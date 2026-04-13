@@ -1,0 +1,109 @@
+# ==========================================
+# 全局与模型配置 (Global & Model Settings)
+# ==========================================
+model_provider = "custom"
+model = "gpt-5.4"
+model_reasoning_effort = "high"
+model_verbosity = "high"
+network_access = true
+model_context_window = 850000
+model_auto_compact_token_limit = 750000
+personality = "pragmatic"
+persistent_instructions = "For Node.js dependency installation or package download commands, prefer cnpm over npm unless the user explicitly requests npm or the project explicitly requires npm, pnpm, yarn, or bun. Do not rewrite npm run, npm exec, npx, or package.json scripts to cnpm unless the task specifically requires that. Always read and write text files as UTF-8 unless the task explicitly requires a different encoding."
+approvals_reviewer = "user"
+
+# ==========================================
+# 自定义模型提供商 (Custom Provider - CPA)
+# ==========================================
+[model_providers.custom]
+name = "custom"
+base_url = "http://192.168.110.17:8082/v1"
+# env_key = "sk-7eKHDoTXHmRhVlKZ9"  # 保持我们专属的 Key 变量名，防止冲突
+wire_api = "responses"             # CPA 走标准 chat 协议最稳妥
+requires_openai_auth = true
+
+# ==========================================
+# 通知与模型迁移 (Mac 配置)
+# ==========================================
+[notice.model_migrations]
+"gpt-5.3-codex" = "gpt-5.4"
+
+# ==========================================
+# 操作系统特定配置 (OS Specific)
+# 提示: macOS 的 Codex CLI 会自动忽略 [windows] 块，这段配置保留在此方便你多端同步
+# ==========================================
+[windows]
+# sandbox = "elevated"
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+web_search = "live"
+sandbox = "elevated"
+
+# ==========================================
+# 受信任的项目路径 (Mac 配置)
+# ==========================================
+
+[projects."/Users/erjiguan/codex_project"]
+trust_level = "trusted"
+
+[projects."/Users/erjiguan/codex_project/echo"]
+trust_level = "trusted"
+
+# ==========================================
+# MCP 工具服务器 (MCP Servers)
+# ==========================================
+[mcp_servers.context7]
+url = "https://mcp.context7.com/mcp"
+
+[mcp_servers.github]
+command = "/Users/erjiguan/.nvm/versions/node/v20.20.2/bin/node"
+args = ["/Users/erjiguan/.nvm/versions/node/v20.20.2/lib/node_modules/npm/bin/npx-cli.js", "-y", "@modelcontextprotocol/server-github"]
+env = { PATH = "/Users/erjiguan/.nvm/versions/node/v20.20.2/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin" }
+startup_timeout_sec = 60
+
+[mcp_servers.exa]
+url = "https://mcp.exa.ai/mcp"
+
+[mcp_servers.memory]
+command = "/Users/erjiguan/.nvm/versions/node/v20.20.2/bin/node"
+args = ["/Users/erjiguan/.nvm/versions/node/v20.20.2/lib/node_modules/npm/bin/npx-cli.js", "-y", "@modelcontextprotocol/server-memory"]
+env = { PATH = "/Users/erjiguan/.nvm/versions/node/v20.20.2/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin", MEMORY_FILE_PATH = "/Users/erjiguan/.codex/memories/memory.json" }
+startup_timeout_sec = 60
+
+[mcp_servers.playwright]
+command = "/Users/erjiguan/.nvm/versions/node/v20.20.2/bin/node"
+args = ["/Users/erjiguan/.nvm/versions/node/v20.20.2/lib/node_modules/npm/bin/npx-cli.js", "-y", "@playwright/mcp@latest"]
+env = { PATH = "/Users/erjiguan/.nvm/versions/node/v20.20.2/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin" }
+startup_timeout_sec = 60
+
+[mcp_servers.sqlite]
+command = "/Users/erjiguan/.nvm/versions/node/v20.20.2/bin/node"
+args = ["/Users/erjiguan/.nvm/versions/node/v20.20.2/lib/node_modules/npm/bin/npx-cli.js", "-y", "mcp-sqlite-server"]
+env = { PATH = "/Users/erjiguan/.nvm/versions/node/v20.20.2/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin" }
+startup_timeout_sec = 60
+
+# Database templates that require real connection details before enabling.
+# Keep these commented to avoid startup failures when credentials are not set.
+#
+# [mcp_servers.postgresql]
+# command = "npx"
+# args = ["-y", "@bytebase/dbhub@latest", "--transport", "stdio"]
+# startup_timeout_sec = 30
+# env = { DSN = "postgres://username:password@localhost:5432/database" }
+#
+# [mcp_servers.mysql]
+# command = "npx"
+# args = ["-y", "@berthojoris/mcp-mysql-server"]
+# startup_timeout_sec = 30
+# env = { DB_HOST = "localhost", DB_PORT = "3306", DB_USER = "root", DB_PASSWORD = "your_password", DB_NAME = "your_database", MCP_PERMISSIONS = "list,read,utility" }
+#
+# [mcp_servers.mongodb]
+# command = "npx"
+# args = ["-y", "mongodb-mcp-server@latest", "--readOnly"]
+# startup_timeout_sec = 30
+# env = { MDB_MCP_CONNECTION_STRING = "mongodb://localhost:27017/your_database", MDB_MCP_TELEMETRY = "disabled" }
+
+# ==========================================
+# 技能配置文件 (Skills)
+# 提示: 路径已从 Windows 的盘符格式适配为 Mac 的 Unix 路径格式
+# ==========================================
