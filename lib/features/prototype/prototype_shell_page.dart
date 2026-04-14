@@ -26,6 +26,7 @@ class PrototypeShellPage extends StatefulWidget {
 class _PrototypeShellPageState extends State<PrototypeShellPage> {
   PrototypeTab _currentTab = PrototypeTab.structure;
   bool _sidebarOpen = false;
+  bool _showAddOverlay = false;
   int _currentTabIndex = 0;
 
   final List<Map<String, dynamic>> _chapterElements = [
@@ -98,25 +99,55 @@ class _PrototypeShellPageState extends State<PrototypeShellPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Stack(
-        children: [
-          _buildCurrentPage(),
-          if (_sidebarOpen) ...[
-            Positioned.fill(
-              child: GestureDetector(
-                onTap: () => setState(() => _sidebarOpen = false),
-                child: Container(color: Colors.black.withValues(alpha: 0.18)),
+    return PopScope(
+      canPop: !_showAddOverlay,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && _showAddOverlay) {
+          setState(() {
+            _showAddOverlay = false;
+          });
+        }
+      },
+      child: Scaffold(
+        body: Stack(
+          children: [
+            _buildCurrentPage(),
+            if (_showAddOverlay) ...[
+              Positioned.fill(
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 6.0, sigmaY: 6.0),
+                  child: Container(
+                    color: Colors.white.withValues(alpha: 0.18),
+                  ),
+                ),
               ),
-            ),
-            const Positioned(
-              top: 0,
-              bottom: 0,
-              left: 0,
-              child: ProjectSidebar(),
-            ),
+              Positioned(
+                top: 120,
+                left: 20,
+                right: 20,
+                bottom: 80,
+                child: QuickRecordOverlayPrototype(
+                  onClose: () => setState(() => _showAddOverlay = false),
+                  onBottomTabChanged: (_) {},
+                ),
+              ),
+            ],
+            if (_sidebarOpen) ...[
+              Positioned.fill(
+                child: GestureDetector(
+                  onTap: () => setState(() => _sidebarOpen = false),
+                  child: Container(color: Colors.black.withValues(alpha: 0.18)),
+                ),
+              ),
+              const Positioned(
+                top: 0,
+                bottom: 0,
+                left: 0,
+                child: ProjectSidebar(),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -136,8 +167,15 @@ class _PrototypeShellPageState extends State<PrototypeShellPage> {
           onBottomTabChanged: _changeTab,
         );
       case PrototypeTab.add:
-        return QuickRecordOverlayPrototype(
-          onClose: () => setState(() => _currentTab = PrototypeTab.structure),
+        return StructurePagePrototype(
+          currentTabIndex: _currentTabIndex,
+          chapterElements: _chapterElements,
+          onOpenSidebar: () => setState(() => _sidebarOpen = true),
+          onTabChanged: (index) {
+            setState(() {
+              _currentTabIndex = index;
+            });
+          },
           onBottomTabChanged: _changeTab,
         );
       case PrototypeTab.curation:
@@ -165,11 +203,18 @@ class _PrototypeShellPageState extends State<PrototypeShellPage> {
   }
 
   void _changeTab(PrototypeTab tab) {
+    if (tab == PrototypeTab.add) {
+      setState(() {
+        _showAddOverlay = true;
+        _sidebarOpen = false;
+      });
+      return;
+    }
+
     setState(() {
       _currentTab = tab;
-      if (tab != PrototypeTab.structure) {
-        _sidebarOpen = false;
-      }
+      _sidebarOpen = false;
+      _showAddOverlay = false;
     });
   }
 }
@@ -414,6 +459,7 @@ class StructurePagePrototype extends StatelessWidget {
           chapterNumber: '02',
           title: '众神之后：废弃工业区的色彩',
           elementCount: '8',
+          isTextOnly: true,
           extraTopRightWidget: _buildStatusIndicator('进行中'),
           customContent: _buildDescriptionText(
             '专注于废弃工厂内部的金属质感与锈迹色彩，捕捉工业遗址在自然侵蚀下的独特美感。',
@@ -465,6 +511,7 @@ class StructurePagePrototype extends StatelessWidget {
           chapterNumber: '05',
           title: '最后的凝视：记忆中的地标',
           elementCount: '5',
+          isTextOnly: true,
           extraTopRightWidget: _buildStatusIndicator('已排版'),
           customContent: _buildDescriptionText(
             '对核心建筑物的最终审视，结合黄昏时刻的暖色调，为整个系列画上句号。',
@@ -520,7 +567,7 @@ class StructurePagePrototype extends StatelessWidget {
             slivers: [
               for (final group in chapterElements) ...[
                 SliverPersistentHeader(
-                  pinned: true,
+                  pinned: false,
                   delegate: _StickyChapterHeaderDelegate(title: group['chapter']),
                 ),
                 SliverList(
@@ -625,7 +672,7 @@ class StructurePagePrototype extends StatelessWidget {
   Widget _buildDescriptionText(String text, {bool isItalic = false}) {
     return Text(
       text,
-      maxLines: 3,
+      maxLines: 2,
       overflow: TextOverflow.ellipsis,
       style: TextStyle(
         fontSize: 14,
@@ -711,210 +758,160 @@ class QuickRecordOverlayPrototype extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFE8E8E8),
-      body: Stack(
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFF5F5F5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.1),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
         children: [
-          Positioned.fill(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
+          Padding(
+            padding: const EdgeInsets.only(
+              left: 20.0,
+              top: 20.0,
+              bottom: 20.0,
+              right: 16.0,
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const SizedBox(height: 60),
-                Text(
-                  'Current Project',
-                  style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                Row(
+                  children: [
+                    const Text(
+                      '上海·静安',
+                      style: TextStyle(fontSize: 14, color: Colors.black87),
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(
+                      Icons.keyboard_arrow_down,
+                      size: 16,
+                      color: Colors.grey.shade700,
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 8),
-                const Text(
-                  'GALLERY CURATED / STUDIO V',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 4.0,
-                    color: Colors.black45,
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '2024.05.24 14:32:01',
+                      style: TextStyle(fontSize: 14, color: Colors.grey.shade800),
+                    ),
+                    const SizedBox(width: 12),
+                    InkWell(
+                      onTap: onClose,
+                      borderRadius: BorderRadius.circular(16),
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade300,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.close,
+                          size: 16,
+                          color: Colors.grey.shade700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20.0),
+              child: TextField(
+                maxLines: null,
+                expands: true,
+                style: const TextStyle(fontSize: 16, color: Colors.black87),
+                decoration: InputDecoration(
+                  border: InputBorder.none,
+                  hintText: '在此输入文字速记...',
+                  hintStyle: TextStyle(
+                    fontSize: 16,
+                    color: Colors.grey.shade400,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Container(
+            height: 80,
+            color: Colors.white,
+            child: Row(
+              children: [
+                Expanded(
+                  child: InkWell(
+                    onTap: () {},
+                    child: const Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.camera_alt,
+                          size: 24,
+                          color: Color(0xFF555555),
+                        ),
+                        SizedBox(height: 8),
+                        Text(
+                          '拍摄',
+                          style: TextStyle(fontSize: 14, color: Colors.black87),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                Container(width: 1, height: 40, color: Colors.grey.shade200),
+                Expanded(
+                  child: InkWell(
+                    onTap: () {},
+                    child: const Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.photo_library,
+                          size: 24,
+                          color: Color(0xFF555555),
+                        ),
+                        SizedBox(height: 8),
+                        Text(
+                          '相册',
+                          style: TextStyle(fontSize: 14, color: Colors.black87),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
             ),
           ),
-          Positioned.fill(
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 4.0, sigmaY: 4.0),
-              child: Container(
-                color: Colors.white.withValues(alpha: 0.3),
-              ),
-            ),
-          ),
-          Positioned(
-            top: 120,
-            left: 20,
-            right: 20,
-            bottom: 80,
+          InkWell(
+            onTap: () {},
             child: Container(
-              decoration: BoxDecoration(
-                color: const Color(0xFFF5F5F5),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.1),
-                    blurRadius: 20,
-                    offset: const Offset(0, 10),
-                  ),
-                ],
-              ),
-              child: Column(
+              height: 64,
+              color: const Color(0xFF5A5A5A),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.only(
-                      left: 20.0,
-                      top: 20.0,
-                      bottom: 20.0,
-                      right: 16.0,
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            const Text(
-                              '上海·静安',
-                              style: TextStyle(fontSize: 14, color: Colors.black87),
-                            ),
-                            const SizedBox(width: 4),
-                            Icon(
-                              Icons.keyboard_arrow_down,
-                              size: 16,
-                              color: Colors.grey.shade700,
-                            ),
-                          ],
-                        ),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              '2024.05.24 14:32:01',
-                              style: TextStyle(fontSize: 14, color: Colors.grey.shade800),
-                            ),
-                            const SizedBox(width: 12),
-                            InkWell(
-                              onTap: onClose,
-                              borderRadius: BorderRadius.circular(16),
-                              child: Container(
-                                padding: const EdgeInsets.all(4),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.shade300,
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Icon(
-                                  Icons.close,
-                                  size: 16,
-                                  color: Colors.grey.shade700,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
+                  Text(
+                    '保 存 记 录',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      letterSpacing: 4.0,
                     ),
                   ),
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                      child: TextField(
-                        maxLines: null,
-                        expands: true,
-                        style: const TextStyle(fontSize: 16, color: Colors.black87),
-                        decoration: InputDecoration(
-                          border: InputBorder.none,
-                          hintText: '在此输入文字速记...',
-                          hintStyle: TextStyle(
-                            fontSize: 16,
-                            color: Colors.grey.shade400,
-                            fontStyle: FontStyle.italic,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  Container(
-                    height: 80,
-                    color: Colors.white,
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: InkWell(
-                            onTap: () {},
-                            child: const Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.camera_alt,
-                                  size: 24,
-                                  color: Color(0xFF555555),
-                                ),
-                                SizedBox(height: 8),
-                                Text(
-                                  '拍摄',
-                                  style: TextStyle(fontSize: 14, color: Colors.black87),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        Container(width: 1, height: 40, color: Colors.grey.shade200),
-                        Expanded(
-                          child: InkWell(
-                            onTap: () {},
-                            child: const Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.photo_library,
-                                  size: 24,
-                                  color: Color(0xFF555555),
-                                ),
-                                SizedBox(height: 8),
-                                Text(
-                                  '相册',
-                                  style: TextStyle(fontSize: 14, color: Colors.black87),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  InkWell(
-                    onTap: () {},
-                    child: Container(
-                      height: 64,
-                      color: const Color(0xFF5A5A5A),
-                      child: const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            '保 存 记 录',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              letterSpacing: 4.0,
-                            ),
-                          ),
-                          SizedBox(width: 8),
-                          Icon(Icons.arrow_forward, color: Colors.white, size: 18),
-                        ],
-                      ),
-                    ),
-                  ),
+                  SizedBox(width: 8),
+                  Icon(Icons.arrow_forward, color: Colors.white, size: 18),
                 ],
               ),
-            ),
-          ),
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: CustomBottomNavBar(
-              activeTab: PrototypeTab.add,
-              onChangeTab: onBottomTabChanged,
             ),
           ),
         ],
@@ -1252,6 +1249,7 @@ class ChapterCard extends StatelessWidget {
     required this.title,
     required this.elementCount,
     required this.customContent,
+    this.isTextOnly = false,
     this.extraTopRightWidget,
   });
 
@@ -1259,6 +1257,7 @@ class ChapterCard extends StatelessWidget {
   final String title;
   final String elementCount;
   final Widget customContent;
+  final bool isTextOnly;
   final Widget? extraTopRightWidget;
 
   @override
@@ -1295,36 +1294,43 @@ class ChapterCard extends StatelessWidget {
               height: 1.4,
             ),
           ),
-          const SizedBox(height: 24),
+          SizedBox(height: isTextOnly ? 18 : 24),
           Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
+            crossAxisAlignment:
+                isTextOnly ? CrossAxisAlignment.start : CrossAxisAlignment.end,
             children: [
               Expanded(
-                child: ClipRect(
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    physics: const BouncingScrollPhysics(),
-                    child: customContent,
-                  ),
-                ),
+                flex: isTextOnly ? 5 : 1,
+                child: isTextOnly
+                    ? customContent
+                    : ClipRect(
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          physics: const BouncingScrollPhysics(),
+                          child: customContent,
+                        ),
+                      ),
               ),
               const SizedBox(width: 16),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    '关联元素',
-                    style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    elementCount,
-                    style: const TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.w300,
+              SizedBox(
+                width: isTextOnly ? 72 : null,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      '关联元素',
+                      style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 4),
+                    Text(
+                      elementCount,
+                      style: const TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w300,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
