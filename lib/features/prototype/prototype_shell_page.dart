@@ -191,10 +191,8 @@ class _PrototypeShellPageState extends State<PrototypeShellPage> {
           onBottomTabChanged: _changeTab,
         );
       case PrototypeTab.overview:
-        return PlaceholderPrototypePage(
-          title: '概 览',
-          icon: Icons.remove_red_eye_outlined,
-          activeTab: PrototypeTab.overview,
+        return OverviewPagePrototype(
+          onOpenSidebar: () => setState(() => _sidebarOpen = true),
           onBottomTabChanged: _changeTab,
         );
       case PrototypeTab.timeline:
@@ -1538,6 +1536,327 @@ class PlaceholderPrototypePage extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class OverviewPagePrototype extends StatefulWidget {
+  const OverviewPagePrototype({
+    super.key,
+    required this.onOpenSidebar,
+    required this.onBottomTabChanged,
+  });
+
+  final VoidCallback onOpenSidebar;
+  final ValueChanged<PrototypeTab> onBottomTabChanged;
+
+  @override
+  State<OverviewPagePrototype> createState() => _OverviewPagePrototypeState();
+}
+
+class _OverviewPagePrototypeState extends State<OverviewPagePrototype> {
+  String _activeFilterTab = '全部';
+
+  static const _overviewStats = {
+    '全部': [
+      ('章节完成', '4 / 6'),
+      ('进度', '65%'),
+      ('叙事元素', '12 / 30'),
+    ],
+    '第一章：河岸线': [
+      ('进度', '72%'),
+      ('叙事元素', '8 / 12'),
+    ],
+    '第二章：工业骨架': [
+      ('进度', '54%'),
+      ('叙事元素', '5 / 9'),
+    ],
+    '第三章：醉意': [
+      ('进度', '81%'),
+      ('叙事元素', '6 / 9'),
+    ],
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: SafeArea(
+        child: Column(
+          children: [
+            _buildTopBar(),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
+                children: [
+                  _buildMainMetric(),
+                  const SizedBox(height: 48),
+                  _buildFilterTabs(),
+                  const SizedBox(height: 48),
+                  _buildPrimaryStats(),
+                  const SizedBox(height: 56),
+                  _buildRelationStats(),
+                  const SizedBox(height: 48),
+                  Divider(color: Colors.grey.shade200, thickness: 1),
+                  const SizedBox(height: 32),
+                  _buildProjectDescription(),
+                  const SizedBox(height: 40),
+                ],
+              ),
+            ),
+            CustomBottomNavBar(
+              activeTab: PrototypeTab.overview,
+              onChangeTab: widget.onBottomTabChanged,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTopBar() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          IconButton(
+            icon: const Icon(Icons.menu, color: Colors.black87),
+            onPressed: widget.onOpenSidebar,
+          ),
+          const Text(
+            '赤水河沿岸寻访',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w300,
+              letterSpacing: 4.0,
+              color: Colors.black87,
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings_outlined, color: Colors.black87),
+            onPressed: () {},
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMainMetric() {
+    return Center(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          const Text(
+            '42',
+            style: TextStyle(
+              fontSize: 96,
+              fontWeight: FontWeight.w400,
+              fontFamily: 'serif',
+              height: 1.0,
+              letterSpacing: -2.0,
+              color: Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            '待 整 理 影 像',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey.shade500,
+              letterSpacing: 4.0,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterTabs() {
+    final tabs = ['全部', '第一章：河岸线', '第二章：工业骨架', '第三章：醉意'];
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      physics: const BouncingScrollPhysics(),
+      child: Row(
+        children: tabs.map((tab) {
+          final isActive = tab == _activeFilterTab;
+          return GestureDetector(
+            onTap: () {
+              setState(() {
+                _activeFilterTab = tab;
+              });
+            },
+            child: Container(
+              margin: const EdgeInsets.only(right: 32.0),
+              padding: const EdgeInsets.only(bottom: 8.0),
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(
+                    color: isActive ? Colors.black87 : Colors.transparent,
+                    width: 2.0,
+                  ),
+                ),
+              ),
+              child: Text(
+                tab,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+                  color: isActive ? Colors.black87 : Colors.grey.shade400,
+                  letterSpacing: 1.2,
+                ),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildPrimaryStats() {
+    final stats = _overviewStats[_activeFilterTab] ?? _overviewStats['全部']!;
+    if (stats.length == 3) {
+      return Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          for (final stat in stats) _OverviewStatBlock(stat.$1, stat.$2),
+        ],
+      );
+    }
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        for (var i = 0; i < stats.length; i++) ...[
+          _OverviewStatBlock(stats[i].$1, stats[i].$2),
+          if (i != stats.length - 1) const SizedBox(width: 72),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildRelationStats() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '关 系 统 计',
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.grey.shade400,
+            letterSpacing: 2.0,
+          ),
+        ),
+        const SizedBox(height: 24),
+        const Row(
+          children: [
+            Expanded(child: _RelationStatRow('呼应', '08')),
+            SizedBox(width: 32),
+            Expanded(child: _RelationStatRow('对比', '14')),
+          ],
+        ),
+        const SizedBox(height: 24),
+        const Row(
+          children: [
+            Expanded(child: _RelationStatRow('重复', '05')),
+            SizedBox(width: 32),
+            Expanded(child: _RelationStatRow('转折', '03')),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildProjectDescription() {
+    return Text(
+      '赤水河沿岸寻访是一个持续进行的影像社会学项目，旨在通过对河流地理与其工业足迹的交叉观察，探讨人造物与自然的动态边界。项目通过结构化的叙事元素，重构空间与感知的联系。',
+      style: TextStyle(
+        fontSize: 14,
+        color: Colors.grey.shade600,
+        height: 1.8,
+        fontStyle: FontStyle.italic,
+        letterSpacing: 1.0,
+      ),
+    );
+  }
+}
+
+class _OverviewStatBlock extends StatelessWidget {
+  const _OverviewStatBlock(this.label, this.value);
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.grey.shade500,
+            fontStyle: FontStyle.italic,
+            letterSpacing: 1.5,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 28,
+            fontWeight: FontWeight.w400,
+            fontFamily: 'serif',
+            color: Colors.black87,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _RelationStatRow extends StatelessWidget {
+  const _RelationStatRow(this.label, this.value);
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: Colors.grey.shade200),
+        ),
+      ),
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey.shade600,
+              fontStyle: FontStyle.italic,
+              letterSpacing: 1.2,
+            ),
+          ),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 24,
+              fontFamily: 'serif',
+              color: Colors.black87,
+            ),
+          ),
+        ],
       ),
     );
   }
