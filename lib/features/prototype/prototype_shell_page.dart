@@ -27,8 +27,6 @@ class _PrototypeShellPageState extends State<PrototypeShellPage> {
   PrototypeTab _currentTab = PrototypeTab.structure;
   bool _sidebarOpen = false;
   int _currentTabIndex = 0;
-  final ScrollController _chaptersController = ScrollController();
-  final ScrollController _elementsController = ScrollController();
 
   final List<Map<String, dynamic>> _chapterElements = [
     {
@@ -99,13 +97,6 @@ class _PrototypeShellPageState extends State<PrototypeShellPage> {
   ];
 
   @override
-  void dispose() {
-    _chaptersController.dispose();
-    _elementsController.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Stack(
@@ -141,15 +132,8 @@ class _PrototypeShellPageState extends State<PrototypeShellPage> {
             setState(() {
               _currentTabIndex = index;
             });
-            final targetController =
-                index == 0 ? _chaptersController : _elementsController;
-            if (targetController.hasClients) {
-              targetController.jumpTo(0);
-            }
           },
           onBottomTabChanged: _changeTab,
-          chaptersController: _chaptersController,
-          elementsController: _elementsController,
         );
       case PrototypeTab.add:
         return QuickRecordOverlayPrototype(
@@ -330,8 +314,6 @@ class StructurePagePrototype extends StatelessWidget {
     required this.onOpenSidebar,
     required this.onTabChanged,
     required this.onBottomTabChanged,
-    required this.chaptersController,
-    required this.elementsController,
   });
 
   final int currentTabIndex;
@@ -339,8 +321,6 @@ class StructurePagePrototype extends StatelessWidget {
   final VoidCallback onOpenSidebar;
   final ValueChanged<int> onTabChanged;
   final ValueChanged<PrototypeTab> onBottomTabChanged;
-  final ScrollController chaptersController;
-  final ScrollController elementsController;
 
   @override
   Widget build(BuildContext context) {
@@ -407,8 +387,6 @@ class StructurePagePrototype extends StatelessWidget {
 
   Widget _buildChaptersView() {
     return ListView(
-      key: const PageStorageKey('structure-chapters-list'),
-      controller: chaptersController,
       padding: const EdgeInsets.symmetric(horizontal: 24.0),
       children: [
         ChapterCard(
@@ -539,8 +517,6 @@ class StructurePagePrototype extends StatelessWidget {
         const SizedBox(height: 24),
         Expanded(
           child: CustomScrollView(
-            key: const PageStorageKey('structure-elements-list'),
-            controller: elementsController,
             slivers: [
               for (final group in chapterElements) ...[
                 SliverPersistentHeader(
@@ -649,6 +625,8 @@ class StructurePagePrototype extends StatelessWidget {
   Widget _buildDescriptionText(String text, {bool isItalic = false}) {
     return Text(
       text,
+      maxLines: 3,
+      overflow: TextOverflow.ellipsis,
       style: TextStyle(
         fontSize: 14,
         color: Colors.grey.shade600,
@@ -667,20 +645,17 @@ class StructurePagePrototype extends StatelessWidget {
       width: width,
       height: height,
       margin: const EdgeInsets.only(right: 2),
-      child: ColorFiltered(
-        colorFilter: const ColorFilter.mode(Colors.grey, BlendMode.saturation),
-        child: Image.network(
-          url,
-          fit: BoxFit.cover,
-          filterQuality: FilterQuality.low,
-          cacheWidth: 240,
-          loadingBuilder: (context, child, progress) {
-            if (progress == null) return child;
-            return const _PhotoFallbackTile(size: 80);
-          },
-          errorBuilder: (context, error, stackTrace) =>
-              const _PhotoFallbackTile(size: 80),
-        ),
+      child: Image.network(
+        url,
+        fit: BoxFit.cover,
+        filterQuality: FilterQuality.low,
+        cacheWidth: 240,
+        loadingBuilder: (context, child, progress) {
+          if (progress == null) return child;
+          return const _PhotoFallbackTile(size: 80);
+        },
+        errorBuilder: (context, error, stackTrace) =>
+            const _PhotoFallbackTile(size: 80),
       ),
     );
   }
@@ -1108,21 +1083,18 @@ class NarrativeListTile extends StatelessWidget {
     return SizedBox(
       width: size,
       height: size,
-      child: ColorFiltered(
-        colorFilter: const ColorFilter.mode(Colors.grey, BlendMode.saturation),
-        child: Image.network(
-          url,
-          fit: BoxFit.cover,
-          filterQuality: FilterQuality.low,
-          cacheWidth: 120,
-          loadingBuilder: (context, child, progress) {
-            if (progress == null) return child;
-            return const _PhotoFallbackTile(size: 44);
-          },
-          errorBuilder: (context, error, stackTrace) => Container(
-            color: Colors.grey.shade200,
-            child: const _PhotoFallbackTile(size: 44),
-          ),
+      child: Image.network(
+        url,
+        fit: BoxFit.cover,
+        filterQuality: FilterQuality.low,
+        cacheWidth: 120,
+        loadingBuilder: (context, child, progress) {
+          if (progress == null) return child;
+          return const _PhotoFallbackTile(size: 44);
+        },
+        errorBuilder: (context, error, stackTrace) => Container(
+          color: Colors.grey.shade200,
+          child: const _PhotoFallbackTile(size: 44),
         ),
       ),
     );
@@ -1323,16 +1295,15 @@ class ChapterCard extends StatelessWidget {
               height: 1.4,
             ),
           ),
-          const SizedBox(height: 32),
+          const SizedBox(height: 24),
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Expanded(
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
+                child: ClipRect(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    physics: const BouncingScrollPhysics(),
                     child: customContent,
                   ),
                 ),
