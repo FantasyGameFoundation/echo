@@ -1,0 +1,11 @@
+{
+  "directives": [
+    {
+      "directive": "When using Flutter libraries, engine features, or tooling, always evaluate iOS, Android, and Web compatibility first and prefer solutions that keep behavior as consistent as possible across all three platforms.",
+      "priority": "high",
+      "context": "Cross-platform development policy for this project.",
+      "timestamp": "2026-04-14T15:33:04.875Z"
+    }
+  ],
+  "notes": []
+}
