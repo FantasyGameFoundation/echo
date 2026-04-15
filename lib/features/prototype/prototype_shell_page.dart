@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
@@ -462,20 +463,9 @@ class StructurePagePrototype extends StatelessWidget {
           title: '晨曦之眼：城市边缘的静谧',
           elementCount: '14',
           extraTopRightWidget: _buildStatusIndicator('草稿'),
-          customContent: Row(
-            children: [
-              _buildNetworkImage(
-                _stablePhotoA,
-                width: 80,
-                height: 80,
-              ),
-              _buildNetworkImage(
-                _stablePhotoB,
-                width: 80,
-                height: 80,
-              ),
-              _buildPlaceholderBox('+12'),
-            ],
+          customContent: _buildResponsiveChapterPreview(
+            imageUrls: const [_stablePhotoA, _stablePhotoB],
+            overflowText: '+12',
           ),
         ),
         ChapterCard(
@@ -493,20 +483,9 @@ class StructurePagePrototype extends StatelessWidget {
           title: '呼吸感：极简构图与留白艺术',
           elementCount: '3',
           extraTopRightWidget: _buildStatusIndicator('待审核'),
-          customContent: Row(
-            children: [
-              _buildNetworkImage(
-                _stablePhotoC,
-                width: 80,
-                height: 80,
-              ),
-              _buildNetworkImage(
-                _stablePhotoD,
-                width: 80,
-                height: 80,
-              ),
-              _buildPlaceholderBox('+1'),
-            ],
+          customContent: _buildResponsiveChapterPreview(
+            imageUrls: const [_stablePhotoC, _stablePhotoD],
+            overflowText: '+1',
           ),
         ),
         ChapterCard(
@@ -514,20 +493,9 @@ class StructurePagePrototype extends StatelessWidget {
           title: '阴影的重量',
           elementCount: '11',
           extraTopRightWidget: _buildStatusIndicator('修订中'),
-          customContent: Row(
-            children: [
-              _buildNetworkImage(
-                _stablePhotoE,
-                width: 80,
-                height: 80,
-              ),
-              _buildNetworkImage(
-                _stablePhotoA,
-                width: 80,
-                height: 80,
-              ),
-              _buildPlaceholderBox('+9'),
-            ],
+          customContent: _buildResponsiveChapterPreview(
+            imageUrls: const [_stablePhotoE, _stablePhotoA],
+            overflowText: '+9',
           ),
         ),
         ChapterCard(
@@ -545,20 +513,9 @@ class StructurePagePrototype extends StatelessWidget {
           title: '光影的旋律：结构与节奏',
           elementCount: '10',
           extraTopRightWidget: _buildStatusIndicator('待发布'),
-          customContent: Row(
-            children: [
-              _buildNetworkImage(
-                _stablePhotoB,
-                width: 80,
-                height: 80,
-              ),
-              _buildNetworkImage(
-                _stablePhotoC,
-                width: 80,
-                height: 80,
-              ),
-              _buildPlaceholderBox('+8'),
-            ],
+          customContent: _buildResponsiveChapterPreview(
+            imageUrls: const [_stablePhotoB, _stablePhotoC],
+            overflowText: '+8',
           ),
         ),
         _buildAddChapterButton(),
@@ -706,15 +663,33 @@ class StructurePagePrototype extends StatelessWidget {
     );
   }
 
-  Widget _buildNetworkImage(
-    String url, {
-    required double width,
-    required double height,
+  Widget _buildResponsiveChapterPreview({
+    required List<String> imageUrls,
+    required String overflowText,
   }) {
-    return Container(
-      width: width,
-      height: height,
-      margin: const EdgeInsets.only(right: 2),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const gap = 2.0;
+        final boxSize = math.min(80.0, (constraints.maxWidth - (gap * 2)) / 3);
+
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildChapterPreviewImage(imageUrls[0], boxSize),
+            const SizedBox(width: gap),
+            _buildChapterPreviewImage(imageUrls[1], boxSize),
+            const SizedBox(width: gap),
+            _buildChapterPreviewPlaceholder(overflowText, boxSize),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildChapterPreviewImage(String url, double size) {
+    return SizedBox(
+      width: size,
+      height: size,
       child: Image.network(
         url,
         fit: BoxFit.cover,
@@ -722,23 +697,26 @@ class StructurePagePrototype extends StatelessWidget {
         cacheWidth: 240,
         loadingBuilder: (context, child, progress) {
           if (progress == null) return child;
-          return const _PhotoFallbackTile(size: 80);
+          return _PhotoFallbackTile(size: size);
         },
         errorBuilder: (context, error, stackTrace) =>
-            const _PhotoFallbackTile(size: 80),
+            _PhotoFallbackTile(size: size),
       ),
     );
   }
 
-  Widget _buildPlaceholderBox(String text) {
+  Widget _buildChapterPreviewPlaceholder(String text, double size) {
     return Container(
-      width: 80,
-      height: 80,
+      width: size,
+      height: size,
       color: Colors.grey.shade300,
       alignment: Alignment.center,
       child: Text(
         text,
-        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+        style: TextStyle(
+          fontWeight: FontWeight.bold,
+          fontSize: size * 0.18,
+        ),
       ),
     );
   }
@@ -3481,15 +3459,7 @@ class ChapterCard extends StatelessWidget {
             children: [
               Expanded(
                 flex: isTextOnly ? 5 : 1,
-                child: isTextOnly
-                    ? customContent
-                    : ClipRect(
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          physics: const BouncingScrollPhysics(),
-                          child: customContent,
-                        ),
-                      ),
+                child: customContent,
               ),
               const SizedBox(width: 16),
               SizedBox(
