@@ -1,5 +1,6 @@
 import 'package:echo/features/structure_elements_relations/domain/element_status.dart';
 import 'package:echo/features/structure_elements_relations/presentation/widgets/photo_fallback_tile.dart';
+import 'package:echo/features/structure_elements_relations/presentation/widgets/narrative_thumbnail_provider.dart';
 import 'package:flutter/material.dart';
 
 class NarrativeListTile extends StatelessWidget {
@@ -78,7 +79,7 @@ class NarrativeListTile extends StatelessWidget {
       height: thumbSize,
       child: Row(
         children: [
-          _buildNetworkThumb(previewImage, size: thumbSize),
+          _buildThumbnail(previewImage, size: thumbSize),
           if (hasMore)
             Container(
               width: thumbSize,
@@ -100,15 +101,16 @@ class NarrativeListTile extends StatelessWidget {
     );
   }
 
-  Widget _buildNetworkThumb(String url, {required double size}) {
+  Widget _buildThumbnail(String source, {required double size}) {
+    final provider = narrativeThumbnailProvider(source);
+
     return SizedBox(
       width: size,
       height: size,
-      child: Image.network(
-        url,
+      child: Image(
+        image: ResizeImage.resizeIfNeeded(120, null, provider),
         fit: BoxFit.cover,
         filterQuality: FilterQuality.low,
-        cacheWidth: 120,
         loadingBuilder: (context, child, progress) {
           if (progress == null) return child;
           return const PhotoFallbackTile(size: 44);

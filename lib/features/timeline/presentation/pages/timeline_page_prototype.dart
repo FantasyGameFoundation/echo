@@ -5,10 +5,12 @@ import 'package:flutter/material.dart';
 class TimelinePagePrototype extends StatefulWidget {
   const TimelinePagePrototype({
     super.key,
+    this.projectTitle = '',
     required this.onOpenSidebar,
     required this.onBottomTabChanged,
   });
 
+  final String projectTitle;
   final VoidCallback onOpenSidebar;
   final ValueChanged<PrototypeTab> onBottomTabChanged;
 
@@ -194,19 +196,26 @@ class _TimelinePagePrototypeState extends State<TimelinePagePrototype> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           IconButton(
             icon: const Icon(Icons.menu, color: Colors.black87),
             onPressed: widget.onOpenSidebar,
           ),
-          const Text(
-            '赤水河沿岸寻访',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w300,
-              letterSpacing: 4.0,
-              color: Colors.black87,
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12.0),
+              child: Text(
+                widget.projectTitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w300,
+                  letterSpacing: 4.0,
+                  color: Colors.black87,
+                ),
+              ),
             ),
           ),
           IconButton(

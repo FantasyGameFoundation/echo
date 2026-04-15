@@ -5,9 +5,19 @@ import 'package:echo/features/project/domain/repositories/project_repository.dar
 import 'package:echo/features/beacon/presentation/pages/beacon_page_prototype.dart';
 import 'package:echo/features/curation/presentation/pages/organize_page_prototype.dart';
 import 'package:echo/features/project/presentation/pages/project_edit_page.dart';
+import 'package:echo/features/project/presentation/pages/no_project_prompt_page.dart';
 import 'package:echo/features/project/presentation/pages/project_wizard_page.dart';
+import 'package:echo/features/project/presentation/utils/project_cover_picker.dart';
 import 'package:echo/features/project/presentation/widgets/project_sidebar.dart';
 import 'package:echo/features/structure_elements_relations/domain/element_status.dart';
+import 'package:echo/features/structure_elements_relations/domain/entities/narrative_element.dart';
+import 'package:echo/features/structure_elements_relations/domain/entities/structure_chapter.dart';
+import 'package:echo/features/structure_elements_relations/domain/repositories/narrative_element_repository.dart';
+import 'package:echo/features/structure_elements_relations/domain/repositories/structure_chapter_repository.dart';
+import 'package:echo/features/structure_elements_relations/presentation/models/narrative_element_draft.dart';
+import 'package:echo/features/structure_elements_relations/presentation/models/structure_chapter_card_data.dart';
+import 'package:echo/features/structure_elements_relations/presentation/pages/chapter_create_page.dart';
+import 'package:echo/features/structure_elements_relations/presentation/pages/narrative_element_create_page.dart';
 import 'package:echo/features/structure_elements_relations/presentation/pages/structure_page_prototype.dart';
 import 'package:echo/features/timeline/presentation/pages/timeline_page_prototype.dart';
 import 'package:echo/shared/models/prototype_tab.dart';
@@ -15,9 +25,20 @@ import 'package:echo/shared/widgets/quick_record_overlay_prototype.dart';
 import 'package:flutter/material.dart';
 
 class AppShellPage extends StatefulWidget {
-  const AppShellPage({super.key, required this.projectRepository});
+  const AppShellPage({
+    super.key,
+    required this.projectRepository,
+    required this.structureChapterRepository,
+    required this.narrativeElementRepository,
+    this.narrativeElementPhotoPicker,
+    this.narrativeElementPhotoImporter,
+  });
 
   final ProjectRepository projectRepository;
+  final StructureChapterRepository structureChapterRepository;
+  final NarrativeElementRepository narrativeElementRepository;
+  final PickProjectCoverImage? narrativeElementPhotoPicker;
+  final ImportNarrativePhoto? narrativeElementPhotoImporter;
 
   @override
   State<AppShellPage> createState() => _AppShellPageState();
@@ -30,74 +51,11 @@ class _AppShellPageState extends State<AppShellPage> {
   int _currentTabIndex = 0;
   Project? _currentProject;
   List<Project> _projects = const <Project>[];
-
-  final List<Map<String, dynamic>> _chapterElements = [
-    {
-      'chapter': 'C H A P T E R  0 1  /  晨曦之眼',
-      'elements': [
-        {
-          'title': '江边的空酒瓶',
-          'desc': '捕捉清晨薄雾中，人造物与自然边界的冲突。',
-          'status': ElementStatus.finding,
-          'images': const [
-            'https://picsum.photos/seed/echo-structure-a/400/400?grayscale',
-            'https://picsum.photos/seed/echo-structure-b/400/400?grayscale',
-            'https://picsum.photos/seed/echo-structure-c/400/400?grayscale',
-            'https://picsum.photos/seed/echo-structure-d/400/400?grayscale',
-          ],
-        },
-        {
-          'title': '孤独的电线杆',
-          'desc': '黄昏时分，切割天空的几何线条。',
-          'status': ElementStatus.finding,
-          'images': const <String>[],
-        },
-      ],
-    },
-    {
-      'chapter': 'C H A P T E R  0 2  /  众神之后',
-      'elements': [
-        {
-          'title': '某种醉态',
-          'desc': '体现人物与环境的疏离感，而非酒精的狂热。',
-          'status': ElementStatus.ready,
-          'images': const [
-            'https://picsum.photos/seed/echo-structure-b/400/400?grayscale',
-            'https://picsum.photos/seed/echo-structure-d/400/400?grayscale',
-            'https://picsum.photos/seed/echo-structure-e/400/400?grayscale',
-          ],
-        },
-        {
-          'title': '斑驳的树影',
-          'desc': '工业废墟中唯一的生机暗示。',
-          'status': ElementStatus.ready,
-          'images': const [
-            'https://picsum.photos/seed/echo-structure-c/400/400?grayscale',
-            'https://picsum.photos/seed/echo-structure-a/400/400?grayscale',
-          ],
-        },
-      ],
-    },
-    {
-      'chapter': 'C H A P T E R  0 3  /  呼吸感',
-      'elements': [
-        {
-          'title': '江边的围网',
-          'desc': '被遗弃的秩序感，纠缠的线条暗示束缚。',
-          'status': ElementStatus.ready,
-          'images': const [
-            'https://picsum.photos/seed/echo-structure-d/400/400?grayscale',
-          ],
-        },
-        {
-          'title': '留白的天空',
-          'desc': '大面积低饱和度冷灰，压抑情绪的释放口。',
-          'status': ElementStatus.finding,
-          'images': const <String>[],
-        },
-      ],
-    },
-  ];
+  List<StructureChapter> _structureChapters = const <StructureChapter>[];
+  List<StructureChapterCardData> _chapterCards =
+      const <StructureChapterCardData>[];
+  List<Map<String, dynamic>> _narrativeElementGroups =
+      const <Map<String, dynamic>>[];
 
   @override
   void initState() {
@@ -163,33 +121,7 @@ class _AppShellPageState extends State<AppShellPage> {
                       _currentTab = PrototypeTab.structure;
                       _currentTabIndex = 0;
                     });
-                    await Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => ProjectWizardPage(
-                          onFinish:
-                              (title, themeStatement, coverImagePath) async {
-                                final project = await widget.projectRepository
-                                    .createProject(
-                                      title: title,
-                                      themeStatement: themeStatement,
-                                      coverImagePath: coverImagePath,
-                                    );
-                                final projects = await widget.projectRepository
-                                    .listProjects();
-                                if (!mounted) {
-                                  return;
-                                }
-                                setState(() {
-                                  _currentProject = project;
-                                  _projects = projects;
-                                  _currentTab = PrototypeTab.structure;
-                                  _currentTabIndex = 0;
-                                  _sidebarOpen = false;
-                                });
-                              },
-                        ),
-                      ),
-                    );
+                    await _openProjectWizard();
                   },
                   onEditProject: (project) async {
                     if (!mounted) {
@@ -247,14 +179,93 @@ class _AppShellPageState extends State<AppShellPage> {
   }
 
   Widget _buildCurrentPage() {
+    if (_projects.isEmpty) {
+      return NoProjectPromptPage(
+        onOpenSidebar: () => setState(() => _sidebarOpen = true),
+        onCreateProject: _openProjectWizard,
+      );
+    }
+
     switch (_currentTab) {
       case PrototypeTab.structure:
       case PrototypeTab.add:
         return StructurePagePrototype(
           currentTabIndex: _currentTabIndex,
-          chapterElements: _chapterElements,
-          projectTitle: _currentProject?.title ?? '赤水河沿岸寻访',
+          chapterCards: _chapterCards,
+          elementGroups: _narrativeElementGroups,
+          projectTitle: _currentProject?.title ?? '',
           onOpenSidebar: () => setState(() => _sidebarOpen = true),
+          onAddChapter: () async {
+            if (_currentProject == null) {
+              return;
+            }
+            await Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => ChapterCreatePage(
+                  existingChapters: _structureChapters,
+                  onSave:
+                      ({
+                        required String title,
+                        required String description,
+                        required int sortOrder,
+                        required List<NarrativeElementDraft> elements,
+                      }) async {
+                        final chapter = await widget.structureChapterRepository
+                            .createChapter(
+                              projectId: _currentProject!.projectId,
+                              title: title,
+                              description: description,
+                              sortOrder: sortOrder,
+                            );
+                        for (final element in elements) {
+                          await widget.narrativeElementRepository.createElement(
+                            projectId: _currentProject!.projectId,
+                            chapterId: chapter.chapterId,
+                            title: element.title,
+                            description: element.description,
+                            photoPaths: element.photoPaths,
+                          );
+                        }
+                        await _refreshProjects();
+                      },
+                ),
+              ),
+            );
+          },
+          onAddElement: () async {
+            if (_currentProject == null) {
+              return;
+            }
+            if (_structureChapters.isEmpty) {
+              _showPassiveHint('请先添加章节');
+              return;
+            }
+            await Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => NarrativeElementCreatePage(
+                  chapters: _structureChapters,
+                  onSave:
+                      ({
+                        required String title,
+                        required String description,
+                        required String? chapterId,
+                        required List<String> photoPaths,
+                      }) async {
+                        await widget.narrativeElementRepository.createElement(
+                          projectId: _currentProject!.projectId,
+                          chapterId: chapterId,
+                          title: title,
+                          description: description,
+                          photoPaths: photoPaths,
+                        );
+                        await _refreshProjects();
+                      },
+                  onPickPhoto: widget.narrativeElementPhotoPicker,
+                  onImportPhoto: widget.narrativeElementPhotoImporter,
+                ),
+              ),
+            );
+          },
           onTabChanged: (index) {
             setState(() {
               _currentTabIndex = index;
@@ -264,16 +275,19 @@ class _AppShellPageState extends State<AppShellPage> {
         );
       case PrototypeTab.curation:
         return OrganizePagePrototype(
+          projectTitle: _currentProject?.title ?? '',
           onOpenSidebar: () => setState(() => _sidebarOpen = true),
           onBottomTabChanged: _changeTab,
         );
       case PrototypeTab.overview:
         return BeaconPagePrototype(
+          projectTitle: _currentProject?.title ?? '',
           onOpenSidebar: () => setState(() => _sidebarOpen = true),
           onBottomTabChanged: _changeTab,
         );
       case PrototypeTab.timeline:
         return TimelinePagePrototype(
+          projectTitle: _currentProject?.title ?? '',
           onOpenSidebar: () => setState(() => _sidebarOpen = true),
           onBottomTabChanged: _changeTab,
         );
@@ -300,9 +314,45 @@ class _AppShellPageState extends State<AppShellPage> {
     await _refreshProjects();
   }
 
+  Future<void> _openProjectWizard() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ProjectWizardPage(
+          onFinish: (title, themeStatement, coverImagePath) async {
+            await widget.projectRepository.createProject(
+              title: title,
+              themeStatement: themeStatement,
+              coverImagePath: coverImagePath,
+            );
+            await _refreshProjects();
+            if (!mounted) {
+              return;
+            }
+            setState(() {
+              _currentTab = PrototypeTab.structure;
+              _currentTabIndex = 0;
+              _sidebarOpen = false;
+              _showAddOverlay = false;
+            });
+          },
+        ),
+      ),
+    );
+  }
+
   Future<void> _refreshProjects() async {
     final currentProject = await widget.projectRepository.getCurrentProject();
     final projects = await widget.projectRepository.listProjects();
+    final chapters = currentProject == null
+        ? const <StructureChapter>[]
+        : await widget.structureChapterRepository.listChaptersForProject(
+            currentProject.projectId,
+          );
+    final elements = currentProject == null
+        ? const <NarrativeElement>[]
+        : await widget.narrativeElementRepository.listElementsForProject(
+            currentProject.projectId,
+          );
     if (!mounted) {
       return;
     }
@@ -310,6 +360,190 @@ class _AppShellPageState extends State<AppShellPage> {
     setState(() {
       _currentProject = currentProject;
       _projects = projects;
+      _structureChapters = chapters;
+      _chapterCards = _buildChapterCards(
+        chapters: chapters,
+        elements: elements,
+      );
+      _narrativeElementGroups = _groupNarrativeElements(
+        chapters: chapters,
+        elements: elements,
+      );
     });
   }
+
+  List<Map<String, dynamic>> _groupNarrativeElements({
+    required List<StructureChapter> chapters,
+    required List<NarrativeElement> elements,
+  }) {
+    final chapterTitles = <String, String>{
+      for (var index = 0; index < chapters.length; index++)
+        chapters[index].chapterId:
+            'C H A P T E R  ${(index + 1).toString().padLeft(2, '0')}  /  ${chapters[index].title}',
+    };
+
+    final grouped = <String?, List<Map<String, dynamic>>>{};
+    for (final element in elements) {
+      final chapterKey = chapterTitles.containsKey(element.owningChapterId)
+          ? element.owningChapterId
+          : null;
+      grouped.putIfAbsent(chapterKey, () => <Map<String, dynamic>>[]);
+      grouped[chapterKey]!.add(<String, dynamic>{
+        'title': element.title,
+        'desc': element.description?.trim().isNotEmpty == true
+            ? element.description!
+            : '暂无叙事元素说明',
+        'status': element.status == 'ready'
+            ? ElementStatus.ready
+            : ElementStatus.finding,
+        'images': element.photoPaths,
+      });
+    }
+
+    final orderedGroups = <Map<String, dynamic>>[];
+    for (final chapter in chapters) {
+      final chapterElements = grouped[chapter.chapterId];
+      if (chapterElements == null || chapterElements.isEmpty) {
+        continue;
+      }
+      orderedGroups.add(<String, dynamic>{
+        'chapter': chapterTitles[chapter.chapterId] ?? '未 分 配 章 节',
+        'elements': chapterElements,
+      });
+    }
+
+    final unassignedElements = grouped[null];
+    if (unassignedElements != null && unassignedElements.isNotEmpty) {
+      orderedGroups.add(<String, dynamic>{
+        'chapter': '未 分 配 章 节',
+        'elements': unassignedElements,
+      });
+    }
+
+    return orderedGroups;
+  }
+
+  List<StructureChapterCardData> _buildChapterCards({
+    required List<StructureChapter> chapters,
+    required List<NarrativeElement> elements,
+  }) {
+    final elementsByChapter = <String, List<NarrativeElement>>{};
+    for (final element in elements) {
+      final chapterId = element.owningChapterId;
+      if (chapterId == null) {
+        continue;
+      }
+      elementsByChapter.putIfAbsent(chapterId, () => <NarrativeElement>[]);
+      elementsByChapter[chapterId]!.add(element);
+    }
+
+    return [
+      for (var index = 0; index < chapters.length; index++)
+        StructureChapterCardData(
+          chapterNumber: (index + 1).toString().padLeft(2, '0'),
+          title: chapters[index].title,
+          description: chapters[index].description?.trim().isNotEmpty == true
+              ? chapters[index].description!
+              : '暂无章节说明',
+          statusLabel: _normalizeChapterStatus(chapters[index].statusLabel),
+          elementCount:
+              elementsByChapter[chapters[index].chapterId]?.length ?? 0,
+          previewImageSources: _chapterPreviewImageSources(
+            elementsByChapter[chapters[index].chapterId] ??
+                const <NarrativeElement>[],
+          ),
+        ),
+    ];
+  }
+
+  String _normalizeChapterStatus(String statusLabel) {
+    return statusLabel == '完成' ? '完成' : '进行';
+  }
+
+  List<String> _chapterPreviewImageSources(List<NarrativeElement> elements) {
+    final previewPhotos = <_ChapterPreviewPhoto>[];
+
+    for (final element in elements) {
+      if (element.photoPaths.isEmpty) {
+        continue;
+      }
+
+      for (var index = element.photoPaths.length - 1; index >= 0; index--) {
+        previewPhotos.add(
+          _ChapterPreviewPhoto(
+            source: element.photoPaths[index],
+            sortTime: element.updatedAt,
+            photoOrder: index,
+          ),
+        );
+      }
+    }
+
+    previewPhotos.sort((left, right) {
+      final timeCompare = right.sortTime.compareTo(left.sortTime);
+      if (timeCompare != 0) {
+        return timeCompare;
+      }
+      return right.photoOrder.compareTo(left.photoOrder);
+    });
+
+    return previewPhotos.map((photo) => photo.source).toList();
+  }
+
+  void _showPassiveHint(String message) {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: ClipRect(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.72),
+                border: Border.all(color: Colors.black.withValues(alpha: 0.06)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 18,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+              child: Text(
+                message,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w400,
+                  letterSpacing: 1.0,
+                  color: Colors.grey.shade700,
+                ),
+              ),
+            ),
+          ),
+        ),
+        duration: const Duration(milliseconds: 1400),
+        behavior: SnackBarBehavior.floating,
+        elevation: 0,
+        backgroundColor: Colors.transparent,
+        margin: const EdgeInsets.only(left: 88, right: 88, bottom: 96),
+        padding: EdgeInsets.zero,
+        shape: const RoundedRectangleBorder(),
+      ),
+    );
+  }
+}
+
+class _ChapterPreviewPhoto {
+  const _ChapterPreviewPhoto({
+    required this.source,
+    required this.sortTime,
+    required this.photoOrder,
+  });
+
+  final String source;
+  final DateTime sortTime;
+  final int photoOrder;
 }

@@ -7,7 +7,6 @@ class ChapterCard extends StatelessWidget {
     required this.title,
     required this.elementCount,
     required this.customContent,
-    this.isTextOnly = false,
     this.extraTopRightWidget,
   });
 
@@ -15,7 +14,6 @@ class ChapterCard extends StatelessWidget {
   final String title;
   final String elementCount;
   final Widget customContent;
-  final bool isTextOnly;
   final Widget? extraTopRightWidget;
 
   @override
@@ -51,16 +49,14 @@ class ChapterCard extends StatelessWidget {
               height: 1.4,
             ),
           ),
-          SizedBox(height: isTextOnly ? 18 : 24),
+          const SizedBox(height: 32),
           Row(
-            crossAxisAlignment: isTextOnly
-                ? CrossAxisAlignment.start
-                : CrossAxisAlignment.end,
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Expanded(flex: isTextOnly ? 5 : 1, child: customContent),
+              Expanded(child: customContent),
               const SizedBox(width: 16),
               SizedBox(
-                width: isTextOnly ? 72 : null,
+                width: 72,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [

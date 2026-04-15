@@ -12,9 +12,20 @@ import 'package:echo/features/project/presentation/pages/project_wizard_page.dar
 import 'package:echo/features/project/presentation/widgets/project_sidebar.dart';
 import 'package:echo/features/beacon/presentation/pages/beacon_page_prototype.dart';
 import 'package:echo/features/curation/presentation/pages/organize_page_prototype.dart';
+import 'package:echo/features/structure_elements_relations/domain/element_status.dart';
+import 'package:echo/features/structure_elements_relations/domain/entities/narrative_element.dart';
+import 'package:echo/features/structure_elements_relations/domain/entities/structure_chapter.dart';
+import 'package:echo/features/structure_elements_relations/domain/repositories/narrative_element_repository.dart';
+import 'package:echo/features/structure_elements_relations/domain/repositories/structure_chapter_repository.dart';
+import 'package:echo/features/structure_elements_relations/presentation/models/narrative_element_draft.dart';
+import 'package:echo/features/structure_elements_relations/presentation/models/structure_chapter_card_data.dart';
+import 'package:echo/features/structure_elements_relations/presentation/pages/chapter_create_page.dart';
+import 'package:echo/features/structure_elements_relations/presentation/pages/narrative_element_create_page.dart';
 import 'package:echo/features/structure_elements_relations/presentation/pages/structure_page_prototype.dart';
+import 'package:echo/features/structure_elements_relations/presentation/widgets/narrative_list_tile.dart';
 import 'package:echo/features/timeline/presentation/pages/timeline_page_prototype.dart';
 import 'package:echo/shared/models/prototype_tab.dart';
+import 'package:echo/shared/widgets/custom_bottom_nav_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:isar/isar.dart';
@@ -106,24 +117,88 @@ void main() {
 
   testWidgets('app renders structure page by default', (tester) async {
     await tester.pumpWidget(
-      EchoApp(projectRepository: _InMemoryProjectRepository()),
+      EchoApp(
+        projectRepository: _InMemoryProjectRepository(),
+        structureChapterRepository: _InMemoryStructureChapterRepository(),
+        narrativeElementRepository: _InMemoryNarrativeElementRepository(),
+      ),
     );
 
-    expect(find.text('赤水河沿岸寻访'), findsOneWidget);
-    expect(find.text('结构'), findsWidgets);
-    expect(find.text('整理'), findsWidgets);
-    expect(find.text('历程'), findsWidgets);
-    expect(find.text('章节骨架'), findsOneWidget);
+    expect(find.text('新 建 项 目'), findsOneWidget);
+    expect(find.byIcon(Icons.menu), findsOneWidget);
+    expect(find.byIcon(Icons.settings_outlined), findsOneWidget);
+    expect(find.byType(CustomBottomNavBar), findsNothing);
+    expect(find.text('章节骨架'), findsNothing);
   });
+
+  testWidgets(
+    'no-project page opens wizard from center button and then lands on new project structure page',
+    (tester) async {
+      final repository = _InMemoryProjectRepository();
+
+      await tester.pumpWidget(
+        EchoApp(
+          projectRepository: repository,
+          structureChapterRepository: _InMemoryStructureChapterRepository(),
+          narrativeElementRepository: _InMemoryNarrativeElementRepository(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('新 建 项 目'), findsOneWidget);
+      expect(find.byType(CustomBottomNavBar), findsNothing);
+
+      await tester.tap(find.text('新 建 项 目'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('输入你的创作意图'), findsOneWidget);
+
+      await tester.enterText(find.byType(TextField), '记录河流与工业废墟之间的关系');
+      await tester.tap(find.byIcon(Icons.arrow_forward));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField), '江岸计划');
+      await tester.tap(find.byIcon(Icons.arrow_forward));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('详 细 编 辑'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('章节骨架'), findsOneWidget);
+      expect(find.text('江岸计划'), findsOneWidget);
+      expect((await repository.getCurrentProject())?.title, '江岸计划');
+    },
+  );
 
   testWidgets('add button opens overlay and close button dismisses it', (
     tester,
   ) async {
     await tester.pumpWidget(
-      EchoApp(projectRepository: _InMemoryProjectRepository()),
+      EchoApp(
+        projectRepository: _InMemoryProjectRepository(
+          initialProjects: <Project>[
+            Project.create(
+              id: 'project-overlay',
+              projectTitle: '覆盖层项目',
+              projectThemeStatement: '用于测试底部加号覆盖层',
+              createdTimestamp: DateTime(2026),
+              updatedTimestamp: DateTime(2026),
+            ),
+          ],
+          currentProjectId: 'project-overlay',
+        ),
+        structureChapterRepository: _InMemoryStructureChapterRepository(),
+        narrativeElementRepository: _InMemoryNarrativeElementRepository(),
+      ),
     );
+    await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.add));
+    await tester.tap(
+      find.descendant(
+        of: find.byType(CustomBottomNavBar),
+        matching: find.byIcon(Icons.add),
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('保 存 记 录'), findsOneWidget);
@@ -139,7 +214,11 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      EchoApp(projectRepository: _InMemoryProjectRepository()),
+      EchoApp(
+        projectRepository: _InMemoryProjectRepository(),
+        structureChapterRepository: _InMemoryStructureChapterRepository(),
+        narrativeElementRepository: _InMemoryNarrativeElementRepository(),
+      ),
     );
 
     await tester.tap(find.byIcon(Icons.menu).first);
@@ -190,7 +269,11 @@ void main() {
     'sidebar shows textual empty states instead of mock project names when no projects exist',
     (tester) async {
       await tester.pumpWidget(
-        EchoApp(projectRepository: _InMemoryProjectRepository()),
+        EchoApp(
+          projectRepository: _InMemoryProjectRepository(),
+          structureChapterRepository: _InMemoryStructureChapterRepository(),
+          narrativeElementRepository: _InMemoryNarrativeElementRepository(),
+        ),
       );
 
       await tester.tap(find.byIcon(Icons.menu).first);
@@ -222,7 +305,13 @@ void main() {
     (tester) async {
       final repository = _InMemoryProjectRepository();
 
-      await tester.pumpWidget(EchoApp(projectRepository: repository));
+      await tester.pumpWidget(
+        EchoApp(
+          projectRepository: repository,
+          structureChapterRepository: _InMemoryStructureChapterRepository(),
+          narrativeElementRepository: _InMemoryNarrativeElementRepository(),
+        ),
+      );
 
       await tester.tap(find.byIcon(Icons.menu).first);
       await tester.pumpAndSettle();
@@ -287,6 +376,464 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(createdCoverImagePath, '/tmp/project-cover.jpg');
+    },
+  );
+
+  testWidgets(
+    'structure page shows real chapters for the current project and add chapter opens placeholder page',
+    (tester) async {
+      final projectRepository = _InMemoryProjectRepository(
+        initialProjects: <Project>[
+          Project.create(
+            id: 'project-structure',
+            projectTitle: '结构测试项目',
+            projectThemeStatement: '用于测试真实章节展示',
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+        ],
+        currentProjectId: 'project-structure',
+      );
+      final chapterRepository = _InMemoryStructureChapterRepository(
+        initialChapters: <StructureChapter>[
+          StructureChapter.create(
+            id: 'chapter-1',
+            projectId: 'project-structure',
+            chapterTitle: '第一章：河岸的回声',
+            chapterDescription: '真实章节说明',
+            chapterElementCount: 2,
+            chapterSortOrder: 0,
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        EchoApp(
+          projectRepository: projectRepository,
+          structureChapterRepository: chapterRepository,
+          narrativeElementRepository: _InMemoryNarrativeElementRepository(
+            initialElements: <NarrativeElement>[
+              NarrativeElement.create(
+                id: 'element-1',
+                projectId: 'project-structure',
+                chapterId: 'chapter-1',
+                elementTitle: '河岸石块',
+                createdTimestamp: DateTime(2026),
+                updatedTimestamp: DateTime(2026),
+              ),
+              NarrativeElement.create(
+                id: 'element-2',
+                projectId: 'project-structure',
+                chapterId: 'chapter-1',
+                elementTitle: '回声碎片',
+                createdTimestamp: DateTime(2026, 1, 2),
+                updatedTimestamp: DateTime(2026, 1, 2),
+              ),
+            ],
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('第一章：河岸的回声'), findsOneWidget);
+      expect(find.text('真实章节说明'), findsOneWidget);
+      expect(find.text('2'), findsOneWidget);
+
+      await tester.tap(find.text('添加章节'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('添 加 章 节'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'chapter create page saves chapter and attached draft elements together',
+    (tester) async {
+      int? savedSortOrder;
+      String? savedTitle;
+      String? savedDescription;
+      List<NarrativeElementDraft>? savedElements;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ChapterCreatePage(
+            existingChapters: <StructureChapter>[
+              StructureChapter.create(
+                id: 'chapter-existing',
+                projectId: 'project-a',
+                chapterTitle: '晨曦之眼',
+                chapterSortOrder: 0,
+                createdTimestamp: DateTime(2026),
+                updatedTimestamp: DateTime(2026),
+              ),
+            ],
+            onSave:
+                ({
+                  required String title,
+                  required String description,
+                  required int sortOrder,
+                  required List<NarrativeElementDraft> elements,
+                }) async {
+                  savedTitle = title;
+                  savedDescription = description;
+                  savedSortOrder = sortOrder;
+                  savedElements = elements;
+                },
+          ),
+        ),
+      );
+
+      await tester.enterText(
+        find.byKey(const ValueKey('chapterCreateTitleField')),
+        '新的章节',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('chapterCreateDescriptionField')),
+        '新的章节说明',
+      );
+      await tester.tap(find.text('添加叙事元素'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('chapterDraftElementNameField')),
+        '章节内元素',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('chapterDraftElementDescriptionField')),
+        '章节内元素说明',
+      );
+      await tester.tap(find.text('保 存'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('章节内元素'), findsOneWidget);
+
+      await tester.tap(find.text('保 存'));
+      await tester.pumpAndSettle();
+
+      expect(savedTitle, '新的章节');
+      expect(savedDescription, '新的章节说明');
+      expect(savedSortOrder, 1);
+      expect(savedElements?.length, 1);
+      expect(savedElements?.first.title, '章节内元素');
+    },
+  );
+
+  testWidgets(
+    'structure page shows real narrative elements and add element opens real page',
+    (tester) async {
+      final projectRepository = _InMemoryProjectRepository(
+        initialProjects: <Project>[
+          Project.create(
+            id: 'project-elements',
+            projectTitle: '元素测试项目',
+            projectThemeStatement: '用于测试真实叙事元素展示',
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+        ],
+        currentProjectId: 'project-elements',
+      );
+      final chapterRepository = _InMemoryStructureChapterRepository(
+        initialChapters: <StructureChapter>[
+          StructureChapter.create(
+            id: 'chapter-elements',
+            projectId: 'project-elements',
+            chapterTitle: '第一章：河岸的回声',
+            chapterDescription: '真实章节说明',
+            chapterElementCount: 1,
+            chapterSortOrder: 0,
+          ),
+        ],
+      );
+      final narrativeElementRepository = _InMemoryNarrativeElementRepository(
+        initialElements: <NarrativeElement>[
+          NarrativeElement.create(
+            id: 'element-1',
+            projectId: 'project-elements',
+            chapterId: 'chapter-elements',
+            elementTitle: '江边的空酒瓶',
+            elementDescription: '真实叙事元素说明',
+            linkedPhotoPaths: <String>[],
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        EchoApp(
+          projectRepository: projectRepository,
+          structureChapterRepository: chapterRepository,
+          narrativeElementRepository: narrativeElementRepository,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('叙事元素'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('江边的空酒瓶'), findsOneWidget);
+      expect(find.text('真实叙事元素说明'), findsOneWidget);
+
+      await tester.tap(find.text('添加叙事元素'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('叙 事 元 素'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'narrative list tile uses a local-file image provider for imported photo paths',
+    (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Material(
+            child: NarrativeListTile(
+              title: 'test-yuansu1',
+              description: 'test-yuansu1',
+              status: ElementStatus.finding,
+              images: <String>['/tmp/echo/media/narrative/photo-1.jpg'],
+            ),
+          ),
+        ),
+      );
+
+      final imageWidget = tester.widget<Image>(find.byType(Image).first);
+
+      expect(_baseImageProvider(imageWidget.image), isA<FileImage>());
+    },
+  );
+
+  testWidgets(
+    'narrative list tile keeps network image provider for remote photo urls',
+    (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Material(
+            child: NarrativeListTile(
+              title: 'test-yuansu1',
+              description: 'test-yuansu1',
+              status: ElementStatus.finding,
+              images: <String>['https://example.com/photo-1.jpg'],
+            ),
+          ),
+        ),
+      );
+
+      final imageWidget = tester.widget<Image>(find.byType(Image).first);
+
+      expect(_baseImageProvider(imageWidget.image), isA<NetworkImage>());
+    },
+  );
+
+  testWidgets('add element shows passive hint when no chapters exist', (
+    tester,
+  ) async {
+    final projectRepository = _InMemoryProjectRepository(
+      initialProjects: <Project>[
+        Project.create(
+          id: 'project-no-chapters',
+          projectTitle: '无章节项目',
+          projectThemeStatement: '用于测试无章节提示',
+          createdTimestamp: DateTime(2026),
+          updatedTimestamp: DateTime(2026),
+        ),
+      ],
+      currentProjectId: 'project-no-chapters',
+    );
+
+    await tester.pumpWidget(
+      EchoApp(
+        projectRepository: projectRepository,
+        structureChapterRepository: _InMemoryStructureChapterRepository(),
+        narrativeElementRepository: _InMemoryNarrativeElementRepository(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('叙事元素'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('添加叙事元素'));
+    await tester.pump();
+
+    expect(find.text('请先添加章节'), findsOneWidget);
+    expect(find.text('叙 事 元 素'), findsNothing);
+  });
+
+  testWidgets(
+    'narrative element create page uses centered save button and returns entered data',
+    (tester) async {
+      String? savedTitle;
+      String? savedDescription;
+      String? savedChapterId;
+      List<String>? savedPhotos;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: NarrativeElementCreatePage(
+            chapters: <StructureChapter>[
+              StructureChapter.create(
+                id: 'chapter-a',
+                projectId: 'project-a',
+                chapterTitle: '第一章：河岸的回声',
+                chapterSortOrder: 0,
+                createdTimestamp: DateTime(2026),
+                updatedTimestamp: DateTime(2026),
+              ),
+            ],
+            onSave:
+                ({
+                  required String title,
+                  required String description,
+                  required String? chapterId,
+                  required List<String> photoPaths,
+                }) async {
+                  savedTitle = title;
+                  savedDescription = description;
+                  savedChapterId = chapterId;
+                  savedPhotos = photoPaths;
+                },
+            onPickPhoto: () async => null,
+          ),
+        ),
+      );
+
+      final backIcon = tester.widget<Icon>(
+        find.descendant(
+          of: find.byType(IconButton),
+          matching: find.byIcon(Icons.arrow_back_ios_new),
+        ),
+      );
+      expect(backIcon.size, 18);
+
+      await tester.enterText(
+        find.byKey(const ValueKey('narrativeElementNameField')),
+        '新的叙事元素',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('narrativeElementDescriptionField')),
+        '新的叙事元素说明',
+      );
+      await tester.tap(find.text('保 存'));
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(savedTitle, '新的叙事元素');
+      expect(savedDescription, '新的叙事元素说明');
+      expect(savedChapterId, 'chapter-a');
+      expect(savedPhotos, isEmpty);
+    },
+  );
+
+  testWidgets(
+    'narrative element create page persists imported app photo path instead of source path',
+    (tester) async {
+      List<String>? savedPhotos;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: NarrativeElementCreatePage(
+            chapters: <StructureChapter>[
+              StructureChapter.create(
+                id: 'chapter-a',
+                projectId: 'project-a',
+                chapterTitle: '第一章：河岸的回声',
+                chapterSortOrder: 0,
+                createdTimestamp: DateTime(2026),
+                updatedTimestamp: DateTime(2026),
+              ),
+            ],
+            onSave:
+                ({
+                  required String title,
+                  required String description,
+                  required String? chapterId,
+                  required List<String> photoPaths,
+                }) async {
+                  savedPhotos = photoPaths;
+                },
+            onPickPhoto: () async => '/Users/demo/Pictures/source-photo.jpg',
+            onImportPhoto: (sourcePath) async =>
+                '/app/media/narrative/copied-photo.jpg',
+          ),
+        ),
+      );
+
+      await tester.enterText(
+        find.byKey(const ValueKey('narrativeElementNameField')),
+        '新的叙事元素',
+      );
+      await tester.tap(find.byIcon(Icons.add));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('保 存'));
+      await tester.pumpAndSettle();
+
+      expect(savedPhotos, <String>['/app/media/narrative/copied-photo.jpg']);
+      expect(
+        savedPhotos,
+        isNot(contains('/Users/demo/Pictures/source-photo.jpg')),
+      );
+    },
+  );
+
+  testWidgets(
+    'narrative element create page shows hint and does not mount photo when import fails',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: NarrativeElementCreatePage(
+            chapters: <StructureChapter>[
+              StructureChapter.create(
+                id: 'chapter-a',
+                projectId: 'project-a',
+                chapterTitle: '第一章：河岸的回声',
+                chapterSortOrder: 0,
+                createdTimestamp: DateTime(2026),
+                updatedTimestamp: DateTime(2026),
+              ),
+            ],
+            onSave:
+                ({
+                  required String title,
+                  required String description,
+                  required String? chapterId,
+                  required List<String> photoPaths,
+                }) async {},
+            onPickPhoto: () async => '/tmp/fake-photo.jpg',
+            onImportPhoto: (sourcePath) async {
+              throw Exception('import failed');
+            },
+          ),
+        ),
+      );
+
+      await tester.tap(find.byIcon(Icons.add));
+      await tester.pump();
+
+      expect(find.text('照片导入失败，请重试'), findsOneWidget);
+      expect(find.byType(Image), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'narrative element create page shows compact hint when no chapters exist',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: NarrativeElementCreatePage(
+            chapters: const <StructureChapter>[],
+            onSave:
+                ({
+                  required String title,
+                  required String description,
+                  required String? chapterId,
+                  required List<String> photoPaths,
+                }) async {},
+            onPickPhoto: () async => null,
+          ),
+        ),
+      );
+
+      expect(find.text('请先添加章节'), findsOneWidget);
+      expect(find.text('暂 无 可 选 章 节'), findsNothing);
     },
   );
 
@@ -362,8 +909,11 @@ void main() {
           data: const MediaQueryData(size: Size(360, 800)),
           child: StructurePagePrototype(
             currentTabIndex: 0,
-            chapterElements: const [],
+            chapterCards: const <StructureChapterCardData>[],
+            elementGroups: const <Map<String, dynamic>>[],
             onOpenSidebar: _noop,
+            onAddChapter: _noop,
+            onAddElement: _noop,
             onTabChanged: _noopTab,
             onBottomTabChanged: _noopPrototypeTab,
           ),
@@ -372,7 +922,7 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('+12'), findsOneWidget);
+    expect(find.text('添加章节'), findsOneWidget);
     expect(
       find.byWidgetPredicate(
         (widget) =>
@@ -582,4 +1132,100 @@ class _InMemoryProjectRepository implements ProjectRepository {
       _currentProject = _projects.isEmpty ? null : _projects.first;
     }
   }
+}
+
+class _InMemoryStructureChapterRepository
+    implements StructureChapterRepository {
+  _InMemoryStructureChapterRepository({List<StructureChapter>? initialChapters})
+    : _chapters = List<StructureChapter>.from(
+        initialChapters ?? <StructureChapter>[],
+      );
+
+  final List<StructureChapter> _chapters;
+
+  @override
+  Future<List<StructureChapter>> listChaptersForProject(
+    String projectId,
+  ) async {
+    final chapters = _chapters
+        .where((chapter) => chapter.owningProjectId == projectId)
+        .toList();
+    chapters.sort((left, right) => left.sortOrder.compareTo(right.sortOrder));
+    return chapters;
+  }
+
+  @override
+  Future<StructureChapter> createChapter({
+    required String projectId,
+    required String title,
+    String? description,
+    required int sortOrder,
+  }) async {
+    for (final chapter in _chapters) {
+      if (chapter.owningProjectId == projectId &&
+          chapter.sortOrder >= sortOrder) {
+        chapter.sortOrder += 1;
+      }
+    }
+
+    final chapter = StructureChapter.create(
+      id: 'chapter-${_chapters.length + 1}',
+      projectId: projectId,
+      chapterTitle: title,
+      chapterDescription: description,
+      chapterSortOrder: sortOrder,
+      createdTimestamp: DateTime(2026),
+      updatedTimestamp: DateTime(2026),
+    );
+    _chapters.add(chapter);
+    return chapter;
+  }
+}
+
+class _InMemoryNarrativeElementRepository
+    implements NarrativeElementRepository {
+  _InMemoryNarrativeElementRepository({List<NarrativeElement>? initialElements})
+    : _elements = List<NarrativeElement>.from(
+        initialElements ?? <NarrativeElement>[],
+      );
+
+  final List<NarrativeElement> _elements;
+
+  @override
+  Future<NarrativeElement> createElement({
+    required String projectId,
+    String? chapterId,
+    required String title,
+    String? description,
+    List<String>? photoPaths,
+  }) async {
+    final element = NarrativeElement.create(
+      id: 'element-${_elements.length + 1}',
+      projectId: projectId,
+      chapterId: chapterId,
+      elementTitle: title,
+      elementDescription: description,
+      linkedPhotoPaths: photoPaths,
+      createdTimestamp: DateTime(2026),
+      updatedTimestamp: DateTime(2026),
+    );
+    _elements.add(element);
+    return element;
+  }
+
+  @override
+  Future<List<NarrativeElement>> listElementsForProject(
+    String projectId,
+  ) async {
+    return _elements
+        .where((element) => element.owningProjectId == projectId)
+        .toList();
+  }
+}
+
+ImageProvider<Object> _baseImageProvider(ImageProvider<Object> provider) {
+  if (provider is ResizeImage) {
+    return provider.imageProvider;
+  }
+  return provider;
 }

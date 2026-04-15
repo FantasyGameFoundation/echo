@@ -1,8 +1,7 @@
-import 'dart:math' as math;
-
+import 'package:echo/features/structure_elements_relations/presentation/models/structure_chapter_card_data.dart';
 import 'package:echo/features/structure_elements_relations/presentation/widgets/chapter_card.dart';
+import 'package:echo/features/structure_elements_relations/presentation/widgets/narrative_thumbnail_provider.dart';
 import 'package:echo/features/structure_elements_relations/presentation/widgets/narrative_list_tile.dart';
-import 'package:echo/features/structure_elements_relations/presentation/widgets/photo_fallback_tile.dart';
 import 'package:echo/features/structure_elements_relations/presentation/widgets/section_tab_bar.dart';
 import 'package:echo/features/structure_elements_relations/presentation/widgets/sticky_chapter_header_delegate.dart';
 import 'package:echo/shared/models/prototype_tab.dart';
@@ -13,17 +12,23 @@ class StructurePagePrototype extends StatelessWidget {
   const StructurePagePrototype({
     super.key,
     required this.currentTabIndex,
-    required this.chapterElements,
-    this.projectTitle = '赤水河沿岸寻访',
+    required this.chapterCards,
+    required this.elementGroups,
+    this.projectTitle = '',
     required this.onOpenSidebar,
+    required this.onAddChapter,
+    required this.onAddElement,
     required this.onTabChanged,
     required this.onBottomTabChanged,
   });
 
   final int currentTabIndex;
-  final List<Map<String, dynamic>> chapterElements;
+  final List<StructureChapterCardData> chapterCards;
+  final List<Map<String, dynamic>> elementGroups;
   final String projectTitle;
   final VoidCallback onOpenSidebar;
+  final VoidCallback onAddChapter;
+  final VoidCallback onAddElement;
   final ValueChanged<int> onTabChanged;
   final ValueChanged<PrototypeTab> onBottomTabChanged;
 
@@ -66,19 +71,26 @@ class StructurePagePrototype extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           IconButton(
             icon: const Icon(Icons.menu, color: Colors.black87),
             onPressed: onOpenSidebar,
           ),
-          Text(
-            projectTitle,
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w300,
-              letterSpacing: 4.0,
-              color: Colors.black87,
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12.0),
+              child: Text(
+                projectTitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w300,
+                  letterSpacing: 4.0,
+                  color: Colors.black87,
+                ),
+              ),
             ),
           ),
           IconButton(
@@ -94,66 +106,20 @@ class StructurePagePrototype extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 24.0),
       children: [
-        ChapterCard(
-          chapterNumber: '01',
-          title: '晨曦之眼：城市边缘的静谧',
-          elementCount: '14',
-          extraTopRightWidget: _buildStatusIndicator('草稿'),
-          customContent: _buildResponsiveChapterPreview(
-            imageUrls: const [_stablePhotoA, _stablePhotoB],
-            overflowText: '+12',
+        for (var index = 0; index < chapterCards.length; index++)
+          ChapterCard(
+            chapterNumber: chapterCards[index].chapterNumber,
+            title: chapterCards[index].title,
+            elementCount: chapterCards[index].elementCount.toString(),
+            extraTopRightWidget: _buildStatusIndicator(
+              chapterCards[index].statusLabel,
+            ),
+            customContent: chapterCards[index].previewImageSources.isEmpty
+                ? _buildDescriptionText(chapterCards[index].description)
+                : _buildChapterPhotoStrip(
+                    chapterCards[index].previewImageSources,
+                  ),
           ),
-        ),
-        ChapterCard(
-          chapterNumber: '02',
-          title: '众神之后：废弃工业区的色彩',
-          elementCount: '8',
-          isTextOnly: true,
-          extraTopRightWidget: _buildStatusIndicator('进行中'),
-          customContent: _buildDescriptionText(
-            '专注于废弃工厂内部的金属质感与锈迹色彩，捕捉工业遗址在自然侵蚀下的独特美感。',
-          ),
-        ),
-        ChapterCard(
-          chapterNumber: '03',
-          title: '呼吸感：极简构图与留白艺术',
-          elementCount: '3',
-          extraTopRightWidget: _buildStatusIndicator('待审核'),
-          customContent: _buildResponsiveChapterPreview(
-            imageUrls: const [_stablePhotoC, _stablePhotoD],
-            overflowText: '+1',
-          ),
-        ),
-        ChapterCard(
-          chapterNumber: '04',
-          title: '阴影的重量',
-          elementCount: '11',
-          extraTopRightWidget: _buildStatusIndicator('修订中'),
-          customContent: _buildResponsiveChapterPreview(
-            imageUrls: const [_stablePhotoE, _stablePhotoA],
-            overflowText: '+9',
-          ),
-        ),
-        ChapterCard(
-          chapterNumber: '05',
-          title: '最后的凝视：记忆中的地标',
-          elementCount: '5',
-          isTextOnly: true,
-          extraTopRightWidget: _buildStatusIndicator('已排版'),
-          customContent: _buildDescriptionText(
-            '对核心建筑物的最终审视，结合黄昏时刻的暖色调，为整个系列画上句号。',
-          ),
-        ),
-        ChapterCard(
-          chapterNumber: '06',
-          title: '光影的旋律：结构与节奏',
-          elementCount: '10',
-          extraTopRightWidget: _buildStatusIndicator('待发布'),
-          customContent: _buildResponsiveChapterPreview(
-            imageUrls: const [_stablePhotoB, _stablePhotoC],
-            overflowText: '+8',
-          ),
-        ),
         _buildAddChapterButton(),
         const SizedBox(height: 40),
       ],
@@ -181,7 +147,7 @@ class StructurePagePrototype extends StatelessWidget {
         Expanded(
           child: CustomScrollView(
             slivers: [
-              for (final group in chapterElements) ...[
+              for (final group in elementGroups) ...[
                 SliverPersistentHeader(
                   pinned: false,
                   delegate: StickyChapterHeaderDelegate(
@@ -240,26 +206,29 @@ class StructurePagePrototype extends StatelessWidget {
   }
 
   Widget _buildAddElementButton() {
-    return Container(
-      height: 64,
-      width: double.infinity,
-      decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey.shade300, width: 1.5),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.add, color: Colors.grey.shade400, size: 20),
-          const SizedBox(width: 8),
-          Text(
-            '添加叙事元素',
-            style: TextStyle(
-              color: Colors.grey.shade400,
-              fontSize: 14,
-              letterSpacing: 1.2,
+    return InkWell(
+      onTap: onAddElement,
+      child: Container(
+        height: 64,
+        width: double.infinity,
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey.shade300, width: 1.5),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.add, color: Colors.grey.shade400, size: 20),
+            const SizedBox(width: 8),
+            Text(
+              '添加叙事元素',
+              style: TextStyle(
+                color: Colors.grey.shade400,
+                fontSize: 14,
+                letterSpacing: 1.2,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -295,94 +264,112 @@ class StructurePagePrototype extends StatelessWidget {
     );
   }
 
-  Widget _buildResponsiveChapterPreview({
-    required List<String> imageUrls,
-    required String overflowText,
-  }) {
+  Widget _buildChapterPhotoStrip(List<String> previewImageSources) {
+    final totalCount = previewImageSources.length;
+    final visibleImages = totalCount > 2
+        ? previewImageSources.take(2).toList()
+        : previewImageSources.take(2).toList();
+    final overflowCount = totalCount > 2 ? totalCount - 2 : 0;
+    final tileCount = visibleImages.length + (overflowCount > 0 ? 1 : 0);
+
     return LayoutBuilder(
       builder: (context, constraints) {
-        const gap = 2.0;
-        final boxSize = math.min(80.0, (constraints.maxWidth - (gap * 2)) / 3);
+        final totalSpacing = tileCount > 0 ? (tileCount - 1) * 2.0 : 0.0;
+        final availableWidth = constraints.maxWidth.isFinite
+            ? constraints.maxWidth
+            : 244.0;
+        final tileSize = tileCount == 0
+            ? 80.0
+            : ((availableWidth - totalSpacing) / tileCount).clamp(56.0, 80.0);
 
         return Row(
-          mainAxisSize: MainAxisSize.min,
           children: [
-            _buildChapterPreviewImage(imageUrls[0], boxSize),
-            const SizedBox(width: gap),
-            _buildChapterPreviewImage(imageUrls[1], boxSize),
-            const SizedBox(width: gap),
-            _buildChapterPreviewPlaceholder(overflowText, boxSize),
+            for (var index = 0; index < visibleImages.length; index++)
+              _buildChapterPreviewImage(
+                visibleImages[index],
+                size: tileSize,
+                addLeftSpacing: index > 0,
+              ),
+            if (overflowCount > 0)
+              _buildChapterOverflowBox(
+                '+$overflowCount',
+                size: tileSize,
+                addLeftSpacing: visibleImages.isNotEmpty,
+              ),
           ],
         );
       },
     );
   }
 
-  Widget _buildChapterPreviewImage(String url, double size) {
-    return SizedBox(
+  Widget _buildChapterPreviewImage(
+    String source, {
+    required double size,
+    required bool addLeftSpacing,
+  }) {
+    return Container(
+      key: ValueKey('chapterPreviewImage-$source'),
       width: size,
       height: size,
-      child: Image.network(
-        url,
+      margin: EdgeInsets.only(left: addLeftSpacing ? 2 : 0),
+      child: Image(
+        image: ResizeImage.resizeIfNeeded(
+          160,
+          null,
+          narrativeThumbnailProvider(source),
+        ),
         fit: BoxFit.cover,
-        filterQuality: FilterQuality.low,
-        cacheWidth: 240,
-        loadingBuilder: (context, child, progress) {
-          if (progress == null) return child;
-          return PhotoFallbackTile(size: size);
+        errorBuilder: (context, error, stackTrace) {
+          return Container(color: Colors.grey.shade300);
         },
-        errorBuilder: (context, error, stackTrace) =>
-            PhotoFallbackTile(size: size),
       ),
     );
   }
 
-  Widget _buildChapterPreviewPlaceholder(String text, double size) {
+  Widget _buildChapterOverflowBox(
+    String text, {
+    required double size,
+    required bool addLeftSpacing,
+  }) {
     return Container(
+      key: ValueKey('chapterPreviewOverflow-$text'),
       width: size,
       height: size,
+      margin: EdgeInsets.only(left: addLeftSpacing ? 2 : 0),
       color: Colors.grey.shade300,
       alignment: Alignment.center,
       child: Text(
         text,
-        style: TextStyle(fontWeight: FontWeight.bold, fontSize: size * 0.18),
+        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
       ),
     );
   }
 
   Widget _buildAddChapterButton() {
-    return Container(
-      height: 80,
-      width: double.infinity,
-      decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey.shade300, width: 1.5),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.add, color: Colors.grey.shade400, size: 20),
-          const SizedBox(width: 8),
-          Text(
-            '添加新章节',
-            style: TextStyle(
-              color: Colors.grey.shade400,
-              fontSize: 14,
-              letterSpacing: 1.2,
+    return InkWell(
+      onTap: onAddChapter,
+      child: Container(
+        height: 64,
+        width: double.infinity,
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey.shade300, width: 1.5),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.add, color: Colors.grey.shade400, size: 20),
+            const SizedBox(width: 8),
+            Text(
+              '添加章节',
+              style: TextStyle(
+                color: Colors.grey.shade400,
+                fontSize: 14,
+                letterSpacing: 1.2,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 }
-
-const _stablePhotoA =
-    'https://picsum.photos/seed/echo-structure-a/400/400?grayscale';
-const _stablePhotoB =
-    'https://picsum.photos/seed/echo-structure-b/400/400?grayscale';
-const _stablePhotoC =
-    'https://picsum.photos/seed/echo-structure-c/400/400?grayscale';
-const _stablePhotoD =
-    'https://picsum.photos/seed/echo-structure-d/400/400?grayscale';
-const _stablePhotoE =
-    'https://picsum.photos/seed/echo-structure-e/400/400?grayscale';
