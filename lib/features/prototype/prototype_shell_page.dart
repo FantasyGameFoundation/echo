@@ -143,14 +143,40 @@ class _PrototypeShellPageState extends State<PrototypeShellPage> {
               Positioned.fill(
                 child: GestureDetector(
                   onTap: () => setState(() => _sidebarOpen = false),
-                  child: Container(color: Colors.black.withValues(alpha: 0.18)),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 6.0, sigmaY: 6.0),
+                    child: Container(
+                      color: Colors.white.withValues(alpha: 0.18),
+                    ),
+                  ),
                 ),
               ),
-              const Positioned(
+              Positioned(
                 top: 0,
                 bottom: 0,
                 left: 0,
-                child: ProjectSidebar(),
+                child: ProjectSidebar(
+                  onNewProject: () async {
+                    setState(() {
+                      _sidebarOpen = false;
+                      _currentTab = PrototypeTab.structure;
+                      _currentTabIndex = 0;
+                    });
+                    await Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => ProjectWizardPage(
+                          onFinish: () {
+                            setState(() {
+                              _currentTab = PrototypeTab.structure;
+                              _currentTabIndex = 0;
+                              _sidebarOpen = false;
+                            });
+                          },
+                        ),
+                      ),
+                    );
+                  },
+                ),
               ),
             ],
           ],
@@ -191,15 +217,13 @@ class _PrototypeShellPageState extends State<PrototypeShellPage> {
           onBottomTabChanged: _changeTab,
         );
       case PrototypeTab.overview:
-        return OverviewPagePrototype(
+        return BeaconPagePrototype(
           onOpenSidebar: () => setState(() => _sidebarOpen = true),
           onBottomTabChanged: _changeTab,
         );
       case PrototypeTab.timeline:
-        return PlaceholderPrototypePage(
-          title: '历 程',
-          icon: Icons.show_chart,
-          activeTab: PrototypeTab.timeline,
+        return TimelinePagePrototype(
+          onOpenSidebar: () => setState(() => _sidebarOpen = true),
           onBottomTabChanged: _changeTab,
         );
     }
@@ -223,7 +247,12 @@ class _PrototypeShellPageState extends State<PrototypeShellPage> {
 }
 
 class ProjectSidebar extends StatelessWidget {
-  const ProjectSidebar({super.key});
+  const ProjectSidebar({
+    super.key,
+    required this.onNewProject,
+  });
+
+  final VoidCallback onNewProject;
 
   @override
   Widget build(BuildContext context) {
@@ -235,31 +264,22 @@ class ProjectSidebar extends StatelessWidget {
         children: [
           Padding(
             padding: const EdgeInsets.only(left: 24, top: 64, bottom: 48),
-            child: Row(
-              children: [
-                const Icon(Icons.photo_library, size: 28, color: Colors.black87),
-                const SizedBox(width: 12),
-                const Text(
-                  '项目中心',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w500,
-                    letterSpacing: 2.0,
-                    color: Colors.black87,
-                  ),
-                ),
-              ],
+            child: const Text(
+              '项目中心',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.w500,
+                letterSpacing: 2.0,
+                color: Colors.black87,
+              ),
             ),
           ),
           _buildSectionTitle('活 跃 项 目'),
           _buildNavItem(title: '赤水河沿岸寻访', isSelected: true),
           _buildNavItem(title: '建筑的沉默'),
           const SizedBox(height: 32),
-          _buildSectionTitle('草 稿 箱'),
+          _buildSectionTitle('已 归 档 项 目'),
           _buildNavItem(title: '无名系列 01'),
-          const SizedBox(height: 32),
-          _buildSectionTitle('管 理'),
-          _buildNavItem(title: '已归档', icon: Icons.archive_outlined),
           const Spacer(),
           Container(
             decoration: BoxDecoration(
@@ -269,7 +289,7 @@ class ProjectSidebar extends StatelessWidget {
             ),
             padding: const EdgeInsets.all(24.0),
             child: InkWell(
-              onTap: () {},
+              onTap: onNewProject,
               child: Container(
                 height: 56,
                 decoration: const BoxDecoration(
@@ -1541,6 +1561,1280 @@ class PlaceholderPrototypePage extends StatelessWidget {
   }
 }
 
+class BeaconPagePrototype extends StatefulWidget {
+  const BeaconPagePrototype({
+    super.key,
+    required this.onOpenSidebar,
+    required this.onBottomTabChanged,
+  });
+
+  final VoidCallback onOpenSidebar;
+  final ValueChanged<PrototypeTab> onBottomTabChanged;
+
+  @override
+  State<BeaconPagePrototype> createState() => _BeaconPagePrototypeState();
+}
+
+class _BeaconPagePrototypeState extends State<BeaconPagePrototype> {
+  String _activeTab = '全部';
+
+  final List<BeaconTask> _allTasks = [
+    BeaconTask(
+      title: '赤水河中游航拍全景',
+      description: '使用无人机接片拍摄河道大拐弯，注意避开正午顶光，寻找河水与两岸红土的清晰交界线。',
+      imageUrl: 'https://images.unsplash.com/photo-1506744626753-1fa44df14c89?w=800',
+      status: TaskStatus.pending,
+      chapters: ['01 / 晨曦之眼', '02 / 众神之后', '04 / 阴影的重量', '05 / 最后的凝视：记忆中的地标', '06 / 光影的旋律'],
+      elements: ['江边的空酒瓶', '水面的漂浮物', '赤红的泥土', '斑驳的树影', '孤独的电线杆', '江边的围网'],
+    ),
+    BeaconTask(
+      title: '废弃糖厂内部钢铁结构',
+      description: '寻找对称的几何构图，使用超广角夸张透视，展现工业巨兽的压迫感。',
+      imageUrl: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=800',
+      status: TaskStatus.pending,
+      chapters: [],
+      elements: ['某种醉态', '江边的空酒瓶', '水面的漂浮物', '迷茫的眼神', '赤红的泥土', '斑驳的树影', '孤独的电线杆'],
+    ),
+    BeaconTask(
+      title: '寻访废弃的盐道码头',
+      description: '重点关注水面反光与铁锈的质感对比，尽量使用广角压低视角。',
+      imageUrl: 'https://images.unsplash.com/photo-1496307653780-42ee777d4833?w=800',
+      status: TaskStatus.pending,
+      chapters: ['02 / 众神之后'],
+      elements: [],
+    ),
+    BeaconTask(
+      title: '老街坊的清晨茶馆',
+      description: '抓拍老人们的面部特写，利用茶馆木窗投射进来的自然光，压暗背景。',
+      imageUrl: 'https://images.unsplash.com/photo-1494438639946-1ebd1d20bf85?w=800',
+      status: TaskStatus.pending,
+      chapters: ['03 / 呼吸感', '06 / 光影的旋律：结构与节奏', '附录 / 遗失的对话'],
+      elements: [],
+    ),
+    BeaconTask(
+      title: '旧林区林道伐木痕迹',
+      description: '记录树桩上的年轮细节，侧逆光下寻找年轮间隙的青苔深度。',
+      imageUrl: 'https://images.unsplash.com/photo-1518131341018-095034639e44?w=800',
+      status: TaskStatus.pending,
+      chapters: [],
+      elements: ['迷茫的眼神', '斑驳的树影'],
+    ),
+    BeaconTask(
+      title: '县城剧院废弃放映厅',
+      description: '极低照度拍摄，捕捉放映机投射孔透出的微光，注意空气中的尘埃。',
+      imageUrl: 'https://images.unsplash.com/photo-1444418776041-9c7e33cc5a9c?w=800',
+      status: TaskStatus.archived,
+      chapters: ['01 / 晨曦之眼', '03 / 呼吸感'],
+      elements: ['某种醉态'],
+    ),
+    BeaconTask(
+      title: '河滩边的采砂船残骸',
+      description: '沿着枯水期的河床线寻找，注意工业遗迹与自然河流的切割线。',
+      imageUrl: 'https://images.unsplash.com/photo-1517581177682-a085bb7ffb15?w=800',
+      status: TaskStatus.archived,
+      chapters: [],
+      elements: [],
+    ),
+  ];
+
+  List<BeaconTask> get _filteredTasks {
+    if (_activeTab == '待执行') {
+      return _allTasks.where((t) => t.status == TaskStatus.pending).toList();
+    } else if (_activeTab == '已归档') {
+      return _allTasks.where((t) => t.status == TaskStatus.archived).toList();
+    }
+    return _allTasks;
+  }
+
+  int get _countAll => _allTasks.length;
+  int get _countPending =>
+      _allTasks.where((t) => t.status == TaskStatus.pending).length;
+  int get _countArchived =>
+      _allTasks.where((t) => t.status == TaskStatus.archived).length;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: SafeArea(
+        child: Stack(
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildTopBar(),
+                const SizedBox(height: 24),
+                _buildTabsWithSearch(),
+                Expanded(
+                  child: ListView.builder(
+                    padding: const EdgeInsets.only(
+                      left: 24,
+                      right: 24,
+                      top: 24,
+                      bottom: 100,
+                    ),
+                    itemCount: _filteredTasks.length,
+                    itemBuilder: (context, index) {
+                      return _buildTaskCard(_filteredTasks[index]);
+                    },
+                  ),
+                ),
+              ],
+            ),
+            Positioned(
+              bottom: 96,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: _buildFloatingActionBtn(),
+              ),
+            ),
+            Align(
+              alignment: Alignment.bottomCenter,
+              child: CustomBottomNavBar(
+                activeTab: PrototypeTab.overview,
+                onChangeTab: widget.onBottomTabChanged,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTopBar() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          IconButton(
+            icon: const Icon(Icons.menu, color: Colors.black87),
+            onPressed: widget.onOpenSidebar,
+          ),
+          const Text(
+            '赤水河沿岸寻访',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w300,
+              letterSpacing: 4.0,
+              color: Colors.black87,
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings, color: Colors.black87),
+            onPressed: () {},
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTabsWithSearch() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          _buildSingleTab('全部', _countAll),
+          const SizedBox(width: 32),
+          _buildSingleTab('待执行', _countPending),
+          const SizedBox(width: 32),
+          _buildSingleTab('已归档', _countArchived),
+          const Spacer(),
+          GestureDetector(
+            onTap: () {},
+            child: const Padding(
+              padding: EdgeInsets.only(bottom: 6.0),
+              child: Icon(Icons.search, color: Colors.black87, size: 18),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSingleTab(String title, int count) {
+    final isActive = _activeTab == title;
+    return GestureDetector(
+      onTap: () => setState(() => _activeTab = title),
+      child: Container(
+        padding: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(
+              color: isActive ? Colors.black87 : Colors.transparent,
+              width: 2.0,
+            ),
+          ),
+        ),
+        child: Row(
+          children: [
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+                color: isActive ? Colors.black87 : Colors.grey.shade500,
+                letterSpacing: 1.0,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              '$count',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: isActive ? Colors.grey.shade600 : Colors.grey.shade400,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTaskCard(BeaconTask task) {
+    final hasAssociations = task.chapters.isNotEmpty || task.elements.isNotEmpty;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    task.title,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                ),
+                const Icon(Icons.chevron_right, color: Colors.black54),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              task.description,
+              style: TextStyle(
+                fontSize: 13,
+                color: Colors.grey.shade600,
+                height: 1.6,
+              ),
+            ),
+            const SizedBox(height: 16),
+            AspectRatio(
+              aspectRatio: 16 / 9,
+              child: Container(
+                color: Colors.grey.shade200,
+                child: ColorFiltered(
+                  colorFilter: _greyscaleFilter,
+                  child: Image.network(
+                    task.imageUrl,
+                    fit: BoxFit.cover,
+                    errorBuilder: (c, e, s) =>
+                        const Icon(Icons.image, color: Colors.grey),
+                  ),
+                ),
+              ),
+            ),
+            if (hasAssociations) ...[
+              const SizedBox(height: 16),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.only(top: 12),
+                decoration: BoxDecoration(
+                  border: Border(top: BorderSide(color: Colors.grey.shade100)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (task.chapters.isNotEmpty)
+                      _buildAssociationText('章节', task.chapters.join('，')),
+                    if (task.chapters.isNotEmpty && task.elements.isNotEmpty)
+                      const SizedBox(height: 4),
+                    if (task.elements.isNotEmpty)
+                      _buildAssociationText('元素', task.elements.join('，')),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAssociationText(String label, String content) {
+    return Text(
+      '[$label]  $content',
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        fontSize: 11,
+        color: Colors.grey.shade500,
+        fontStyle: FontStyle.italic,
+        letterSpacing: 0.5,
+      ),
+    );
+  }
+
+  Widget _buildFloatingActionBtn() {
+    return InkWell(
+      onTap: () {},
+      borderRadius: BorderRadius.circular(24),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.black,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.2),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '执 行 模 式',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 2.0,
+              ),
+            ),
+            SizedBox(width: 8),
+            Icon(Icons.arrow_forward, color: Colors.white, size: 16),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+enum TaskStatus { pending, archived }
+
+class BeaconTask {
+  BeaconTask({
+    required this.title,
+    required this.description,
+    required this.imageUrl,
+    required this.status,
+    this.chapters = const [],
+    this.elements = const [],
+  });
+
+  final String title;
+  final String description;
+  final String imageUrl;
+  final TaskStatus status;
+  final List<String> chapters;
+  final List<String> elements;
+}
+
+enum TimelineEventType { photo, note, organize, node }
+
+class TimelineEvent {
+  TimelineEvent({
+    required this.date,
+    required this.type,
+    required this.content,
+    this.location,
+    this.images = const [],
+    this.highlightText,
+  });
+
+  final DateTime date;
+  final TimelineEventType type;
+  final String content;
+  final String? location;
+  final List<String> images;
+  final String? highlightText;
+}
+
+class TimelinePagePrototype extends StatefulWidget {
+  const TimelinePagePrototype({
+    super.key,
+    required this.onOpenSidebar,
+    required this.onBottomTabChanged,
+  });
+
+  final VoidCallback onOpenSidebar;
+  final ValueChanged<PrototypeTab> onBottomTabChanged;
+
+  @override
+  State<TimelinePagePrototype> createState() => _TimelinePagePrototypeState();
+}
+
+class _TimelinePagePrototypeState extends State<TimelinePagePrototype> {
+  String _activeTab = '全部';
+
+  final List<TimelineEvent> _allEvents = [
+    TimelineEvent(
+      date: DateTime(2026, 10, 24, 14, 30),
+      type: TimelineEventType.photo,
+      location: '贵州省 遵义市 习水县',
+      content: '发现了一些有趣的钢铁结构，光影对比很强烈。赤水河畔的旧工厂正逐渐被植被吞噬。',
+      images: [
+        'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=400',
+        'https://images.unsplash.com/photo-1496307653780-42ee777d4833?w=400',
+      ],
+    ),
+    TimelineEvent(
+      date: DateTime(2026, 10, 22, 11, 15),
+      type: TimelineEventType.node,
+      content: '',
+      highlightText: '元素【废弃的盐道码头】已标记完成',
+      images: ['https://images.unsplash.com/photo-1496307653780-42ee777d4833?w=200'],
+    ),
+    TimelineEvent(
+      date: DateTime(2026, 10, 21, 20, 45),
+      type: TimelineEventType.note,
+      content:
+          '「今天的寻访非常顺利，赤水河的水位比预想的要低一些，正好露出了那些旧时代的盐道遗迹。下次需要带上无人机，从空中俯瞰河道与古道的拓扑关系。」',
+    ),
+    TimelineEvent(
+      date: DateTime(2026, 10, 18, 9, 10),
+      type: TimelineEventType.photo,
+      location: '贵州省 遵义市 茅台镇',
+      content:
+          '清晨的雾气还未散去，空气中弥漫着淡淡的酒糟香气。车间的外墙上爬满了厚厚的苍藓，这种历史感是新建筑无法模拟的。记录下了光线穿透雾气照刷在石阶上的瞬间。',
+      images: ['https://images.unsplash.com/photo-1513694203232-719a280e022f?w=800'],
+    ),
+    TimelineEvent(
+      date: DateTime(2026, 10, 15, 16, 40),
+      type: TimelineEventType.organize,
+      content: '',
+      highlightText: '建立关联：【码头遗址】与【第三章：水路文明】',
+      images: [
+        'https://images.unsplash.com/photo-1494438639946-1ebd1d20bf85?w=200',
+        'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=200'
+      ],
+    ),
+    TimelineEvent(
+      date: DateTime(2026, 10, 12, 22, 15),
+      type: TimelineEventType.note,
+      content:
+          '「整理照片时发现，那些看似无序的碎石滩其实遵循着河流的几何走向。需要对水文地理学做更深入的案头研究。关于『消逝的建筑』这一主题，我想表达的不只是物理的坍塌，更是意义的迁移。」',
+      images: ['https://images.unsplash.com/photo-1518131341018-095034639e44?w=400'],
+    ),
+    TimelineEvent(
+      date: DateTime(2026, 9, 28, 14, 00),
+      type: TimelineEventType.node,
+      content: '',
+      highlightText: '章节【第一章：河岸线】框架已搭建完成',
+      images: [],
+    ),
+    TimelineEvent(
+      date: DateTime(2026, 9, 25, 10, 30),
+      type: TimelineEventType.photo,
+      location: '四川省 泸州市 赤水市',
+      content: '项目启动。首次跨越省界，从不同的行政视角观察同一条河流。',
+      images: ['https://images.unsplash.com/photo-1517581177682-a085bb7ffb15?w=800'],
+    ),
+  ];
+
+  List<TimelineEvent> get _filteredEvents {
+    if (_activeTab == '全部') return _allEvents;
+    return _filterEvents(_activeTab);
+  }
+
+  List<TimelineEvent> _filterEvents(String tab) {
+    switch (tab) {
+      case '照片':
+        return _allEvents.where((e) => e.type == TimelineEventType.photo).toList();
+      case '手记':
+        return _allEvents.where((e) => e.type == TimelineEventType.note).toList();
+      case '整理':
+        return _allEvents.where((e) => e.type == TimelineEventType.organize).toList();
+      case '节点':
+        return _allEvents.where((e) => e.type == TimelineEventType.node).toList();
+      default:
+        return _allEvents;
+    }
+  }
+
+  Map<String, List<TimelineEvent>> get _groupedEvents {
+    final groups = <String, List<TimelineEvent>>{};
+    for (final event in _filteredEvents) {
+      final monthKey =
+          '${event.date.year}年${event.date.month.toString().padLeft(2, '0')}月';
+      groups.putIfAbsent(monthKey, () => []);
+      groups[monthKey]!.add(event);
+    }
+    return groups;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final groupedData = _groupedEvents;
+
+    return Scaffold(
+      body: SafeArea(
+        child: Column(
+          children: [
+            _buildTopBar(),
+            const SizedBox(height: 16),
+            _buildTabsWithSearch(),
+            const SizedBox(height: 16),
+            Expanded(
+              child: groupedData.isEmpty
+                  ? Center(
+                      child: Text(
+                        '暂无记录',
+                        style: TextStyle(color: Colors.grey.shade400),
+                      ),
+                    )
+                  : CustomScrollView(
+                      slivers: [
+                        for (final entry in groupedData.entries)
+                          SliverMainAxisGroup(
+                            slivers: [
+                              SliverPersistentHeader(
+                                pinned: true,
+                                delegate: _MonthHeaderDelegate(monthText: entry.key),
+                              ),
+                              SliverList(
+                                delegate: SliverChildBuilderDelegate(
+                                  (context, index) {
+                                    final isLastInMonth =
+                                        index == entry.value.length - 1;
+                                    return _buildTimelineTile(
+                                      entry.value[index],
+                                      isLastInMonth,
+                                    );
+                                  },
+                                  childCount: entry.value.length,
+                                ),
+                              ),
+                            ],
+                          ),
+                        const SliverToBoxAdapter(child: SizedBox(height: 80)),
+                      ],
+                    ),
+            ),
+            CustomBottomNavBar(
+              activeTab: PrototypeTab.timeline,
+              onChangeTab: widget.onBottomTabChanged,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTopBar() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          IconButton(
+            icon: const Icon(Icons.menu, color: Colors.black87),
+            onPressed: widget.onOpenSidebar,
+          ),
+          const Text(
+            '历 程',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 8.0,
+              color: Colors.black87,
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings, color: Colors.black87),
+            onPressed: () {},
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTabsWithSearch() {
+    final tabs = ['全部', '照片', '手记', '整理', '节点'];
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          ...tabs.map(
+            (tab) => Padding(
+              padding: const EdgeInsets.only(right: 24.0),
+              child: _buildSingleTimelineTab(tab),
+            ),
+          ),
+          const Spacer(),
+          GestureDetector(
+            onTap: () {},
+            child: const Padding(
+              padding: EdgeInsets.only(bottom: 6.0),
+              child: Icon(Icons.search, color: Colors.black87, size: 18),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSingleTimelineTab(String title) {
+    final isActive = _activeTab == title;
+    return GestureDetector(
+      onTap: () => setState(() => _activeTab = title),
+      child: Container(
+        padding: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(
+              color: isActive ? Colors.black87 : Colors.transparent,
+              width: 2.0,
+            ),
+          ),
+        ),
+        child: Text(
+          title,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+            color: isActive ? Colors.black87 : Colors.grey.shade500,
+            letterSpacing: 1.0,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTimelineTile(TimelineEvent event, bool isLast) {
+    final dateStr = '${event.date.month}月${event.date.day}日';
+    final timeStr =
+        '${event.date.hour.toString().padLeft(2, '0')}:${event.date.minute.toString().padLeft(2, '0')}';
+
+    return Stack(
+      children: [
+        if (!isLast)
+          Positioned(
+            top: 14,
+            bottom: 0,
+            left: 83.5,
+            child: Container(
+              width: 1,
+              color: Colors.grey.shade300,
+            ),
+          ),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 72,
+              child: Padding(
+                padding: const EdgeInsets.only(left: 24.0, top: 4.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      dateStr,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      timeStr,
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            SizedBox(
+              width: 24,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 8.0),
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: Container(
+                    width: 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade400,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(right: 24.0, bottom: 40.0),
+                child: _buildEventCard(event),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEventCard(TimelineEvent event) {
+    switch (event.type) {
+      case TimelineEventType.photo:
+        return _buildPhotoCard(event);
+      case TimelineEventType.note:
+        return _buildNoteCard(event);
+      case TimelineEventType.organize:
+      case TimelineEventType.node:
+        return _buildGreyBlockCard(event);
+    }
+  }
+
+  Widget _buildPhotoCard(TimelineEvent event) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (event.location != null) ...[
+          Row(
+            children: [
+              Icon(Icons.location_on, size: 14, color: Colors.grey.shade600),
+              const SizedBox(width: 4),
+              Text(
+                event.location!,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+        ],
+        if (event.images.isNotEmpty) ...[
+          _buildTimelineImageGrid(event.images),
+          const SizedBox(height: 12),
+        ],
+        Text(
+          event.content,
+          style: TextStyle(
+            fontSize: 13,
+            color: Colors.grey.shade700,
+            height: 1.6,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildNoteCard(TimelineEvent event) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          event.content,
+          style: TextStyle(
+            fontSize: 14,
+            color: Colors.grey.shade600,
+            height: 1.8,
+            fontStyle: FontStyle.italic,
+          ),
+        ),
+        if (event.images.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          _buildTimelineImageGrid(event.images),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildGreyBlockCard(TimelineEvent event) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: Text(
+              event.highlightText ?? '',
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
+                height: 1.5,
+              ),
+            ),
+          ),
+          if (event.images.isNotEmpty) ...[
+            const SizedBox(width: 16),
+            Row(
+              children: event.images
+                  .map(
+                    (url) => Padding(
+                      padding: const EdgeInsets.only(left: 8.0),
+                      child: _buildTimelineNetworkImage(url, size: 48),
+                    ),
+                  )
+                  .toList(),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTimelineImageGrid(List<String> urls) {
+    if (urls.length == 1) {
+      return AspectRatio(
+        aspectRatio: 16 / 9,
+        child: _buildTimelineNetworkImage(urls.first, width: double.infinity),
+      );
+    } else {
+      return Row(
+        children: [
+          Expanded(
+            child: AspectRatio(
+              aspectRatio: 1,
+              child: _buildTimelineNetworkImage(urls[0], width: double.infinity),
+            ),
+          ),
+          const SizedBox(width: 4),
+          Expanded(
+            child: AspectRatio(
+              aspectRatio: 1,
+              child: _buildTimelineNetworkImage(urls[1], width: double.infinity),
+            ),
+          ),
+        ],
+      );
+    }
+  }
+
+  Widget _buildTimelineNetworkImage(String url, {double? width, double? size}) {
+    return SizedBox(
+      width: size ?? width,
+      height: size,
+      child: ColorFiltered(
+        colorFilter: _greyscaleFilter,
+        child: Image.network(
+          url,
+          fit: BoxFit.cover,
+          errorBuilder: (c, e, s) => Container(color: Colors.grey.shade300),
+        ),
+      ),
+    );
+  }
+}
+
+class _MonthHeaderDelegate extends SliverPersistentHeaderDelegate {
+  _MonthHeaderDelegate({required this.monthText});
+
+  final String monthText;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return Container(
+      color: const Color(0xFFF7F7F9),
+      padding: const EdgeInsets.only(left: 24.0, top: 12.0, bottom: 12.0),
+      alignment: Alignment.centerLeft,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border.all(color: Colors.grey.shade300),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Text(
+          monthText,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+            color: Colors.grey.shade700,
+            letterSpacing: 2.0,
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  double get maxExtent => 52.0;
+
+  @override
+  double get minExtent => 52.0;
+
+  @override
+  bool shouldRebuild(covariant _MonthHeaderDelegate oldDelegate) {
+    return monthText != oldDelegate.monthText;
+  }
+}
+
+class ProjectWizardPage extends StatefulWidget {
+  const ProjectWizardPage({
+    super.key,
+    required this.onFinish,
+  });
+
+  final VoidCallback onFinish;
+
+  @override
+  State<ProjectWizardPage> createState() => _ProjectWizardPageState();
+}
+
+class _ProjectWizardPageState extends State<ProjectWizardPage> {
+  int _currentStage = 1;
+
+  final TextEditingController _intentController = TextEditingController();
+  final TextEditingController _nameController = TextEditingController();
+
+  bool _isFlashing = false;
+
+  void _nextStage() {
+    if (_currentStage == 1 && _intentController.text.trim().isEmpty) return;
+    if (_currentStage == 2 && _nameController.text.trim().isEmpty) return;
+
+    if (_currentStage < 3) {
+      setState(() => _currentStage++);
+    }
+  }
+
+  void _prevStage() {
+    if (_currentStage > 1) {
+      setState(() => _currentStage--);
+    } else {
+      Navigator.pop(context);
+    }
+  }
+
+  void _goToStructurePage() async {
+    setState(() => _isFlashing = true);
+    await Future.delayed(const Duration(milliseconds: 150));
+
+    if (!mounted) return;
+    widget.onFinish();
+    Navigator.pop(context);
+  }
+
+  @override
+  void dispose() {
+    _intentController.dispose();
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: SafeArea(
+        child: Stack(
+          children: [
+            Positioned(
+              top: 16,
+              left: 16,
+              child: IconButton(
+                icon: const Icon(Icons.arrow_back_ios_new, size: 18, color: Colors.black87),
+                onPressed: _prevStage,
+              ),
+            ),
+            Positioned.fill(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 800),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                transitionBuilder: (child, animation) {
+                  final inOffset =
+                      Tween<Offset>(begin: const Offset(0, 0.05), end: Offset.zero)
+                          .animate(animation);
+                  return FadeTransition(
+                    opacity: animation,
+                    child: child.key == ValueKey(_currentStage)
+                        ? SlideTransition(position: inOffset, child: child)
+                        : child,
+                  );
+                },
+                child: _buildStageContent(),
+              ),
+            ),
+            if (_currentStage < 3)
+              Positioned(
+                bottom: 40,
+                left: 32,
+                right: 32,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _buildNavButton(
+                      icon: Icons.arrow_back,
+                      onTap: _prevStage,
+                      opacity: _currentStage > 1 ? 0.6 : 0.0,
+                    ),
+                    _buildNavButton(
+                      icon: Icons.arrow_forward,
+                      onTap: _nextStage,
+                      opacity: 1.0,
+                      isPrimary: true,
+                    ),
+                  ],
+                ),
+              ),
+            if (_isFlashing)
+              Positioned.fill(
+                child: Container(color: Colors.white),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStageContent() {
+    switch (_currentStage) {
+      case 1:
+        return _buildStage1Intention();
+      case 2:
+        return _buildStage2Naming();
+      case 3:
+        return _buildStage3Cover();
+      default:
+        return const SizedBox.shrink();
+    }
+  }
+
+  Widget _buildStage1Intention() {
+    return Center(
+      key: const ValueKey(1),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 40.0),
+        child: TextField(
+          controller: _intentController,
+          autofocus: true,
+          maxLines: null,
+          textAlign: TextAlign.center,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) => _nextStage(),
+          style: const TextStyle(
+            fontSize: 22,
+            color: Colors.black87,
+            fontWeight: FontWeight.w300,
+            fontStyle: FontStyle.italic,
+            height: 1.6,
+          ),
+          decoration: InputDecoration(
+            border: InputBorder.none,
+            hintText: '输入你的创作意图',
+            hintStyle: TextStyle(
+              fontSize: 22,
+              color: Colors.grey.shade400,
+              fontWeight: FontWeight.w300,
+              fontStyle: FontStyle.italic,
+              height: 1.6,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStage2Naming() {
+    return Padding(
+      key: const ValueKey(2),
+      padding: const EdgeInsets.symmetric(horizontal: 40.0),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            '" ${_intentController.text} "',
+            textAlign: TextAlign.center,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey.shade500,
+              fontStyle: FontStyle.italic,
+              fontWeight: FontWeight.w300,
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 64),
+          TextField(
+            controller: _nameController,
+            autofocus: true,
+            maxLines: null,
+            textAlign: TextAlign.center,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => _nextStage(),
+            style: const TextStyle(
+              fontSize: 36,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+              letterSpacing: 2.0,
+              height: 1.3,
+            ),
+            decoration: InputDecoration(
+              border: InputBorder.none,
+              hintText: '项目名称',
+              hintStyle: TextStyle(
+                fontSize: 36,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey.shade300,
+                letterSpacing: 2.0,
+              ),
+            ),
+          ),
+          const SizedBox(height: 56),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStage3Cover() {
+    return Padding(
+      key: const ValueKey(3),
+      padding: const EdgeInsets.symmetric(horizontal: 32.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          const SizedBox(height: 80),
+          Text(
+            _intentController.text,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey.shade400,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            _nameController.text,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+              letterSpacing: 2.0,
+            ),
+          ),
+          const Spacer(),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                '是否添加封面图',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.grey.shade600,
+                  fontWeight: FontWeight.w300,
+                  letterSpacing: 1.0,
+                ),
+              ),
+              const SizedBox(width: 12),
+              InkWell(
+                onTap: () {},
+                borderRadius: BorderRadius.circular(16),
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.black26, width: 1),
+                  ),
+                  child: const Icon(Icons.add, size: 14, color: Colors.black87),
+                ),
+              ),
+            ],
+          ),
+          const Spacer(),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 40.0),
+            child: Center(
+              child: InkWell(
+                onTap: _goToStructurePage,
+                borderRadius: BorderRadius.circular(24),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.black12, width: 1.0),
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '详 细 编 辑',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.black87,
+                          fontWeight: FontWeight.w400,
+                          letterSpacing: 2.0,
+                        ),
+                      ),
+                      SizedBox(width: 8),
+                      Icon(Icons.arrow_forward, size: 14, color: Colors.black54),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNavButton({
+    required IconData icon,
+    required VoidCallback onTap,
+    required double opacity,
+    bool isPrimary = false,
+  }) {
+    if (opacity == 0) return const SizedBox(width: 48);
+
+    return Opacity(
+      opacity: opacity,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(24),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: isPrimary ? Colors.black26 : Colors.black12,
+              width: 1.0,
+            ),
+          ),
+          child: Icon(
+            icon,
+            color: Colors.black87,
+            size: isPrimary ? 24 : 20,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class OverviewPagePrototype extends StatefulWidget {
   const OverviewPagePrototype({
     super.key,
@@ -2283,16 +3577,16 @@ class CustomBottomNavBar extends StatelessWidget {
             ),
           ),
           _buildNavItem(
-            Icons.remove_red_eye_outlined,
-            '概览',
-            isActive: activeTab == PrototypeTab.overview,
-            onTap: () => onChangeTab(PrototypeTab.overview),
-          ),
-          _buildNavItem(
             Icons.show_chart,
             '历程',
             isActive: activeTab == PrototypeTab.timeline,
             onTap: () => onChangeTab(PrototypeTab.timeline),
+          ),
+          _buildNavItem(
+            Icons.bookmark_border,
+            '信标',
+            isActive: activeTab == PrototypeTab.overview,
+            onTap: () => onChangeTab(PrototypeTab.overview),
           ),
         ],
       ),
