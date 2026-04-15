@@ -14,6 +14,7 @@ class StructurePagePrototype extends StatelessWidget {
     super.key,
     required this.currentTabIndex,
     required this.chapterElements,
+    this.projectTitle = '赤水河沿岸寻访',
     required this.onOpenSidebar,
     required this.onTabChanged,
     required this.onBottomTabChanged,
@@ -21,6 +22,7 @@ class StructurePagePrototype extends StatelessWidget {
 
   final int currentTabIndex;
   final List<Map<String, dynamic>> chapterElements;
+  final String projectTitle;
   final VoidCallback onOpenSidebar;
   final ValueChanged<int> onTabChanged;
   final ValueChanged<PrototypeTab> onBottomTabChanged;
@@ -70,8 +72,8 @@ class StructurePagePrototype extends StatelessWidget {
             icon: const Icon(Icons.menu, color: Colors.black87),
             onPressed: onOpenSidebar,
           ),
-          const Text(
-            '赤水河沿岸寻访',
+          Text(
+            projectTitle,
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w300,
@@ -182,21 +184,20 @@ class StructurePagePrototype extends StatelessWidget {
               for (final group in chapterElements) ...[
                 SliverPersistentHeader(
                   pinned: false,
-                  delegate: StickyChapterHeaderDelegate(title: group['chapter']),
+                  delegate: StickyChapterHeaderDelegate(
+                    title: group['chapter'],
+                  ),
                 ),
                 SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) {
-                      final item = group['elements'][index];
-                      return NarrativeListTile(
-                        title: item['title'],
-                        description: item['desc'],
-                        status: item['status'],
-                        images: item['images'],
-                      );
-                    },
-                    childCount: group['elements'].length,
-                  ),
+                  delegate: SliverChildBuilderDelegate((context, index) {
+                    final item = group['elements'][index];
+                    return NarrativeListTile(
+                      title: item['title'],
+                      description: item['desc'],
+                      status: item['status'],
+                      images: item['images'],
+                    );
+                  }, childCount: group['elements'].length),
                 ),
               ],
               SliverToBoxAdapter(
@@ -267,10 +268,7 @@ class StructurePagePrototype extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        Text(
-          '状态',
-          style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
-        ),
+        Text('状态', style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
         Text(
           status,
           style: const TextStyle(
@@ -333,7 +331,8 @@ class StructurePagePrototype extends StatelessWidget {
           if (progress == null) return child;
           return PhotoFallbackTile(size: size);
         },
-        errorBuilder: (context, error, stackTrace) => PhotoFallbackTile(size: size),
+        errorBuilder: (context, error, stackTrace) =>
+            PhotoFallbackTile(size: size),
       ),
     );
   }
@@ -346,10 +345,7 @@ class StructurePagePrototype extends StatelessWidget {
       alignment: Alignment.center,
       child: Text(
         text,
-        style: TextStyle(
-          fontWeight: FontWeight.bold,
-          fontSize: size * 0.18,
-        ),
+        style: TextStyle(fontWeight: FontWeight.bold, fontSize: size * 0.18),
       ),
     );
   }
@@ -380,8 +376,13 @@ class StructurePagePrototype extends StatelessWidget {
   }
 }
 
-const _stablePhotoA = 'https://picsum.photos/seed/echo-structure-a/400/400?grayscale';
-const _stablePhotoB = 'https://picsum.photos/seed/echo-structure-b/400/400?grayscale';
-const _stablePhotoC = 'https://picsum.photos/seed/echo-structure-c/400/400?grayscale';
-const _stablePhotoD = 'https://picsum.photos/seed/echo-structure-d/400/400?grayscale';
-const _stablePhotoE = 'https://picsum.photos/seed/echo-structure-e/400/400?grayscale';
+const _stablePhotoA =
+    'https://picsum.photos/seed/echo-structure-a/400/400?grayscale';
+const _stablePhotoB =
+    'https://picsum.photos/seed/echo-structure-b/400/400?grayscale';
+const _stablePhotoC =
+    'https://picsum.photos/seed/echo-structure-c/400/400?grayscale';
+const _stablePhotoD =
+    'https://picsum.photos/seed/echo-structure-d/400/400?grayscale';
+const _stablePhotoE =
+    'https://picsum.photos/seed/echo-structure-e/400/400?grayscale';

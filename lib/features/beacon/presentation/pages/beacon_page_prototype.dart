@@ -3,10 +3,26 @@ import 'package:echo/shared/widgets/custom_bottom_nav_bar.dart';
 import 'package:flutter/material.dart';
 
 const ColorFilter _beaconGreyscaleFilter = ColorFilter.matrix(<double>[
-  0.2126, 0.7152, 0.0722, 0, 0,
-  0.2126, 0.7152, 0.0722, 0, 0,
-  0.2126, 0.7152, 0.0722, 0, 0,
-  0, 0, 0, 1, 0,
+  0.2126,
+  0.7152,
+  0.0722,
+  0,
+  0,
+  0.2126,
+  0.7152,
+  0.0722,
+  0,
+  0,
+  0.2126,
+  0.7152,
+  0.0722,
+  0,
+  0,
+  0,
+  0,
+  0,
+  1,
+  0,
 ]);
 
 class BeaconPagePrototype extends StatefulWidget {
@@ -30,23 +46,40 @@ class _BeaconPagePrototypeState extends State<BeaconPagePrototype> {
     BeaconTask(
       title: '赤水河中游航拍全景',
       description: '使用无人机接片拍摄河道大拐弯，注意避开正午顶光，寻找河水与两岸红土的清晰交界线。',
-      imageUrl: 'https://images.unsplash.com/photo-1506744626753-1fa44df14c89?w=800',
+      imageUrl:
+          'https://images.unsplash.com/photo-1506744626753-1fa44df14c89?w=800',
       status: TaskStatus.pending,
-      chapters: ['01 / 晨曦之眼', '02 / 众神之后', '04 / 阴影的重量', '05 / 最后的凝视：记忆中的地标', '06 / 光影的旋律'],
+      chapters: [
+        '01 / 晨曦之眼',
+        '02 / 众神之后',
+        '04 / 阴影的重量',
+        '05 / 最后的凝视：记忆中的地标',
+        '06 / 光影的旋律',
+      ],
       elements: ['江边的空酒瓶', '水面的漂浮物', '赤红的泥土', '斑驳的树影', '孤独的电线杆', '江边的围网'],
     ),
     BeaconTask(
       title: '废弃糖厂内部钢铁结构',
       description: '寻找对称的几何构图，使用超广角夸张透视，展现工业巨兽的压迫感。',
-      imageUrl: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=800',
+      imageUrl:
+          'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=800',
       status: TaskStatus.pending,
       chapters: [],
-      elements: ['某种醉态', '江边的空酒瓶', '水面的漂浮物', '迷茫的眼神', '赤红的泥土', '斑驳的树影', '孤独的电线杆'],
+      elements: [
+        '某种醉态',
+        '江边的空酒瓶',
+        '水面的漂浮物',
+        '迷茫的眼神',
+        '赤红的泥土',
+        '斑驳的树影',
+        '孤独的电线杆',
+      ],
     ),
     BeaconTask(
       title: '寻访废弃的盐道码头',
       description: '重点关注水面反光与铁锈的质感对比，尽量使用广角压低视角。',
-      imageUrl: 'https://images.unsplash.com/photo-1496307653780-42ee777d4833?w=800',
+      imageUrl:
+          'https://images.unsplash.com/photo-1496307653780-42ee777d4833?w=800',
       status: TaskStatus.pending,
       chapters: ['02 / 众神之后'],
       elements: [],
@@ -54,7 +87,8 @@ class _BeaconPagePrototypeState extends State<BeaconPagePrototype> {
     BeaconTask(
       title: '老街坊的清晨茶馆',
       description: '抓拍老人们的面部特写，利用茶馆木窗投射进来的自然光，压暗背景。',
-      imageUrl: 'https://images.unsplash.com/photo-1494438639946-1ebd1d20bf85?w=800',
+      imageUrl:
+          'https://images.unsplash.com/photo-1494438639946-1ebd1d20bf85?w=800',
       status: TaskStatus.pending,
       chapters: ['03 / 呼吸感', '06 / 光影的旋律：结构与节奏', '附录 / 遗失的对话'],
       elements: [],
@@ -62,7 +96,8 @@ class _BeaconPagePrototypeState extends State<BeaconPagePrototype> {
     BeaconTask(
       title: '旧林区林道伐木痕迹',
       description: '记录树桩上的年轮细节，侧逆光下寻找年轮间隙的青苔深度。',
-      imageUrl: 'https://images.unsplash.com/photo-1518131341018-095034639e44?w=800',
+      imageUrl:
+          'https://images.unsplash.com/photo-1518131341018-095034639e44?w=800',
       status: TaskStatus.pending,
       chapters: [],
       elements: ['迷茫的眼神', '斑驳的树影'],
@@ -70,7 +105,8 @@ class _BeaconPagePrototypeState extends State<BeaconPagePrototype> {
     BeaconTask(
       title: '县城剧院废弃放映厅',
       description: '极低照度拍摄，捕捉放映机投射孔透出的微光，注意空气中的尘埃。',
-      imageUrl: 'https://images.unsplash.com/photo-1444418776041-9c7e33cc5a9c?w=800',
+      imageUrl:
+          'https://images.unsplash.com/photo-1444418776041-9c7e33cc5a9c?w=800',
       status: TaskStatus.archived,
       chapters: ['01 / 晨曦之眼', '03 / 呼吸感'],
       elements: ['某种醉态'],
@@ -78,7 +114,8 @@ class _BeaconPagePrototypeState extends State<BeaconPagePrototype> {
     BeaconTask(
       title: '河滩边的采砂船残骸',
       description: '沿着枯水期的河床线寻找，注意工业遗迹与自然河流的切割线。',
-      imageUrl: 'https://images.unsplash.com/photo-1517581177682-a085bb7ffb15?w=800',
+      imageUrl:
+          'https://images.unsplash.com/photo-1517581177682-a085bb7ffb15?w=800',
       status: TaskStatus.archived,
       chapters: [],
       elements: [],
@@ -95,8 +132,10 @@ class _BeaconPagePrototypeState extends State<BeaconPagePrototype> {
   }
 
   int get _countAll => _allTasks.length;
-  int get _countPending => _allTasks.where((t) => t.status == TaskStatus.pending).length;
-  int get _countArchived => _allTasks.where((t) => t.status == TaskStatus.archived).length;
+  int get _countPending =>
+      _allTasks.where((t) => t.status == TaskStatus.pending).length;
+  int get _countArchived =>
+      _allTasks.where((t) => t.status == TaskStatus.archived).length;
 
   @override
   Widget build(BuildContext context) {
@@ -112,9 +151,15 @@ class _BeaconPagePrototypeState extends State<BeaconPagePrototype> {
                 _buildTabsWithSearch(),
                 Expanded(
                   child: ListView.builder(
-                    padding: const EdgeInsets.only(left: 24, right: 24, top: 24, bottom: 100),
+                    padding: const EdgeInsets.only(
+                      left: 24,
+                      right: 24,
+                      top: 24,
+                      bottom: 100,
+                    ),
                     itemCount: _filteredTasks.length,
-                    itemBuilder: (context, index) => _buildTaskCard(_filteredTasks[index]),
+                    itemBuilder: (context, index) =>
+                        _buildTaskCard(_filteredTasks[index]),
                   ),
                 ),
               ],
@@ -231,7 +276,8 @@ class _BeaconPagePrototypeState extends State<BeaconPagePrototype> {
   }
 
   Widget _buildTaskCard(BeaconTask task) {
-    final hasAssociations = task.chapters.isNotEmpty || task.elements.isNotEmpty;
+    final hasAssociations =
+        task.chapters.isNotEmpty || task.elements.isNotEmpty;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 24),
@@ -280,7 +326,8 @@ class _BeaconPagePrototypeState extends State<BeaconPagePrototype> {
                   child: Image.network(
                     task.imageUrl,
                     fit: BoxFit.cover,
-                    errorBuilder: (c, e, s) => const Icon(Icons.image, color: Colors.grey),
+                    errorBuilder: (c, e, s) =>
+                        const Icon(Icons.image, color: Colors.grey),
                   ),
                 ),
               ),

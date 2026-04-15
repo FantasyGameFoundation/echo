@@ -5,10 +5,6 @@ class SettingsPlaceholderPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      body: SafeArea(
-        child: SizedBox.shrink(),
-      ),
-    );
+    return const Scaffold(body: SafeArea(child: SizedBox.shrink()));
   }
 }

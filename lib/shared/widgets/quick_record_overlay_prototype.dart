@@ -55,7 +55,10 @@ class QuickRecordOverlayPrototype extends StatelessWidget {
                   children: [
                     Text(
                       '2024.05.24 14:32:01',
-                      style: TextStyle(fontSize: 14, color: Colors.grey.shade800),
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey.shade800,
+                      ),
                     ),
                     const SizedBox(width: 12),
                     InkWell(

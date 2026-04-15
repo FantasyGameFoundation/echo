@@ -53,13 +53,11 @@ class ChapterCard extends StatelessWidget {
           ),
           SizedBox(height: isTextOnly ? 18 : 24),
           Row(
-            crossAxisAlignment:
-                isTextOnly ? CrossAxisAlignment.start : CrossAxisAlignment.end,
+            crossAxisAlignment: isTextOnly
+                ? CrossAxisAlignment.start
+                : CrossAxisAlignment.end,
             children: [
-              Expanded(
-                flex: isTextOnly ? 5 : 1,
-                child: customContent,
-              ),
+              Expanded(flex: isTextOnly ? 5 : 1, child: customContent),
               const SizedBox(width: 16),
               SizedBox(
                 width: isTextOnly ? 72 : null,
@@ -68,7 +66,10 @@ class ChapterCard extends StatelessWidget {
                   children: [
                     Text(
                       '关联元素',
-                      style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Colors.grey.shade500,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(

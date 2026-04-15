@@ -1,7 +1,10 @@
 import 'dart:ui';
 
+import 'package:echo/features/project/domain/entities/project.dart';
+import 'package:echo/features/project/domain/repositories/project_repository.dart';
 import 'package:echo/features/beacon/presentation/pages/beacon_page_prototype.dart';
 import 'package:echo/features/curation/presentation/pages/organize_page_prototype.dart';
+import 'package:echo/features/project/presentation/pages/project_edit_page.dart';
 import 'package:echo/features/project/presentation/pages/project_wizard_page.dart';
 import 'package:echo/features/project/presentation/widgets/project_sidebar.dart';
 import 'package:echo/features/structure_elements_relations/domain/element_status.dart';
@@ -12,7 +15,9 @@ import 'package:echo/shared/widgets/quick_record_overlay_prototype.dart';
 import 'package:flutter/material.dart';
 
 class AppShellPage extends StatefulWidget {
-  const AppShellPage({super.key});
+  const AppShellPage({super.key, required this.projectRepository});
+
+  final ProjectRepository projectRepository;
 
   @override
   State<AppShellPage> createState() => _AppShellPageState();
@@ -23,6 +28,8 @@ class _AppShellPageState extends State<AppShellPage> {
   bool _sidebarOpen = false;
   bool _showAddOverlay = false;
   int _currentTabIndex = 0;
+  Project? _currentProject;
+  List<Project> _projects = const <Project>[];
 
   final List<Map<String, dynamic>> _chapterElements = [
     {
@@ -93,6 +100,12 @@ class _AppShellPageState extends State<AppShellPage> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _loadProjects();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return PopScope(
       canPop: !_showAddOverlay,
@@ -111,9 +124,7 @@ class _AppShellPageState extends State<AppShellPage> {
               Positioned.fill(
                 child: BackdropFilter(
                   filter: ImageFilter.blur(sigmaX: 6.0, sigmaY: 6.0),
-                  child: Container(
-                    color: Colors.white.withValues(alpha: 0.18),
-                  ),
+                  child: Container(color: Colors.white.withValues(alpha: 0.18)),
                 ),
               ),
               Positioned(
@@ -144,6 +155,8 @@ class _AppShellPageState extends State<AppShellPage> {
                 bottom: 0,
                 left: 0,
                 child: ProjectSidebar(
+                  projects: _projects,
+                  currentProjectId: _currentProject?.projectId,
                   onNewProject: () async {
                     setState(() {
                       _sidebarOpen = false;
@@ -153,16 +166,76 @@ class _AppShellPageState extends State<AppShellPage> {
                     await Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (_) => ProjectWizardPage(
-                          onFinish: () {
-                            setState(() {
-                              _currentTab = PrototypeTab.structure;
-                              _currentTabIndex = 0;
-                              _sidebarOpen = false;
-                            });
-                          },
+                          onFinish:
+                              (title, themeStatement, coverImagePath) async {
+                                final project = await widget.projectRepository
+                                    .createProject(
+                                      title: title,
+                                      themeStatement: themeStatement,
+                                      coverImagePath: coverImagePath,
+                                    );
+                                final projects = await widget.projectRepository
+                                    .listProjects();
+                                if (!mounted) {
+                                  return;
+                                }
+                                setState(() {
+                                  _currentProject = project;
+                                  _projects = projects;
+                                  _currentTab = PrototypeTab.structure;
+                                  _currentTabIndex = 0;
+                                  _sidebarOpen = false;
+                                });
+                              },
                         ),
                       ),
                     );
+                  },
+                  onEditProject: (project) async {
+                    if (!mounted) {
+                      return;
+                    }
+                    await Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => ProjectEditPage(
+                          project: project,
+                          onSave:
+                              (title, themeStatement, coverImagePath) async {
+                                await widget.projectRepository.updateProject(
+                                  projectId: project.projectId,
+                                  title: title,
+                                  themeStatement: themeStatement,
+                                  coverImagePath: coverImagePath,
+                                );
+                                await _refreshProjects();
+                              },
+                        ),
+                      ),
+                    );
+                  },
+                  onArchiveProject: (project) async {
+                    await widget.projectRepository.archiveProject(
+                      project.projectId,
+                    );
+                    await _refreshProjects();
+                  },
+                  onDeleteProject: (project) async {
+                    await widget.projectRepository.deleteProject(
+                      project.projectId,
+                    );
+                    await _refreshProjects();
+                  },
+                  onSelectProject: (projectId) async {
+                    await widget.projectRepository.setCurrentProject(projectId);
+                    await _refreshProjects();
+                    if (!mounted) {
+                      return;
+                    }
+                    setState(() {
+                      _currentTab = PrototypeTab.structure;
+                      _currentTabIndex = 0;
+                      _sidebarOpen = false;
+                    });
                   },
                 ),
               ),
@@ -180,6 +253,7 @@ class _AppShellPageState extends State<AppShellPage> {
         return StructurePagePrototype(
           currentTabIndex: _currentTabIndex,
           chapterElements: _chapterElements,
+          projectTitle: _currentProject?.title ?? '赤水河沿岸寻访',
           onOpenSidebar: () => setState(() => _sidebarOpen = true),
           onTabChanged: (index) {
             setState(() {
@@ -219,6 +293,23 @@ class _AppShellPageState extends State<AppShellPage> {
       _currentTab = tab;
       _sidebarOpen = false;
       _showAddOverlay = false;
+    });
+  }
+
+  Future<void> _loadProjects() async {
+    await _refreshProjects();
+  }
+
+  Future<void> _refreshProjects() async {
+    final currentProject = await widget.projectRepository.getCurrentProject();
+    final projects = await widget.projectRepository.listProjects();
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _currentProject = currentProject;
+      _projects = projects;
     });
   }
 }

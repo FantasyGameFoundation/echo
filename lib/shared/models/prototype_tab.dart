@@ -1,7 +1,1 @@
-enum PrototypeTab {
-  structure,
-  curation,
-  add,
-  overview,
-  timeline,
-}
+enum PrototypeTab { structure, curation, add, overview, timeline }

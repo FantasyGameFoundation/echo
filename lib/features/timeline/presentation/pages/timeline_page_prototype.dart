@@ -35,19 +35,25 @@ class _TimelinePagePrototypeState extends State<TimelinePagePrototype> {
       type: TimelineEventType.node,
       content: '',
       highlightText: '元素【废弃的盐道码头】已标记完成',
-      images: ['https://images.unsplash.com/photo-1496307653780-42ee777d4833?w=200'],
+      images: [
+        'https://images.unsplash.com/photo-1496307653780-42ee777d4833?w=200',
+      ],
     ),
     TimelineEvent(
       date: DateTime(2026, 10, 21, 20, 45),
       type: TimelineEventType.note,
-      content: '「今天的寻访非常顺利，赤水河的水位比预想的要低一些，正好露出了那些旧时代的盐道遗迹。下次需要带上无人机，从空中俯瞰河道与古道的拓扑关系。」',
+      content:
+          '「今天的寻访非常顺利，赤水河的水位比预想的要低一些，正好露出了那些旧时代的盐道遗迹。下次需要带上无人机，从空中俯瞰河道与古道的拓扑关系。」',
     ),
     TimelineEvent(
       date: DateTime(2026, 10, 18, 9, 10),
       type: TimelineEventType.photo,
       location: '贵州省 遵义市 茅台镇',
-      content: '清晨的雾气还未散去，空气中弥漫着淡淡的酒糟香气。车间的外墙上爬满了厚厚的苍藓，这种历史感是新建筑无法模拟的。记录下了光线穿透雾气照刷在石阶上的瞬间。',
-      images: ['https://images.unsplash.com/photo-1513694203232-719a280e022f?w=800'],
+      content:
+          '清晨的雾气还未散去，空气中弥漫着淡淡的酒糟香气。车间的外墙上爬满了厚厚的苍藓，这种历史感是新建筑无法模拟的。记录下了光线穿透雾气照刷在石阶上的瞬间。',
+      images: [
+        'https://images.unsplash.com/photo-1513694203232-719a280e022f?w=800',
+      ],
     ),
     TimelineEvent(
       date: DateTime(2026, 10, 15, 16, 40),
@@ -62,8 +68,11 @@ class _TimelinePagePrototypeState extends State<TimelinePagePrototype> {
     TimelineEvent(
       date: DateTime(2026, 10, 12, 22, 15),
       type: TimelineEventType.note,
-      content: '「整理照片时发现，那些看似无序的碎石滩其实遵循着河流的几何走向。需要对水文地理学做更深入的案头研究。关于『消逝的建筑』这一主题，我想表达的不只是物理的坍塌，更是意义的迁移。」',
-      images: ['https://images.unsplash.com/photo-1518131341018-095034639e44?w=400'],
+      content:
+          '「整理照片时发现，那些看似无序的碎石滩其实遵循着河流的几何走向。需要对水文地理学做更深入的案头研究。关于『消逝的建筑』这一主题，我想表达的不只是物理的坍塌，更是意义的迁移。」',
+      images: [
+        'https://images.unsplash.com/photo-1518131341018-095034639e44?w=400',
+      ],
     ),
     TimelineEvent(
       date: DateTime(2026, 9, 28, 14, 00),
@@ -77,7 +86,9 @@ class _TimelinePagePrototypeState extends State<TimelinePagePrototype> {
       type: TimelineEventType.photo,
       location: '四川省 泸州市 赤水市',
       content: '项目启动。首次跨越省界，从不同的行政视角观察同一条河流。',
-      images: ['https://images.unsplash.com/photo-1517581177682-a085bb7ffb15?w=800'],
+      images: [
+        'https://images.unsplash.com/photo-1517581177682-a085bb7ffb15?w=800',
+      ],
     ),
   ];
 
@@ -89,13 +100,21 @@ class _TimelinePagePrototypeState extends State<TimelinePagePrototype> {
   List<TimelineEvent> _filterEvents(String tab) {
     switch (tab) {
       case '照片':
-        return _allEvents.where((e) => e.type == TimelineEventType.photo).toList();
+        return _allEvents
+            .where((e) => e.type == TimelineEventType.photo)
+            .toList();
       case '手记':
-        return _allEvents.where((e) => e.type == TimelineEventType.note).toList();
+        return _allEvents
+            .where((e) => e.type == TimelineEventType.note)
+            .toList();
       case '整理':
-        return _allEvents.where((e) => e.type == TimelineEventType.organize).toList();
+        return _allEvents
+            .where((e) => e.type == TimelineEventType.organize)
+            .toList();
       case '节点':
-        return _allEvents.where((e) => e.type == TimelineEventType.node).toList();
+        return _allEvents
+            .where((e) => e.type == TimelineEventType.node)
+            .toList();
       default:
         return _allEvents;
     }
@@ -104,7 +123,8 @@ class _TimelinePagePrototypeState extends State<TimelinePagePrototype> {
   Map<String, List<TimelineEvent>> get _groupedEvents {
     final groups = <String, List<TimelineEvent>>{};
     for (final event in _filteredEvents) {
-      final monthKey = '${event.date.year}年${event.date.month.toString().padLeft(2, '0')}月';
+      final monthKey =
+          '${event.date.year}年${event.date.month.toString().padLeft(2, '0')}月';
       groups.putIfAbsent(monthKey, () => []);
       groups[monthKey]!.add(event);
     }
@@ -138,16 +158,22 @@ class _TimelinePagePrototypeState extends State<TimelinePagePrototype> {
                             slivers: [
                               SliverPersistentHeader(
                                 pinned: true,
-                                delegate: _MonthHeaderDelegate(monthText: entry.key),
+                                delegate: _MonthHeaderDelegate(
+                                  monthText: entry.key,
+                                ),
                               ),
                               SliverList(
-                                delegate: SliverChildBuilderDelegate(
-                                  (context, index) {
-                                    final isLastInMonth = index == entry.value.length - 1;
-                                    return _buildTimelineTile(entry.value[index], isLastInMonth);
-                                  },
-                                  childCount: entry.value.length,
-                                ),
+                                delegate: SliverChildBuilderDelegate((
+                                  context,
+                                  index,
+                                ) {
+                                  final isLastInMonth =
+                                      index == entry.value.length - 1;
+                                  return _buildTimelineTile(
+                                    entry.value[index],
+                                    isLastInMonth,
+                                  );
+                                }, childCount: entry.value.length),
                               ),
                             ],
                           ),
@@ -284,7 +310,9 @@ class _TimelinePagePrototypeState extends State<TimelinePagePrototype> {
                   Expanded(
                     child: Container(
                       width: 1,
-                      color: isLastInMonth ? Colors.transparent : Colors.grey.shade300,
+                      color: isLastInMonth
+                          ? Colors.transparent
+                          : Colors.grey.shade300,
                     ),
                   ),
                 ],
@@ -310,7 +338,11 @@ class _TimelinePagePrototypeState extends State<TimelinePagePrototype> {
               padding: const EdgeInsets.only(bottom: 16.0),
               child: Row(
                 children: [
-                  Icon(Icons.location_on, size: 20, color: Colors.grey.shade500),
+                  Icon(
+                    Icons.location_on,
+                    size: 20,
+                    color: Colors.grey.shade500,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -343,7 +375,9 @@ class _TimelinePagePrototypeState extends State<TimelinePagePrototype> {
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
               decoration: BoxDecoration(
                 color: Colors.grey.shade100,
-                border: Border(left: BorderSide(color: Colors.grey.shade400, width: 2)),
+                border: Border(
+                  left: BorderSide(color: Colors.grey.shade400, width: 2),
+                ),
               ),
               child: Text(
                 event.highlightText!,
@@ -362,7 +396,9 @@ class _TimelinePagePrototypeState extends State<TimelinePagePrototype> {
                 fontSize: 16,
                 color: Colors.grey.shade600,
                 height: 1.8,
-                fontStyle: event.type == TimelineEventType.note ? FontStyle.italic : FontStyle.normal,
+                fontStyle: event.type == TimelineEventType.note
+                    ? FontStyle.italic
+                    : FontStyle.normal,
               ),
             ),
           if (!isImageHeavy && event.images.isNotEmpty) ...[
@@ -378,8 +414,11 @@ class _TimelinePagePrototypeState extends State<TimelinePagePrototype> {
                       width: 84,
                       height: 84,
                       fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) =>
-                          Container(width: 84, height: 84, color: Colors.grey.shade200),
+                      errorBuilder: (context, error, stackTrace) => Container(
+                        width: 84,
+                        height: 84,
+                        color: Colors.grey.shade200,
+                      ),
                     ),
                   );
                 }).toList(),
@@ -418,7 +457,11 @@ class _MonthHeaderDelegate extends SliverPersistentHeaderDelegate {
   final String monthText;
 
   @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
     return Container(
       color: const Color(0xFFF7F7F9),
       alignment: Alignment.centerLeft,

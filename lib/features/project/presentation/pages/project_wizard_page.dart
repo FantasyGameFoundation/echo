@@ -1,12 +1,24 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:echo/features/project/presentation/utils/project_cover_picker.dart';
+
+typedef ProjectWizardFinish =
+    Future<void> Function(
+      String title,
+      String themeStatement,
+      String? coverImagePath,
+    );
 
 class ProjectWizardPage extends StatefulWidget {
   const ProjectWizardPage({
     super.key,
     required this.onFinish,
-  });
+    PickProjectCoverImage? onPickCoverImage,
+  }) : onPickCoverImage = onPickCoverImage ?? pickProjectCoverImageFromGallery;
 
-  final VoidCallback onFinish;
+  final ProjectWizardFinish onFinish;
+  final PickProjectCoverImage onPickCoverImage;
 
   @override
   State<ProjectWizardPage> createState() => _ProjectWizardPageState();
@@ -17,8 +29,17 @@ class _ProjectWizardPageState extends State<ProjectWizardPage> {
 
   final TextEditingController _intentController = TextEditingController();
   final TextEditingController _nameController = TextEditingController();
+  final FocusNode _intentFocusNode = FocusNode();
+  final FocusNode _nameFocusNode = FocusNode();
 
   bool _isFlashing = false;
+  String? _coverImagePath;
+
+  @override
+  void initState() {
+    super.initState();
+    _scheduleStageFocus();
+  }
 
   void _nextStage() {
     if (_currentStage == 1 && _intentController.text.trim().isEmpty) return;
@@ -26,12 +47,14 @@ class _ProjectWizardPageState extends State<ProjectWizardPage> {
 
     if (_currentStage < 3) {
       setState(() => _currentStage++);
+      _scheduleStageFocus();
     }
   }
 
   void _prevStage() {
     if (_currentStage > 1) {
       setState(() => _currentStage--);
+      _scheduleStageFocus();
     } else {
       Navigator.pop(context);
     }
@@ -42,14 +65,51 @@ class _ProjectWizardPageState extends State<ProjectWizardPage> {
     await Future.delayed(const Duration(milliseconds: 150));
 
     if (!mounted) return;
-    widget.onFinish();
+    await widget.onFinish(
+      _nameController.text.trim(),
+      _intentController.text.trim(),
+      _coverImagePath,
+    );
+    if (!mounted) return;
     Navigator.pop(context);
+  }
+
+  Future<void> _pickCoverImage() async {
+    final coverImagePath = await widget.onPickCoverImage();
+    if (!mounted || coverImagePath == null) {
+      return;
+    }
+
+    setState(() {
+      _coverImagePath = coverImagePath;
+    });
+  }
+
+  void _scheduleStageFocus() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      switch (_currentStage) {
+        case 1:
+          _intentFocusNode.requestFocus();
+          break;
+        case 2:
+          _nameFocusNode.requestFocus();
+          break;
+        case 3:
+          FocusScope.of(context).unfocus();
+          break;
+      }
+    });
   }
 
   @override
   void dispose() {
     _intentController.dispose();
     _nameController.dispose();
+    _intentFocusNode.dispose();
+    _nameFocusNode.dispose();
     super.dispose();
   }
 
@@ -63,7 +123,11 @@ class _ProjectWizardPageState extends State<ProjectWizardPage> {
               top: 16,
               left: 16,
               child: IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new, size: 18, color: Colors.black87),
+                icon: const Icon(
+                  Icons.arrow_back_ios_new,
+                  size: 18,
+                  color: Colors.black87,
+                ),
                 onPressed: _prevStage,
               ),
             ),
@@ -73,9 +137,10 @@ class _ProjectWizardPageState extends State<ProjectWizardPage> {
                 switchInCurve: Curves.easeOutCubic,
                 switchOutCurve: Curves.easeInCubic,
                 transitionBuilder: (child, animation) {
-                  final inOffset =
-                      Tween<Offset>(begin: const Offset(0, 0.05), end: Offset.zero)
-                          .animate(animation);
+                  final inOffset = Tween<Offset>(
+                    begin: const Offset(0, 0.05),
+                    end: Offset.zero,
+                  ).animate(animation);
                   return FadeTransition(
                     opacity: animation,
                     child: child.key == ValueKey(_currentStage)
@@ -109,9 +174,7 @@ class _ProjectWizardPageState extends State<ProjectWizardPage> {
                 ),
               ),
             if (_isFlashing)
-              Positioned.fill(
-                child: Container(color: Colors.white),
-              ),
+              Positioned.fill(child: Container(color: Colors.white)),
           ],
         ),
       ),
@@ -137,8 +200,9 @@ class _ProjectWizardPageState extends State<ProjectWizardPage> {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 40.0),
         child: TextField(
+          key: const ValueKey('projectIntentField'),
           controller: _intentController,
-          autofocus: true,
+          focusNode: _intentFocusNode,
           maxLines: null,
           textAlign: TextAlign.center,
           textInputAction: TextInputAction.done,
@@ -188,8 +252,9 @@ class _ProjectWizardPageState extends State<ProjectWizardPage> {
           ),
           const SizedBox(height: 64),
           TextField(
+            key: const ValueKey('projectNameField'),
             controller: _nameController,
-            autofocus: true,
+            focusNode: _nameFocusNode,
             maxLines: null,
             textAlign: TextAlign.center,
             textInputAction: TextInputAction.done,
@@ -263,7 +328,7 @@ class _ProjectWizardPageState extends State<ProjectWizardPage> {
               ),
               const SizedBox(width: 12),
               InkWell(
-                onTap: () {},
+                onTap: _pickCoverImage,
                 borderRadius: BorderRadius.circular(16),
                 child: Container(
                   padding: const EdgeInsets.all(6),
@@ -276,6 +341,28 @@ class _ProjectWizardPageState extends State<ProjectWizardPage> {
               ),
             ],
           ),
+          if (_coverImagePath != null) ...[
+            const SizedBox(height: 20),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(18),
+              child: Container(
+                width: 120,
+                height: 148,
+                color: Colors.grey.shade200,
+                child: Image.file(
+                  File(_coverImagePath!),
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => Center(
+                    child: Icon(
+                      Icons.image_outlined,
+                      color: Colors.grey.shade500,
+                      size: 24,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
           const Spacer(),
           Padding(
             padding: const EdgeInsets.only(bottom: 40.0),
@@ -284,7 +371,10 @@ class _ProjectWizardPageState extends State<ProjectWizardPage> {
                 onTap: _goToStructurePage,
                 borderRadius: BorderRadius.circular(24),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 32,
+                    vertical: 12,
+                  ),
                   decoration: BoxDecoration(
                     border: Border.all(color: Colors.black12, width: 1.0),
                     borderRadius: BorderRadius.circular(24),
@@ -302,7 +392,11 @@ class _ProjectWizardPageState extends State<ProjectWizardPage> {
                         ),
                       ),
                       SizedBox(width: 8),
-                      Icon(Icons.arrow_forward, size: 14, color: Colors.black54),
+                      Icon(
+                        Icons.arrow_forward,
+                        size: 14,
+                        color: Colors.black54,
+                      ),
                     ],
                   ),
                 ),
@@ -336,11 +430,7 @@ class _ProjectWizardPageState extends State<ProjectWizardPage> {
               width: 1.0,
             ),
           ),
-          child: Icon(
-            icon,
-            color: Colors.black87,
-            size: isPrimary ? 24 : 20,
-          ),
+          child: Icon(icon, color: Colors.black87, size: isPrimary ? 24 : 20),
         ),
       ),
     );

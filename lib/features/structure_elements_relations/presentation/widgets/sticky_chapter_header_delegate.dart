@@ -6,7 +6,11 @@ class StickyChapterHeaderDelegate extends SliverPersistentHeaderDelegate {
   final String title;
 
   @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
     return Container(
       color: const Color(0xFFF7F7F9),
       padding: const EdgeInsets.symmetric(horizontal: 24.0),

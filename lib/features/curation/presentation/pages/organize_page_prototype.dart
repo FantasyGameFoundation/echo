@@ -3,10 +3,26 @@ import 'package:echo/shared/widgets/custom_bottom_nav_bar.dart';
 import 'package:flutter/material.dart';
 
 const ColorFilter greyscaleFilter = ColorFilter.matrix(<double>[
-  0.2126, 0.7152, 0.0722, 0, 0,
-  0.2126, 0.7152, 0.0722, 0, 0,
-  0.2126, 0.7152, 0.0722, 0, 0,
-  0, 0, 0, 1, 0,
+  0.2126,
+  0.7152,
+  0.0722,
+  0,
+  0,
+  0.2126,
+  0.7152,
+  0.0722,
+  0,
+  0,
+  0.2126,
+  0.7152,
+  0.0722,
+  0,
+  0,
+  0,
+  0,
+  0,
+  1,
+  0,
 ]);
 
 class OrganizePagePrototype extends StatefulWidget {
@@ -32,12 +48,7 @@ class _OrganizePagePrototypeState extends State<OrganizePagePrototype> {
     '重复': null,
     '转折': null,
   };
-  final Map<String, int> _relationCounts = {
-    '呼应': 3,
-    '对比': 1,
-    '重复': 2,
-    '转折': 0,
-  };
+  final Map<String, int> _relationCounts = {'呼应': 3, '对比': 1, '重复': 2, '转折': 0};
 
   final List<String> _previewImages = [
     'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800',
@@ -77,7 +88,8 @@ class _OrganizePagePrototypeState extends State<OrganizePagePrototype> {
                         const SizedBox(height: 16),
                         _buildChapterCardSelector(
                           activeItem: _selectedChapter,
-                          onSelected: (val) => setState(() => _selectedChapter = val),
+                          onSelected: (val) =>
+                              setState(() => _selectedChapter = val),
                         ),
                         const SizedBox(height: 40),
                         _buildSectionHeader('关联元素', showSearch: true),
@@ -167,10 +179,7 @@ class _OrganizePagePrototypeState extends State<OrganizePagePrototype> {
             color: Colors.black,
             child: ColorFiltered(
               colorFilter: greyscaleFilter,
-              child: Image.network(
-                _previewImages[index],
-                fit: BoxFit.contain,
-              ),
+              child: Image.network(_previewImages[index], fit: BoxFit.contain),
             ),
           );
         },
@@ -227,7 +236,9 @@ class _OrganizePagePrototypeState extends State<OrganizePagePrototype> {
               width: 172,
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: isActive ? const Color(0xFF222222) : Colors.grey.shade200,
+                color: isActive
+                    ? const Color(0xFF222222)
+                    : Colors.grey.shade200,
               ),
               child: Row(
                 children: [
@@ -241,7 +252,9 @@ class _OrganizePagePrototypeState extends State<OrganizePagePrototype> {
                       style: TextStyle(
                         fontSize: 14,
                         color: isActive ? Colors.white : Colors.grey.shade700,
-                        fontWeight: isActive ? FontWeight.w500 : FontWeight.normal,
+                        fontWeight: isActive
+                            ? FontWeight.w500
+                            : FontWeight.normal,
                         letterSpacing: 0.8,
                         height: 1.25,
                       ),
@@ -261,8 +274,14 @@ class _OrganizePagePrototypeState extends State<OrganizePagePrototype> {
       return Container(
         width: 52,
         height: 52,
-        color: isActive ? Colors.white.withValues(alpha: 0.18) : Colors.grey.shade300,
-        child: const Icon(Icons.grid_view_rounded, size: 20, color: Colors.white70),
+        color: isActive
+            ? Colors.white.withValues(alpha: 0.18)
+            : Colors.grey.shade300,
+        child: const Icon(
+          Icons.grid_view_rounded,
+          size: 20,
+          color: Colors.white70,
+        ),
       );
     }
 
@@ -275,7 +294,9 @@ class _OrganizePagePrototypeState extends State<OrganizePagePrototype> {
           image,
           fit: BoxFit.cover,
           errorBuilder: (context, error, stackTrace) => Container(
-            color: isActive ? Colors.white.withValues(alpha: 0.18) : Colors.grey.shade300,
+            color: isActive
+                ? Colors.white.withValues(alpha: 0.18)
+                : Colors.grey.shade300,
             child: const Icon(Icons.broken_image, color: Colors.grey),
           ),
         ),
@@ -303,9 +324,14 @@ class _OrganizePagePrototypeState extends State<OrganizePagePrototype> {
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
                 width: itemWidth,
-                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16.0,
+                  vertical: 10.0,
+                ),
                 decoration: BoxDecoration(
-                  color: isActive ? const Color(0xFF222222) : Colors.grey.shade200,
+                  color: isActive
+                      ? const Color(0xFF222222)
+                      : Colors.grey.shade200,
                 ),
                 child: Text(
                   item,
@@ -343,10 +369,11 @@ class _OrganizePagePrototypeState extends State<OrganizePagePrototype> {
             onTap: () => onTapRelation(item),
             child: Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 14.0),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade200,
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16.0,
+                vertical: 14.0,
               ),
+              decoration: BoxDecoration(color: Colors.grey.shade200),
               child: Row(
                 children: [
                   Expanded(
@@ -388,10 +415,8 @@ class _OrganizePagePrototypeState extends State<OrganizePagePrototype> {
   Future<void> _openRelationPhotoPicker(String relation) async {
     final selected = await Navigator.of(context).push<String>(
       MaterialPageRoute(
-        builder: (_) => RelationPhotoPickerPage(
-          relation: relation,
-          photos: _previewImages,
-        ),
+        builder: (_) =>
+            RelationPhotoPickerPage(relation: relation, photos: _previewImages),
       ),
     );
 
@@ -414,7 +439,8 @@ class RelationPhotoPickerPage extends StatefulWidget {
   final List<String> photos;
 
   @override
-  State<RelationPhotoPickerPage> createState() => _RelationPhotoPickerPageState();
+  State<RelationPhotoPickerPage> createState() =>
+      _RelationPhotoPickerPageState();
 }
 
 class _RelationPhotoPickerPageState extends State<RelationPhotoPickerPage> {
@@ -435,7 +461,8 @@ class _RelationPhotoPickerPageState extends State<RelationPhotoPickerPage> {
         )
         .where((item) {
           final searchMatch = _search.isEmpty || item.label.contains(_search);
-          final filterMatch = _activeFilter == '全部' || item.category == _activeFilter;
+          final filterMatch =
+              _activeFilter == '全部' || item.category == _activeFilter;
           return searchMatch && filterMatch;
         })
         .toList();
@@ -512,7 +539,10 @@ class _RelationPhotoPickerPageState extends State<RelationPhotoPickerPage> {
                             padding: const EdgeInsets.all(12),
                             child: Text(
                               item.label,
-                              style: const TextStyle(fontSize: 14, color: Colors.black87),
+                              style: const TextStyle(
+                                fontSize: 14,
+                                color: Colors.black87,
+                              ),
                             ),
                           ),
                         ],
