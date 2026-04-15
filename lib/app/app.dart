@@ -1,5 +1,5 @@
 import 'package:echo/app/theme/app_theme.dart';
-import 'package:echo/features/prototype/prototype_shell_page.dart';
+import 'package:echo/app/shell/app_shell_page.dart';
 import 'package:flutter/material.dart';
 
 class EchoApp extends StatelessWidget {
@@ -11,7 +11,7 @@ class EchoApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'Echo',
       theme: AppTheme.light(),
-      home: const PrototypeShellPage(),
+      home: const AppShellPage(),
     );
   }
 }
