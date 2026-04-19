@@ -1949,6 +1949,7 @@ void main() {
             onAddChapter: _noop,
             onAddElement: _noop,
             onAddRelation: _noop,
+            onOpenRelation: _noopTab,
             onTabChanged: _noopTab,
             onBottomTabChanged: _noopPrototypeTab,
           ),
@@ -1981,21 +1982,25 @@ void main() {
           elementGroups: const <Map<String, dynamic>>[],
           relationCards: const <StructureRelationCardData>[
             StructureRelationCardData(
+              relationTypeId: 'type-a',
               name: '对比',
               description: '跨章节的色彩冷暖或几何构图冲突，强调环境的异质性。',
               setCount: 4,
             ),
             StructureRelationCardData(
+              relationTypeId: 'type-b',
               name: '重复',
               description: '特定视觉符号的规律性再现，构建叙事韵律。',
               setCount: 2,
             ),
             StructureRelationCardData(
+              relationTypeId: 'type-c',
               name: '呼应',
               description: '不同地理位置间的情感共鸣，将碎片化的河岸串联为整体。',
               setCount: 7,
             ),
             StructureRelationCardData(
+              relationTypeId: 'type-d',
               name: '转折',
               description: '叙事节奏在工业遗迹与纯粹自然间的突然切换。',
               setCount: 1,
@@ -2005,6 +2010,7 @@ void main() {
           onAddChapter: _noop,
           onAddElement: _noop,
           onAddRelation: _noop,
+          onOpenRelation: _noopTab,
           onTabChanged: _noopTab,
           onBottomTabChanged: _noopPrototypeTab,
         ),
@@ -2088,6 +2094,57 @@ void main() {
 
     expect(find.text('时空并置'), findsOneWidget);
   });
+
+  testWidgets(
+    'relation card opens edit page and only name/description are editable',
+    (tester) async {
+      final projectRepository = _InMemoryProjectRepository(
+        initialProjects: <Project>[
+          Project.create(
+            id: 'project-relation-edit',
+            projectTitle: '关联关系编辑测试',
+            projectThemeStatement: '验证关联关系编辑流程',
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+        ],
+        currentProjectId: 'project-relation-edit',
+      );
+      final relationRepository = _InMemoryProjectRelationRepository();
+
+      await tester.pumpWidget(
+        EchoApp(
+          projectRepository: projectRepository,
+          structureChapterRepository: _InMemoryStructureChapterRepository(),
+          narrativeElementRepository: _InMemoryNarrativeElementRepository(),
+          projectRelationRepository: relationRepository,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('关联关系'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('对比'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('编 辑 关 联 关 系'), findsOneWidget);
+      expect(find.text('编辑时不可修改关联类型'), findsOneWidget);
+
+      await tester.enterText(
+        find.byKey(const ValueKey('relationTypeNameField')),
+        '新的对比',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('relationTypeDescriptionField')),
+        '更新后的对比说明',
+      );
+      await tester.tap(find.byKey(const ValueKey('relationTypeSaveButton')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('新的对比'), findsOneWidget);
+      expect(find.text('更新后的对比说明'), findsOneWidget);
+    },
+  );
 
   testWidgets('organize page keeps core curation markers after extraction', (
     tester,
@@ -2520,6 +2577,25 @@ class _InMemoryProjectRelationRepository implements ProjectRelationRepository {
     existingTypes.add(relationType);
     _typesByProject[projectId] = existingTypes;
     return relationType;
+  }
+
+  @override
+  Future<ProjectRelationType> updateRelationType({
+    required String relationTypeId,
+    required String name,
+    required String description,
+  }) async {
+    for (final entry in _typesByProject.entries) {
+      for (final relationType in entry.value) {
+        if (relationType.relationTypeId == relationTypeId) {
+          relationType.name = name.trim();
+          relationType.description = description.trim();
+          relationType.updatedAt = DateTime(2026, 1, 6);
+          return relationType;
+        }
+      }
+    }
+    throw StateError('Relation type not found: $relationTypeId');
   }
 
   @override

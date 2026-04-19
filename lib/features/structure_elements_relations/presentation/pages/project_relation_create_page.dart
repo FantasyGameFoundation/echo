@@ -7,13 +7,26 @@ typedef CreateProjectRelationType =
       required String description,
     });
 
+typedef UpdateProjectRelationType = CreateProjectRelationType;
+
 class ProjectRelationCreatePage extends StatefulWidget {
   const ProjectRelationCreatePage({
     super.key,
     required this.onCreateRelationType,
-  });
+  }) : relationType = null,
+       onUpdateRelationType = null;
 
-  final CreateProjectRelationType onCreateRelationType;
+  const ProjectRelationCreatePage.edit({
+    super.key,
+    required this.relationType,
+    required this.onUpdateRelationType,
+  }) : onCreateRelationType = null;
+
+  final ProjectRelationType? relationType;
+  final CreateProjectRelationType? onCreateRelationType;
+  final UpdateProjectRelationType? onUpdateRelationType;
+
+  bool get isEditMode => relationType != null;
 
   @override
   State<ProjectRelationCreatePage> createState() =>
@@ -25,21 +38,33 @@ enum _RelationTargetType { element, photo, both }
 class _ProjectRelationCreatePageState extends State<ProjectRelationCreatePage> {
   late final TextEditingController _nameController;
   late final TextEditingController _descController;
+  late final String _initialName;
+  late final String _initialDescription;
   _RelationTargetType _selectedType = _RelationTargetType.both;
   bool _isSaving = false;
+
+  bool get _hasChanges {
+    return _nameController.text.trim() != _initialName ||
+        _descController.text.trim() != _initialDescription;
+  }
 
   bool get _canSave => _nameController.text.trim().isNotEmpty && !_isSaving;
 
   @override
   void initState() {
     super.initState();
-    _nameController = TextEditingController()..addListener(_handleChanged);
-    _descController = TextEditingController();
+    _initialName = widget.relationType?.name.trim() ?? '';
+    _initialDescription = widget.relationType?.description.trim() ?? '';
+    _nameController = TextEditingController(text: _initialName)
+      ..addListener(_handleChanged);
+    _descController = TextEditingController(text: _initialDescription)
+      ..addListener(_handleChanged);
   }
 
   @override
   void dispose() {
     _nameController.removeListener(_handleChanged);
+    _descController.removeListener(_handleChanged);
     _nameController.dispose();
     _descController.dispose();
     super.dispose();
@@ -60,16 +85,23 @@ class _ProjectRelationCreatePageState extends State<ProjectRelationCreatePage> {
       _isSaving = true;
     });
 
-    final relationType = await widget.onCreateRelationType(
-      name: _nameController.text.trim(),
-      description: _descController.text.trim(),
-    );
+    if (widget.isEditMode) {
+      await widget.onUpdateRelationType!(
+        name: _nameController.text.trim(),
+        description: _descController.text.trim(),
+      );
+    } else {
+      await widget.onCreateRelationType!(
+        name: _nameController.text.trim(),
+        description: _descController.text.trim(),
+      );
+    }
 
     if (!mounted) {
       return;
     }
 
-    Navigator.of(context).pop(relationType);
+    Navigator.of(context).pop();
   }
 
   @override
@@ -103,9 +135,7 @@ class _ProjectRelationCreatePageState extends State<ProjectRelationCreatePage> {
                             letterSpacing: 2.0,
                             color: Colors.black87,
                           ),
-                          decoration: _buildInputDecoration(
-                            '例如：视觉呼应、时空对比...',
-                          ),
+                          decoration: _buildInputDecoration('例如：视觉呼应、时空对比...'),
                         ),
                         const SizedBox(height: 48),
                         _buildSectionLabel('关 联 类 型'),
@@ -147,9 +177,9 @@ class _ProjectRelationCreatePageState extends State<ProjectRelationCreatePage> {
               right: 0,
               child: Center(
                 child: IgnorePointer(
-                  ignoring: !_canSave,
+                  ignoring: !_hasChanges || !_canSave,
                   child: AnimatedOpacity(
-                    opacity: _canSave ? 1.0 : 0.0,
+                    opacity: _hasChanges ? 1.0 : 0.0,
                     duration: const Duration(milliseconds: 600),
                     curve: Curves.easeInOut,
                     child: GestureDetector(
@@ -196,9 +226,9 @@ class _ProjectRelationCreatePageState extends State<ProjectRelationCreatePage> {
             ),
             onPressed: () => Navigator.of(context).pop(),
           ),
-          const Text(
-            '添 加 关 联 关 系',
-            style: TextStyle(
+          Text(
+            widget.isEditMode ? '编 辑 关 联 关 系' : '添 加 关 联 关 系',
+            style: const TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w600,
               letterSpacing: 4.0,
@@ -242,7 +272,7 @@ class _ProjectRelationCreatePageState extends State<ProjectRelationCreatePage> {
   }
 
   Widget _buildTypeSelector() {
-    return LayoutBuilder(
+    final typeSelector = LayoutBuilder(
       builder: (context, constraints) {
         final itemWidth = (constraints.maxWidth - 16) / 3;
 
@@ -256,13 +286,34 @@ class _ProjectRelationCreatePageState extends State<ProjectRelationCreatePage> {
         );
       },
     );
+
+    if (!widget.isEditMode) {
+      return typeSelector;
+    }
+
+    return Opacity(
+      opacity: 0.45,
+      child: IgnorePointer(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            typeSelector,
+            const SizedBox(height: 8),
+            Text(
+              '编辑时不可修改关联类型',
+              style: TextStyle(
+                fontSize: 11,
+                color: Colors.grey.shade500,
+                letterSpacing: 0.6,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
-  Widget _buildTypeItem(
-    String label,
-    _RelationTargetType type,
-    double width,
-  ) {
+  Widget _buildTypeItem(String label, _RelationTargetType type, double width) {
     final isSelected = _selectedType == type;
 
     return GestureDetector(

@@ -14,6 +14,12 @@ abstract class ProjectRelationRepository {
     required String description,
   });
 
+  Future<ProjectRelationType> updateRelationType({
+    required String relationTypeId,
+    required String name,
+    required String description,
+  });
+
   Future<List<ProjectRelationGroup>> listRelationGroupsForProject(
     String projectId,
   );

@@ -387,6 +387,33 @@ class _AppShellPageState extends State<AppShellPage> {
               ),
             );
           },
+          onOpenRelation: (index) async {
+            if (_currentProject == null ||
+                index < 0 ||
+                index >= _relationTypes.length) {
+              return;
+            }
+            final relationType = _relationTypes[index];
+            await Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => ProjectRelationCreatePage.edit(
+                  relationType: relationType,
+                  onUpdateRelationType:
+                      ({required name, required description}) async {
+                        final updatedRelationType = await widget
+                            .projectRelationRepository
+                            .updateRelationType(
+                              relationTypeId: relationType.relationTypeId,
+                              name: name,
+                              description: description,
+                            );
+                        await _refreshProjects();
+                        return updatedRelationType;
+                      },
+                ),
+              ),
+            );
+          },
           onTabChanged: (index) {
             setState(() {
               _currentTabIndex = index;
@@ -695,7 +722,9 @@ class _AppShellPageState extends State<AppShellPage> {
             statusLabel: '进行',
           );
       if (updatedChapter == null) {
-        throw StateError('Failed to unlock structure chapter: $unlockChapterId');
+        throw StateError(
+          'Failed to unlock structure chapter: $unlockChapterId',
+        );
       }
     }
     await _refreshProjects();
@@ -804,6 +833,7 @@ class _AppShellPageState extends State<AppShellPage> {
     return [
       for (final relationType in _relationTypes)
         StructureRelationCardData(
+          relationTypeId: relationType.relationTypeId,
           name: relationType.name,
           description: relationType.description,
           setCount: groupCounts[relationType.relationTypeId] ?? 0,

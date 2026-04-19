@@ -99,6 +99,33 @@ class LocalProjectRelationRepository implements ProjectRelationRepository {
   }
 
   @override
+  Future<ProjectRelationType> updateRelationType({
+    required String relationTypeId,
+    required String name,
+    required String description,
+  }) async {
+    final database = await _database();
+    final relationType = await database.projectRelationTypes
+        .filter()
+        .relationTypeIdEqualTo(relationTypeId)
+        .findFirst();
+    if (relationType == null) {
+      throw StateError('Relation type not found: $relationTypeId');
+    }
+
+    relationType.name = name.trim();
+    final trimmedDescription = description.trim();
+    relationType.description = trimmedDescription;
+    relationType.updatedAt = DateTime.now();
+
+    await database.writeTxn(() async {
+      await database.projectRelationTypes.put(relationType);
+    });
+
+    return relationType;
+  }
+
+  @override
   Future<List<ProjectRelationGroup>> listRelationGroupsForProject(
     String projectId,
   ) async {

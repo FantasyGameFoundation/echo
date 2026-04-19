@@ -24,6 +24,7 @@ class StructurePagePrototype extends StatelessWidget {
     required this.onAddElement,
     this.onOpenElement,
     required this.onAddRelation,
+    this.onOpenRelation,
     required this.onTabChanged,
     required this.onBottomTabChanged,
   });
@@ -39,6 +40,7 @@ class StructurePagePrototype extends StatelessWidget {
   final VoidCallback onAddElement;
   final ValueChanged<String>? onOpenElement;
   final VoidCallback onAddRelation;
+  final ValueChanged<int>? onOpenRelation;
   final ValueChanged<int> onTabChanged;
   final ValueChanged<PrototypeTab> onBottomTabChanged;
 
@@ -215,6 +217,9 @@ class StructurePagePrototype extends StatelessWidget {
             name: relation.name,
             description: relation.description,
             setCount: relation.setCount,
+            onTap: onOpenRelation == null
+                ? null
+                : () => onOpenRelation!(relationCards.indexOf(relation)),
           ),
         _buildAddRelationButton(),
         const SizedBox(height: 40),

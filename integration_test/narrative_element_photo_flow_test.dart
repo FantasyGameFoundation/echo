@@ -965,6 +965,25 @@ class _MutableProjectRelationRepository implements ProjectRelationRepository {
   }
 
   @override
+  Future<ProjectRelationType> updateRelationType({
+    required String relationTypeId,
+    required String name,
+    required String description,
+  }) async {
+    for (final entry in _typesByProject.entries) {
+      for (final relationType in entry.value) {
+        if (relationType.relationTypeId == relationTypeId) {
+          relationType.name = name.trim();
+          relationType.description = description.trim();
+          relationType.updatedAt = DateTime(2026, 4, 4);
+          return relationType;
+        }
+      }
+    }
+    throw StateError('Relation type not found: $relationTypeId');
+  }
+
+  @override
   Future<ProjectRelationGroup> createRelationGroup({
     required String projectId,
     required String relationTypeId,

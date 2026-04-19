@@ -6,15 +6,17 @@ class RelationCard extends StatelessWidget {
     required this.name,
     required this.description,
     required this.setCount,
+    this.onTap,
   });
 
   final String name;
   final String description;
   final int setCount;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final cardBody = Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
       decoration: const BoxDecoration(color: Colors.white),
@@ -92,5 +94,11 @@ class RelationCard extends StatelessWidget {
         ],
       ),
     );
+
+    if (onTap == null) {
+      return cardBody;
+    }
+
+    return InkWell(onTap: onTap, child: cardBody);
   }
 }
