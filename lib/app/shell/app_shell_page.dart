@@ -11,13 +11,18 @@ import 'package:echo/features/project/presentation/utils/project_cover_picker.da
 import 'package:echo/features/project/presentation/widgets/project_sidebar.dart';
 import 'package:echo/features/structure_elements_relations/domain/element_status.dart';
 import 'package:echo/features/structure_elements_relations/domain/entities/narrative_element.dart';
+import 'package:echo/features/structure_elements_relations/domain/entities/project_relation_group.dart';
+import 'package:echo/features/structure_elements_relations/domain/entities/project_relation_type.dart';
 import 'package:echo/features/structure_elements_relations/domain/entities/structure_chapter.dart';
 import 'package:echo/features/structure_elements_relations/domain/repositories/narrative_element_repository.dart';
+import 'package:echo/features/structure_elements_relations/domain/repositories/project_relation_repository.dart';
 import 'package:echo/features/structure_elements_relations/domain/repositories/structure_chapter_repository.dart';
 import 'package:echo/features/structure_elements_relations/presentation/models/narrative_element_draft.dart';
 import 'package:echo/features/structure_elements_relations/presentation/models/structure_chapter_card_data.dart';
+import 'package:echo/features/structure_elements_relations/presentation/models/structure_relation_card_data.dart';
 import 'package:echo/features/structure_elements_relations/presentation/pages/chapter_create_page.dart';
 import 'package:echo/features/structure_elements_relations/presentation/pages/narrative_element_create_page.dart';
+import 'package:echo/features/structure_elements_relations/presentation/pages/project_relation_create_page.dart';
 import 'package:echo/features/structure_elements_relations/presentation/pages/structure_page_prototype.dart';
 import 'package:echo/features/timeline/presentation/pages/timeline_page_prototype.dart';
 import 'package:echo/shared/models/prototype_tab.dart';
@@ -30,6 +35,7 @@ class AppShellPage extends StatefulWidget {
     required this.projectRepository,
     required this.structureChapterRepository,
     required this.narrativeElementRepository,
+    required this.projectRelationRepository,
     this.narrativeElementPhotoPicker,
     this.narrativeElementPhotoImporter,
   });
@@ -37,6 +43,7 @@ class AppShellPage extends StatefulWidget {
   final ProjectRepository projectRepository;
   final StructureChapterRepository structureChapterRepository;
   final NarrativeElementRepository narrativeElementRepository;
+  final ProjectRelationRepository projectRelationRepository;
   final PickProjectCoverImage? narrativeElementPhotoPicker;
   final ImportNarrativePhoto? narrativeElementPhotoImporter;
 
@@ -52,6 +59,8 @@ class _AppShellPageState extends State<AppShellPage> {
   Project? _currentProject;
   List<Project> _projects = const <Project>[];
   List<StructureChapter> _structureChapters = const <StructureChapter>[];
+  List<ProjectRelationType> _relationTypes = const <ProjectRelationType>[];
+  List<ProjectRelationGroup> _relationGroups = const <ProjectRelationGroup>[];
   List<StructureChapterCardData> _chapterCards =
       const <StructureChapterCardData>[];
   List<Map<String, dynamic>> _narrativeElementGroups =
@@ -193,6 +202,7 @@ class _AppShellPageState extends State<AppShellPage> {
           currentTabIndex: _currentTabIndex,
           chapterCards: _chapterCards,
           elementGroups: _narrativeElementGroups,
+          relationCards: _buildRelationCards(),
           projectTitle: _currentProject?.title ?? '',
           onOpenSidebar: () => setState(() => _sidebarOpen = true),
           onAddChapter: () async {
@@ -262,6 +272,29 @@ class _AppShellPageState extends State<AppShellPage> {
                       },
                   onPickPhoto: widget.narrativeElementPhotoPicker,
                   onImportPhoto: widget.narrativeElementPhotoImporter,
+                ),
+              ),
+            );
+          },
+          onAddRelation: () async {
+            if (_currentProject == null) {
+              return;
+            }
+            await Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => ProjectRelationCreatePage(
+                  onCreateRelationType:
+                      ({required name, required description}) async {
+                        final relationType = await widget
+                            .projectRelationRepository
+                            .createRelationType(
+                              projectId: _currentProject!.projectId,
+                              name: name,
+                              description: description,
+                            );
+                        await _refreshProjects();
+                        return relationType;
+                      },
                 ),
               ),
             );
@@ -353,6 +386,16 @@ class _AppShellPageState extends State<AppShellPage> {
         : await widget.narrativeElementRepository.listElementsForProject(
             currentProject.projectId,
           );
+    final relationTypes = currentProject == null
+        ? const <ProjectRelationType>[]
+        : await widget.projectRelationRepository.listRelationTypesForProject(
+            currentProject.projectId,
+          );
+    final relationGroups = currentProject == null
+        ? const <ProjectRelationGroup>[]
+        : await widget.projectRelationRepository.listRelationGroupsForProject(
+            currentProject.projectId,
+          );
     if (!mounted) {
       return;
     }
@@ -361,6 +404,8 @@ class _AppShellPageState extends State<AppShellPage> {
       _currentProject = currentProject;
       _projects = projects;
       _structureChapters = chapters;
+      _relationTypes = relationTypes;
+      _relationGroups = relationGroups;
       _chapterCards = _buildChapterCards(
         chapters: chapters,
         elements: elements,
@@ -488,6 +533,26 @@ class _AppShellPageState extends State<AppShellPage> {
     });
 
     return previewPhotos.map((photo) => photo.source).toList();
+  }
+
+  List<StructureRelationCardData> _buildRelationCards() {
+    final groupCounts = <String, int>{};
+    for (final group in _relationGroups) {
+      groupCounts.update(
+        group.linkedRelationTypeId,
+        (value) => value + 1,
+        ifAbsent: () => 1,
+      );
+    }
+
+    return [
+      for (final relationType in _relationTypes)
+        StructureRelationCardData(
+          name: relationType.name,
+          description: relationType.description,
+          setCount: groupCounts[relationType.relationTypeId] ?? 0,
+        ),
+    ];
   }
 
   void _showPassiveHint(String message) {

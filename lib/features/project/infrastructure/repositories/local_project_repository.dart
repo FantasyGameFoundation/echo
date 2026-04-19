@@ -2,6 +2,8 @@ import 'package:echo/features/project/domain/entities/project.dart';
 import 'package:echo/features/project/domain/repositories/project_repository.dart';
 import 'package:echo/features/project/infrastructure/database/project_isar.dart';
 import 'package:echo/features/project/infrastructure/models/project_session.dart';
+import 'package:echo/features/structure_elements_relations/domain/entities/project_relation_type.dart';
+import 'package:echo/features/structure_elements_relations/domain/project_relation_defaults.dart';
 import 'package:isar/isar.dart';
 
 class LocalProjectRepository implements ProjectRepository {
@@ -32,9 +34,22 @@ class LocalProjectRepository implements ProjectRepository {
       createdTimestamp: now,
       updatedTimestamp: now,
     );
+    final defaultRelationTypes = defaultProjectRelationDefinitions
+        .map(
+          (definition) => ProjectRelationType.create(
+            projectId: project.projectId,
+            relationName: definition.name,
+            relationDescription: definition.description,
+            relationSortOrder: definition.sortOrder,
+            createdTimestamp: now,
+            updatedTimestamp: now,
+          ),
+        )
+        .toList();
 
     await database.writeTxn(() async {
       await database.projects.put(project);
+      await database.projectRelationTypes.putAll(defaultRelationTypes);
       await database.projectSessions.put(
         ProjectSession()..currentProjectId = project.projectId,
       );

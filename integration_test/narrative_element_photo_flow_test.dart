@@ -4,9 +4,15 @@ import 'package:echo/app/app.dart';
 import 'package:echo/features/project/domain/entities/project.dart';
 import 'package:echo/features/project/domain/repositories/project_repository.dart';
 import 'package:echo/features/structure_elements_relations/domain/entities/narrative_element.dart';
+import 'package:echo/features/structure_elements_relations/domain/entities/project_relation_group.dart';
+import 'package:echo/features/structure_elements_relations/domain/entities/project_relation_member.dart';
+import 'package:echo/features/structure_elements_relations/domain/entities/project_relation_type.dart';
 import 'package:echo/features/structure_elements_relations/domain/entities/structure_chapter.dart';
 import 'package:echo/features/structure_elements_relations/domain/repositories/narrative_element_repository.dart';
+import 'package:echo/features/structure_elements_relations/domain/repositories/project_relation_repository.dart';
 import 'package:echo/features/structure_elements_relations/domain/repositories/structure_chapter_repository.dart';
+import 'package:echo/features/structure_elements_relations/domain/project_relation_defaults.dart';
+import 'package:echo/features/structure_elements_relations/domain/models/project_relation_draft_member.dart';
 import 'package:echo/features/structure_elements_relations/presentation/widgets/chapter_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -40,6 +46,7 @@ void main() {
             ],
           ),
           narrativeRepository: _MutableNarrativeElementRepository(),
+          relationRepository: _MutableProjectRelationRepository(),
           photoPicker: () async => photoFixture.sourceFile.path,
           photoImporter: photoFixture.importIntoAppMedia,
         ),
@@ -93,6 +100,7 @@ void main() {
         _buildTestApp(
           chapterRepository: chapterRepository,
           narrativeRepository: _MutableNarrativeElementRepository(),
+          relationRepository: _MutableProjectRelationRepository(),
         ),
       );
       await tester.pumpAndSettle();
@@ -189,6 +197,7 @@ void main() {
         _buildTestApp(
           chapterRepository: chapterRepository,
           narrativeRepository: narrativeRepository,
+          relationRepository: _MutableProjectRelationRepository(),
           photoPicker: () async => photoFixture.sourceFile.path,
           photoImporter: photoFixture.importIntoAppMedia,
         ),
@@ -345,6 +354,7 @@ void main() {
               ),
             ],
           ),
+          relationRepository: _MutableProjectRelationRepository(),
         ),
       );
       await tester.pumpAndSettle();
@@ -470,11 +480,175 @@ void main() {
       );
     },
   );
+
+  testWidgets(
+    'new projects show real relation types and add page saves mixed, element-only, and photo-only relation groups',
+    (tester) async {
+      await _setPhoneSurface(binding);
+
+      final relationRepository = _MutableProjectRelationRepository();
+      final chapterRepository = _MutableStructureChapterRepository(
+        initialChapters: <StructureChapter>[
+          StructureChapter.create(
+            id: 'chapter-a',
+            projectId: 'project-seeded',
+            chapterTitle: '第一章',
+            chapterDescription: '第一章说明',
+            chapterStatus: '进行',
+            chapterSortOrder: 0,
+            createdTimestamp: DateTime(2026, 1, 1),
+            updatedTimestamp: DateTime(2026, 1, 1),
+          ),
+          StructureChapter.create(
+            id: 'chapter-b',
+            projectId: 'project-seeded',
+            chapterTitle: '第二章',
+            chapterDescription: '第二章说明',
+            chapterStatus: '进行',
+            chapterSortOrder: 1,
+            createdTimestamp: DateTime(2026, 1, 2),
+            updatedTimestamp: DateTime(2026, 1, 2),
+          ),
+        ],
+      );
+      final narrativeRepository = _MutableNarrativeElementRepository(
+        initialElements: <NarrativeElement>[
+          NarrativeElement.create(
+            id: 'element-a',
+            projectId: 'project-seeded',
+            chapterId: 'chapter-a',
+            elementTitle: '第一章元素',
+            linkedPhotoPaths: <String>[
+              '/tmp/relation-photo-a1.png',
+              '/tmp/relation-photo-a2.png',
+            ],
+            createdTimestamp: DateTime(2026, 3, 1),
+            updatedTimestamp: DateTime(2026, 3, 1),
+          ),
+          NarrativeElement.create(
+            id: 'element-b',
+            projectId: 'project-seeded',
+            chapterId: 'chapter-b',
+            elementTitle: '第二章元素',
+            linkedPhotoPaths: <String>[
+              '/tmp/relation-photo-b1.png',
+              '/tmp/relation-photo-b2.png',
+            ],
+            createdTimestamp: DateTime(2026, 3, 2),
+            updatedTimestamp: DateTime(2026, 3, 2),
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          chapterRepository: chapterRepository,
+          narrativeRepository: narrativeRepository,
+          relationRepository: relationRepository,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('关联关系'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('对比'), findsOneWidget);
+      expect(find.text('重复'), findsOneWidget);
+      expect(find.text('呼应'), findsOneWidget);
+      expect(find.text('转折'), findsOneWidget);
+
+      await tester.scrollUntilVisible(
+        find.text('添加关联关系'),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('添加关联关系'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('关 联 关 系'), findsOneWidget);
+      expect(
+        find.byKey(_relationTypeKeyByName(relationRepository, '呼应')),
+        findsOneWidget,
+      );
+
+      await tester.tap(
+        find.byKey(_relationTypeKeyByName(relationRepository, '呼应')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('relationElementChip-element-a')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(
+          const ValueKey('relationPhotoItem-/tmp/relation-photo-b2.png'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('relationSaveButton')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('呼应'), findsOneWidget);
+      expect(find.text('1'), findsOneWidget);
+
+      await tester.tap(find.text('添加关联关系'));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(_relationTypeKeyByName(relationRepository, '对比')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('relationElementChip-element-a')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('relationElementChip-element-b')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('relationSaveButton')));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('添加关联关系'));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(_relationTypeKeyByName(relationRepository, '重复')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(
+          const ValueKey('relationPhotoItem-/tmp/relation-photo-a2.png'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(
+          const ValueKey('relationPhotoItem-/tmp/relation-photo-b2.png'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('relationSaveButton')));
+      await tester.pumpAndSettle();
+
+      expect(relationRepository.groupsForProject('project-seeded').length, 3);
+      expect(find.text('对比'), findsOneWidget);
+      expect(find.text('重复'), findsOneWidget);
+      expect(find.text('呼应'), findsOneWidget);
+      expect(find.text('1'), findsNWidgets(3));
+
+      await _captureScreenshot(
+        binding: binding,
+        name: 'project-relation-real-flow',
+      );
+    },
+  );
 }
 
 EchoApp _buildTestApp({
   required _MutableStructureChapterRepository chapterRepository,
   required _MutableNarrativeElementRepository narrativeRepository,
+  required _MutableProjectRelationRepository relationRepository,
   Future<String?> Function()? photoPicker,
   Future<String> Function(String sourcePath)? photoImporter,
 }) {
@@ -482,6 +656,7 @@ EchoApp _buildTestApp({
     projectRepository: _SeededProjectRepository(),
     structureChapterRepository: chapterRepository,
     narrativeElementRepository: narrativeRepository,
+    projectRelationRepository: relationRepository,
     narrativeElementPhotoPicker: photoPicker,
     narrativeElementPhotoImporter: photoImporter,
   );
@@ -681,6 +856,162 @@ class _MutableNarrativeElementRepository implements NarrativeElementRepository {
     elements.sort((left, right) => left.createdAt.compareTo(right.createdAt));
     return elements;
   }
+}
+
+class _MutableProjectRelationRepository implements ProjectRelationRepository {
+  final Map<String, List<ProjectRelationType>> _typesByProject =
+      <String, List<ProjectRelationType>>{};
+  final Map<String, List<ProjectRelationGroup>> _groupsByProject =
+      <String, List<ProjectRelationGroup>>{};
+  final Map<String, List<ProjectRelationMember>> _membersByProject =
+      <String, List<ProjectRelationMember>>{};
+
+  List<ProjectRelationGroup> groupsForProject(String projectId) {
+    return List<ProjectRelationGroup>.from(
+      _groupsByProject[projectId] ?? const [],
+    );
+  }
+
+  Future<void> _ensureDefaults(String projectId) async {
+    if ((_typesByProject[projectId] ?? const <ProjectRelationType>[])
+        .isNotEmpty) {
+      return;
+    }
+
+    final now = DateTime(2026, 4, 1);
+    _typesByProject[projectId] = defaultProjectRelationDefinitions
+        .map(
+          (definition) => ProjectRelationType.create(
+            id: 'type-$projectId-${definition.sortOrder}',
+            projectId: projectId,
+            relationName: definition.name,
+            relationDescription: definition.description,
+            relationSortOrder: definition.sortOrder,
+            createdTimestamp: now,
+            updatedTimestamp: now,
+          ),
+        )
+        .toList();
+  }
+
+  @override
+  Future<ProjectRelationType> createRelationType({
+    required String projectId,
+    required String name,
+    required String description,
+  }) async {
+    await _ensureDefaults(projectId);
+    final existingTypes = _typesByProject[projectId] ?? <ProjectRelationType>[];
+    final nextSortOrder = existingTypes.isEmpty
+        ? 0
+        : existingTypes
+                  .map((relationType) => relationType.sortOrder)
+                  .reduce((left, right) => left > right ? left : right) +
+              1;
+    final now = DateTime(2026, 4, 3, existingTypes.length + 1);
+    final relationType = ProjectRelationType.create(
+      id: 'type-$projectId-$nextSortOrder',
+      projectId: projectId,
+      relationName: name,
+      relationDescription: description,
+      relationSortOrder: nextSortOrder,
+      createdTimestamp: now,
+      updatedTimestamp: now,
+    );
+    existingTypes.add(relationType);
+    _typesByProject[projectId] = existingTypes;
+    return relationType;
+  }
+
+  @override
+  Future<ProjectRelationGroup> createRelationGroup({
+    required String projectId,
+    required String relationTypeId,
+    required List<ProjectRelationDraftMember> members,
+  }) async {
+    if (members.length < 2) {
+      throw ArgumentError(
+        'A relation group must contain at least two selections.',
+      );
+    }
+
+    await _ensureDefaults(projectId);
+
+    final now = DateTime(
+      2026,
+      4,
+      2,
+      (_groupsByProject[projectId]?.length ?? 0) + 1,
+    );
+    final relationGroup = ProjectRelationGroup.create(
+      id: 'group-${(_groupsByProject[projectId]?.length ?? 0) + 1}',
+      projectId: projectId,
+      relationTypeId: relationTypeId,
+      createdTimestamp: now,
+      updatedTimestamp: now,
+    );
+
+    final relationMembers = <ProjectRelationMember>[
+      for (var index = 0; index < members.length; index++)
+        ProjectRelationMember.create(
+          id: 'member-$projectId-${(_membersByProject[projectId]?.length ?? 0) + index + 1}',
+          projectId: projectId,
+          groupId: relationGroup.relationGroupId,
+          targetKind: members[index].kind.name,
+          elementId: members[index].elementId,
+          photoPath: members[index].photoPath,
+          sourceElementId: members[index].sourceElementId,
+          sortOrder: index,
+          createdTimestamp: now,
+        ),
+    ];
+
+    _groupsByProject.putIfAbsent(projectId, () => <ProjectRelationGroup>[]);
+    _groupsByProject[projectId]!.add(relationGroup);
+    _membersByProject.putIfAbsent(projectId, () => <ProjectRelationMember>[]);
+    _membersByProject[projectId]!.addAll(relationMembers);
+    return relationGroup;
+  }
+
+  @override
+  Future<List<ProjectRelationGroup>> listRelationGroupsForProject(
+    String projectId,
+  ) async {
+    await _ensureDefaults(projectId);
+    return List<ProjectRelationGroup>.from(
+      _groupsByProject[projectId] ?? const [],
+    );
+  }
+
+  @override
+  Future<List<ProjectRelationMember>> listRelationMembersForProject(
+    String projectId,
+  ) async {
+    await _ensureDefaults(projectId);
+    return List<ProjectRelationMember>.from(
+      _membersByProject[projectId] ?? const [],
+    );
+  }
+
+  @override
+  Future<List<ProjectRelationType>> listRelationTypesForProject(
+    String projectId,
+  ) async {
+    await _ensureDefaults(projectId);
+    return List<ProjectRelationType>.from(
+      _typesByProject[projectId] ?? const [],
+    );
+  }
+}
+
+ValueKey<String> _relationTypeKeyByName(
+  _MutableProjectRelationRepository repository,
+  String relationName,
+) {
+  final relationType = repository._typesByProject['project-seeded']!.firstWhere(
+    (type) => type.name == relationName,
+  );
+  return ValueKey<String>('relationTypeChip-${relationType.relationTypeId}');
 }
 
 ImageProvider<Object> _baseImageProvider(ImageProvider<Object> provider) {

@@ -5,8 +5,10 @@ import 'package:echo/features/project/infrastructure/database/project_isar.dart'
 import 'package:echo/features/project/infrastructure/repositories/local_project_repository.dart';
 import 'package:echo/features/project/presentation/utils/project_cover_picker.dart';
 import 'package:echo/features/structure_elements_relations/domain/repositories/narrative_element_repository.dart';
+import 'package:echo/features/structure_elements_relations/domain/repositories/project_relation_repository.dart';
 import 'package:echo/features/structure_elements_relations/domain/repositories/structure_chapter_repository.dart';
 import 'package:echo/features/structure_elements_relations/infrastructure/repositories/local_narrative_element_repository.dart';
+import 'package:echo/features/structure_elements_relations/infrastructure/repositories/local_project_relation_repository.dart';
 import 'package:echo/features/structure_elements_relations/infrastructure/repositories/local_structure_chapter_repository.dart';
 import 'package:echo/features/structure_elements_relations/presentation/pages/narrative_element_create_page.dart';
 import 'package:flutter/material.dart';
@@ -18,6 +20,7 @@ class EchoApp extends StatelessWidget {
     this.projectRepository,
     this.structureChapterRepository,
     this.narrativeElementRepository,
+    this.projectRelationRepository,
     this.narrativeElementPhotoPicker,
     this.narrativeElementPhotoImporter,
   });
@@ -32,10 +35,13 @@ class EchoApp extends StatelessWidget {
       LocalStructureChapterRepository(openIsar: _sharedOpenIsar);
   static final NarrativeElementRepository _defaultNarrativeElementRepository =
       LocalNarrativeElementRepository(openIsar: _sharedOpenIsar);
+  static final ProjectRelationRepository _defaultProjectRelationRepository =
+      LocalProjectRelationRepository(openIsar: _sharedOpenIsar);
 
   final ProjectRepository? projectRepository;
   final StructureChapterRepository? structureChapterRepository;
   final NarrativeElementRepository? narrativeElementRepository;
+  final ProjectRelationRepository? projectRelationRepository;
   final PickProjectCoverImage? narrativeElementPhotoPicker;
   final ImportNarrativePhoto? narrativeElementPhotoImporter;
 
@@ -51,6 +57,8 @@ class EchoApp extends StatelessWidget {
             structureChapterRepository ?? _defaultStructureChapterRepository,
         narrativeElementRepository:
             narrativeElementRepository ?? _defaultNarrativeElementRepository,
+        projectRelationRepository:
+            projectRelationRepository ?? _defaultProjectRelationRepository,
         narrativeElementPhotoPicker: narrativeElementPhotoPicker,
         narrativeElementPhotoImporter: narrativeElementPhotoImporter,
       ),

@@ -1,7 +1,9 @@
 import 'package:echo/features/structure_elements_relations/presentation/models/structure_chapter_card_data.dart';
+import 'package:echo/features/structure_elements_relations/presentation/models/structure_relation_card_data.dart';
 import 'package:echo/features/structure_elements_relations/presentation/widgets/chapter_card.dart';
 import 'package:echo/features/structure_elements_relations/presentation/widgets/narrative_thumbnail_provider.dart';
 import 'package:echo/features/structure_elements_relations/presentation/widgets/narrative_list_tile.dart';
+import 'package:echo/features/structure_elements_relations/presentation/widgets/relation_card.dart';
 import 'package:echo/features/structure_elements_relations/presentation/widgets/section_tab_bar.dart';
 import 'package:echo/features/structure_elements_relations/presentation/widgets/sticky_chapter_header_delegate.dart';
 import 'package:echo/shared/models/prototype_tab.dart';
@@ -14,10 +16,12 @@ class StructurePagePrototype extends StatelessWidget {
     required this.currentTabIndex,
     required this.chapterCards,
     required this.elementGroups,
+    required this.relationCards,
     this.projectTitle = '',
     required this.onOpenSidebar,
     required this.onAddChapter,
     required this.onAddElement,
+    required this.onAddRelation,
     required this.onTabChanged,
     required this.onBottomTabChanged,
   });
@@ -25,10 +29,12 @@ class StructurePagePrototype extends StatelessWidget {
   final int currentTabIndex;
   final List<StructureChapterCardData> chapterCards;
   final List<Map<String, dynamic>> elementGroups;
+  final List<StructureRelationCardData> relationCards;
   final String projectTitle;
   final VoidCallback onOpenSidebar;
   final VoidCallback onAddChapter;
   final VoidCallback onAddElement;
+  final VoidCallback onAddRelation;
   final ValueChanged<int> onTabChanged;
   final ValueChanged<PrototypeTab> onBottomTabChanged;
 
@@ -52,11 +58,7 @@ class StructurePagePrototype extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 24),
-            Expanded(
-              child: currentTabIndex == 0
-                  ? _buildChaptersView()
-                  : _buildElementsView(),
-            ),
+            Expanded(child: _buildCurrentSection()),
             CustomBottomNavBar(
               activeTab: PrototypeTab.structure,
               onChangeTab: onBottomTabChanged,
@@ -65,6 +67,19 @@ class StructurePagePrototype extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Widget _buildCurrentSection() {
+    switch (currentTabIndex) {
+      case 0:
+        return _buildChaptersView();
+      case 1:
+        return _buildElementsView();
+      case 2:
+        return _buildRelationsView();
+      default:
+        return _buildChaptersView();
+    }
   }
 
   Widget _buildTopBar() {
@@ -179,6 +194,22 @@ class StructurePagePrototype extends StatelessWidget {
             ],
           ),
         ),
+      ],
+    );
+  }
+
+  Widget _buildRelationsView() {
+    return ListView(
+      padding: const EdgeInsets.symmetric(horizontal: 24.0),
+      children: [
+        for (final relation in relationCards)
+          RelationCard(
+            name: relation.name,
+            description: relation.description,
+            setCount: relation.setCount,
+          ),
+        _buildAddRelationButton(),
+        const SizedBox(height: 40),
       ],
     );
   }
@@ -365,6 +396,34 @@ class StructurePagePrototype extends StatelessWidget {
                 color: Colors.grey.shade400,
                 fontSize: 14,
                 letterSpacing: 1.2,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAddRelationButton() {
+    return InkWell(
+      onTap: onAddRelation,
+      child: Container(
+        height: 64,
+        margin: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey.shade300, width: 1.0),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.add, color: Colors.grey.shade400, size: 18),
+            const SizedBox(width: 8),
+            Text(
+              '添加关联关系',
+              style: TextStyle(
+                color: Colors.grey.shade400,
+                fontSize: 13,
+                letterSpacing: 2.0,
               ),
             ),
           ],

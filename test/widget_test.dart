@@ -14,11 +14,18 @@ import 'package:echo/features/beacon/presentation/pages/beacon_page_prototype.da
 import 'package:echo/features/curation/presentation/pages/organize_page_prototype.dart';
 import 'package:echo/features/structure_elements_relations/domain/element_status.dart';
 import 'package:echo/features/structure_elements_relations/domain/entities/narrative_element.dart';
+import 'package:echo/features/structure_elements_relations/domain/entities/project_relation_group.dart';
+import 'package:echo/features/structure_elements_relations/domain/entities/project_relation_member.dart';
+import 'package:echo/features/structure_elements_relations/domain/entities/project_relation_type.dart';
 import 'package:echo/features/structure_elements_relations/domain/entities/structure_chapter.dart';
 import 'package:echo/features/structure_elements_relations/domain/repositories/narrative_element_repository.dart';
+import 'package:echo/features/structure_elements_relations/domain/repositories/project_relation_repository.dart';
 import 'package:echo/features/structure_elements_relations/domain/repositories/structure_chapter_repository.dart';
+import 'package:echo/features/structure_elements_relations/domain/project_relation_defaults.dart';
+import 'package:echo/features/structure_elements_relations/domain/models/project_relation_draft_member.dart';
 import 'package:echo/features/structure_elements_relations/presentation/models/narrative_element_draft.dart';
 import 'package:echo/features/structure_elements_relations/presentation/models/structure_chapter_card_data.dart';
+import 'package:echo/features/structure_elements_relations/presentation/models/structure_relation_card_data.dart';
 import 'package:echo/features/structure_elements_relations/presentation/pages/chapter_create_page.dart';
 import 'package:echo/features/structure_elements_relations/presentation/pages/narrative_element_create_page.dart';
 import 'package:echo/features/structure_elements_relations/presentation/pages/structure_page_prototype.dart';
@@ -121,6 +128,7 @@ void main() {
         projectRepository: _InMemoryProjectRepository(),
         structureChapterRepository: _InMemoryStructureChapterRepository(),
         narrativeElementRepository: _InMemoryNarrativeElementRepository(),
+        projectRelationRepository: _InMemoryProjectRelationRepository(),
       ),
     );
 
@@ -141,6 +149,7 @@ void main() {
           projectRepository: repository,
           structureChapterRepository: _InMemoryStructureChapterRepository(),
           narrativeElementRepository: _InMemoryNarrativeElementRepository(),
+          projectRelationRepository: _InMemoryProjectRelationRepository(),
         ),
       );
       await tester.pumpAndSettle();
@@ -189,6 +198,7 @@ void main() {
         ),
         structureChapterRepository: _InMemoryStructureChapterRepository(),
         narrativeElementRepository: _InMemoryNarrativeElementRepository(),
+        projectRelationRepository: _InMemoryProjectRelationRepository(),
       ),
     );
     await tester.pumpAndSettle();
@@ -218,6 +228,7 @@ void main() {
         projectRepository: _InMemoryProjectRepository(),
         structureChapterRepository: _InMemoryStructureChapterRepository(),
         narrativeElementRepository: _InMemoryNarrativeElementRepository(),
+        projectRelationRepository: _InMemoryProjectRelationRepository(),
       ),
     );
 
@@ -273,6 +284,7 @@ void main() {
           projectRepository: _InMemoryProjectRepository(),
           structureChapterRepository: _InMemoryStructureChapterRepository(),
           narrativeElementRepository: _InMemoryNarrativeElementRepository(),
+          projectRelationRepository: _InMemoryProjectRelationRepository(),
         ),
       );
 
@@ -310,6 +322,7 @@ void main() {
           projectRepository: repository,
           structureChapterRepository: _InMemoryStructureChapterRepository(),
           narrativeElementRepository: _InMemoryNarrativeElementRepository(),
+          projectRelationRepository: _InMemoryProjectRelationRepository(),
         ),
       );
 
@@ -431,6 +444,7 @@ void main() {
               ),
             ],
           ),
+          projectRelationRepository: _InMemoryProjectRelationRepository(),
         ),
       );
       await tester.pumpAndSettle();
@@ -564,6 +578,7 @@ void main() {
           projectRepository: projectRepository,
           structureChapterRepository: chapterRepository,
           narrativeElementRepository: narrativeElementRepository,
+          projectRelationRepository: _InMemoryProjectRelationRepository(),
         ),
       );
       await tester.pumpAndSettle();
@@ -646,6 +661,7 @@ void main() {
         projectRepository: projectRepository,
         structureChapterRepository: _InMemoryStructureChapterRepository(),
         narrativeElementRepository: _InMemoryNarrativeElementRepository(),
+        projectRelationRepository: _InMemoryProjectRelationRepository(),
       ),
     );
     await tester.pumpAndSettle();
@@ -911,9 +927,11 @@ void main() {
             currentTabIndex: 0,
             chapterCards: const <StructureChapterCardData>[],
             elementGroups: const <Map<String, dynamic>>[],
+            relationCards: const <StructureRelationCardData>[],
             onOpenSidebar: _noop,
             onAddChapter: _noop,
             onAddElement: _noop,
+            onAddRelation: _noop,
             onTabChanged: _noopTab,
             onBottomTabChanged: _noopPrototypeTab,
           ),
@@ -933,6 +951,125 @@ void main() {
       findsNothing,
     );
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('structure page relation tab shows mock relation cards', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StructurePagePrototype(
+          currentTabIndex: 2,
+          chapterCards: const <StructureChapterCardData>[],
+          elementGroups: const <Map<String, dynamic>>[],
+          relationCards: const <StructureRelationCardData>[
+            StructureRelationCardData(
+              name: '对比',
+              description: '跨章节的色彩冷暖或几何构图冲突，强调环境的异质性。',
+              setCount: 4,
+            ),
+            StructureRelationCardData(
+              name: '重复',
+              description: '特定视觉符号的规律性再现，构建叙事韵律。',
+              setCount: 2,
+            ),
+            StructureRelationCardData(
+              name: '呼应',
+              description: '不同地理位置间的情感共鸣，将碎片化的河岸串联为整体。',
+              setCount: 7,
+            ),
+            StructureRelationCardData(
+              name: '转折',
+              description: '叙事节奏在工业遗迹与纯粹自然间的突然切换。',
+              setCount: 1,
+            ),
+          ],
+          onOpenSidebar: _noop,
+          onAddChapter: _noop,
+          onAddElement: _noop,
+          onAddRelation: _noop,
+          onTabChanged: _noopTab,
+          onBottomTabChanged: _noopPrototypeTab,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('关联关系'), findsOneWidget);
+    expect(find.text('对比'), findsOneWidget);
+    expect(find.text('重复'), findsOneWidget);
+    expect(find.text('呼应'), findsOneWidget);
+    expect(find.text('转折'), findsOneWidget);
+    expect(find.text('4'), findsOneWidget);
+    expect(find.text('7'), findsOneWidget);
+
+    await tester.scrollUntilVisible(
+      find.text('添加关联关系'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('添加关联关系'), findsOneWidget);
+  });
+
+  testWidgets('standalone relation page can add a new relation type card', (
+    tester,
+  ) async {
+    final projectRepository = _InMemoryProjectRepository(
+      initialProjects: <Project>[
+        Project.create(
+          id: 'project-seeded',
+          projectTitle: '赤水河沿岸寻访',
+          projectThemeStatement: '测试项目',
+          createdTimestamp: DateTime(2026, 1, 1),
+          updatedTimestamp: DateTime(2026, 1, 1),
+        ),
+      ],
+      currentProjectId: 'project-seeded',
+    );
+    final relationRepository = _InMemoryProjectRelationRepository();
+
+    await tester.pumpWidget(
+      EchoApp(
+        projectRepository: projectRepository,
+        structureChapterRepository: _InMemoryStructureChapterRepository(),
+        narrativeElementRepository: _InMemoryNarrativeElementRepository(),
+        projectRelationRepository: relationRepository,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('关联关系'));
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.text('添加关联关系'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('添加关联关系'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('添 加 关 联 关 系'), findsOneWidget);
+    expect(find.text('赤水河沿岸寻访'), findsNothing);
+    expect(find.text('章节骨架'), findsNothing);
+    expect(find.text('叙事元素'), findsNothing);
+
+    await tester.enterText(
+      find.byKey(const ValueKey('relationTypeNameField')),
+      '时空并置',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('relationTypeDescriptionField')),
+      '同一空间在不同时间中的互文关系',
+    );
+    await tester.tap(find.byKey(const ValueKey('relationTypeSaveButton')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('时空并置'), findsOneWidget);
   });
 
   testWidgets('organize page keeps core curation markers after extraction', (
@@ -1220,6 +1357,140 @@ class _InMemoryNarrativeElementRepository
     return _elements
         .where((element) => element.owningProjectId == projectId)
         .toList();
+  }
+}
+
+class _InMemoryProjectRelationRepository implements ProjectRelationRepository {
+  final Map<String, List<ProjectRelationType>> _typesByProject =
+      <String, List<ProjectRelationType>>{};
+  final Map<String, List<ProjectRelationGroup>> _groupsByProject =
+      <String, List<ProjectRelationGroup>>{};
+  final Map<String, List<ProjectRelationMember>> _membersByProject =
+      <String, List<ProjectRelationMember>>{};
+
+  Future<void> _ensureDefaults(String projectId) async {
+    if ((_typesByProject[projectId] ?? const <ProjectRelationType>[])
+        .isNotEmpty) {
+      return;
+    }
+
+    final now = DateTime(2026, 1, 1);
+    _typesByProject[projectId] = defaultProjectRelationDefinitions
+        .map(
+          (definition) => ProjectRelationType.create(
+            id: 'type-$projectId-${definition.sortOrder}',
+            projectId: projectId,
+            relationName: definition.name,
+            relationDescription: definition.description,
+            relationSortOrder: definition.sortOrder,
+            createdTimestamp: now,
+            updatedTimestamp: now,
+          ),
+        )
+        .toList();
+  }
+
+  @override
+  Future<ProjectRelationType> createRelationType({
+    required String projectId,
+    required String name,
+    required String description,
+  }) async {
+    await _ensureDefaults(projectId);
+    final existingTypes = _typesByProject[projectId] ?? <ProjectRelationType>[];
+    final nextSortOrder = existingTypes.isEmpty
+        ? 0
+        : existingTypes
+                  .map((relationType) => relationType.sortOrder)
+                  .reduce((left, right) => left > right ? left : right) +
+              1;
+    final now = DateTime(2026, 1, 3, existingTypes.length + 1);
+    final relationType = ProjectRelationType.create(
+      id: 'type-$projectId-$nextSortOrder',
+      projectId: projectId,
+      relationName: name,
+      relationDescription: description,
+      relationSortOrder: nextSortOrder,
+      createdTimestamp: now,
+      updatedTimestamp: now,
+    );
+    existingTypes.add(relationType);
+    _typesByProject[projectId] = existingTypes;
+    return relationType;
+  }
+
+  @override
+  Future<ProjectRelationGroup> createRelationGroup({
+    required String projectId,
+    required String relationTypeId,
+    required List<ProjectRelationDraftMember> members,
+  }) async {
+    if (members.length < 2) {
+      throw ArgumentError(
+        'A relation group must contain at least two selections.',
+      );
+    }
+
+    await _ensureDefaults(projectId);
+    final now = DateTime(2026, 1, 2);
+    final relationGroup = ProjectRelationGroup.create(
+      id: 'group-${(_groupsByProject[projectId]?.length ?? 0) + 1}',
+      projectId: projectId,
+      relationTypeId: relationTypeId,
+      createdTimestamp: now,
+      updatedTimestamp: now,
+    );
+
+    final relationMembers = <ProjectRelationMember>[
+      for (var index = 0; index < members.length; index++)
+        ProjectRelationMember.create(
+          id: 'member-$projectId-${(_membersByProject[projectId]?.length ?? 0) + index + 1}',
+          projectId: projectId,
+          groupId: relationGroup.relationGroupId,
+          targetKind: members[index].kind.name,
+          elementId: members[index].elementId,
+          photoPath: members[index].photoPath,
+          sourceElementId: members[index].sourceElementId,
+          sortOrder: index,
+          createdTimestamp: now,
+        ),
+    ];
+
+    _groupsByProject.putIfAbsent(projectId, () => <ProjectRelationGroup>[]);
+    _groupsByProject[projectId]!.add(relationGroup);
+    _membersByProject.putIfAbsent(projectId, () => <ProjectRelationMember>[]);
+    _membersByProject[projectId]!.addAll(relationMembers);
+    return relationGroup;
+  }
+
+  @override
+  Future<List<ProjectRelationGroup>> listRelationGroupsForProject(
+    String projectId,
+  ) async {
+    await _ensureDefaults(projectId);
+    return List<ProjectRelationGroup>.from(
+      _groupsByProject[projectId] ?? const [],
+    );
+  }
+
+  @override
+  Future<List<ProjectRelationMember>> listRelationMembersForProject(
+    String projectId,
+  ) async {
+    await _ensureDefaults(projectId);
+    return List<ProjectRelationMember>.from(
+      _membersByProject[projectId] ?? const [],
+    );
+  }
+
+  @override
+  Future<List<ProjectRelationType>> listRelationTypesForProject(
+    String projectId,
+  ) async {
+    await _ensureDefaults(projectId);
+    return List<ProjectRelationType>.from(
+      _typesByProject[projectId] ?? const [],
+    );
   }
 }
 

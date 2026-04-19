@@ -21,7 +21,7 @@ const ProjectSessionSchema = CollectionSchema(
       id: 0,
       name: r'currentProjectId',
       type: IsarType.string,
-    ),
+    )
   },
   estimateSize: _projectSessionEstimateSize,
   serialize: _projectSessionSerialize,
@@ -96,10 +96,7 @@ List<IsarLinkBase<dynamic>> _projectSessionGetLinks(ProjectSession object) {
 }
 
 void _projectSessionAttach(
-  IsarCollection<dynamic> col,
-  Id id,
-  ProjectSession object,
-) {
+    IsarCollection<dynamic> col, Id id, ProjectSession object) {
   object.id = id;
 }
 
@@ -115,16 +112,17 @@ extension ProjectSessionQueryWhereSort
 extension ProjectSessionQueryWhere
     on QueryBuilder<ProjectSession, ProjectSession, QWhereClause> {
   QueryBuilder<ProjectSession, ProjectSession, QAfterWhereClause> idEqualTo(
-    Id id,
-  ) {
+      Id id) {
     return QueryBuilder.apply(this, (query) {
-      return query.addWhereClause(IdWhereClause.between(lower: id, upper: id));
+      return query.addWhereClause(IdWhereClause.between(
+        lower: id,
+        upper: id,
+      ));
     });
   }
 
   QueryBuilder<ProjectSession, ProjectSession, QAfterWhereClause> idNotEqualTo(
-    Id id,
-  ) {
+      Id id) {
     return QueryBuilder.apply(this, (query) {
       if (query.whereSort == Sort.asc) {
         return query
@@ -147,9 +145,8 @@ extension ProjectSessionQueryWhere
   }
 
   QueryBuilder<ProjectSession, ProjectSession, QAfterWhereClause> idGreaterThan(
-    Id id, {
-    bool include = false,
-  }) {
+      Id id,
+      {bool include = false}) {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(
         IdWhereClause.greaterThan(lower: id, includeLower: include),
@@ -158,9 +155,8 @@ extension ProjectSessionQueryWhere
   }
 
   QueryBuilder<ProjectSession, ProjectSession, QAfterWhereClause> idLessThan(
-    Id id, {
-    bool include = false,
-  }) {
+      Id id,
+      {bool include = false}) {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(
         IdWhereClause.lessThan(upper: id, includeUpper: include),
@@ -175,14 +171,12 @@ extension ProjectSessionQueryWhere
     bool includeUpper = true,
   }) {
     return QueryBuilder.apply(this, (query) {
-      return query.addWhereClause(
-        IdWhereClause.between(
-          lower: lowerId,
-          includeLower: includeLower,
-          upper: upperId,
-          includeUpper: includeUpper,
-        ),
-      );
+      return query.addWhereClause(IdWhereClause.between(
+        lower: lowerId,
+        includeLower: includeLower,
+        upper: upperId,
+        includeUpper: includeUpper,
+      ));
     });
   }
 }
@@ -190,74 +184,71 @@ extension ProjectSessionQueryWhere
 extension ProjectSessionQueryFilter
     on QueryBuilder<ProjectSession, ProjectSession, QFilterCondition> {
   QueryBuilder<ProjectSession, ProjectSession, QAfterFilterCondition>
-  currentProjectIdIsNull() {
+      currentProjectIdIsNull() {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(
-        const FilterCondition.isNull(property: r'currentProjectId'),
-      );
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'currentProjectId',
+      ));
     });
   }
 
   QueryBuilder<ProjectSession, ProjectSession, QAfterFilterCondition>
-  currentProjectIdIsNotNull() {
+      currentProjectIdIsNotNull() {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(
-        const FilterCondition.isNotNull(property: r'currentProjectId'),
-      );
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'currentProjectId',
+      ));
     });
   }
 
   QueryBuilder<ProjectSession, ProjectSession, QAfterFilterCondition>
-  currentProjectIdEqualTo(String? value, {bool caseSensitive = true}) {
+      currentProjectIdEqualTo(
+    String? value, {
+    bool caseSensitive = true,
+  }) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(
-        FilterCondition.equalTo(
-          property: r'currentProjectId',
-          value: value,
-          caseSensitive: caseSensitive,
-        ),
-      );
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'currentProjectId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
     });
   }
 
   QueryBuilder<ProjectSession, ProjectSession, QAfterFilterCondition>
-  currentProjectIdGreaterThan(
+      currentProjectIdGreaterThan(
     String? value, {
     bool include = false,
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(
-        FilterCondition.greaterThan(
-          include: include,
-          property: r'currentProjectId',
-          value: value,
-          caseSensitive: caseSensitive,
-        ),
-      );
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'currentProjectId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
     });
   }
 
   QueryBuilder<ProjectSession, ProjectSession, QAfterFilterCondition>
-  currentProjectIdLessThan(
+      currentProjectIdLessThan(
     String? value, {
     bool include = false,
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(
-        FilterCondition.lessThan(
-          include: include,
-          property: r'currentProjectId',
-          value: value,
-          caseSensitive: caseSensitive,
-        ),
-      );
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'currentProjectId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
     });
   }
 
   QueryBuilder<ProjectSession, ProjectSession, QAfterFilterCondition>
-  currentProjectIdBetween(
+      currentProjectIdBetween(
     String? lower,
     String? upper, {
     bool includeLower = true,
@@ -265,122 +256,122 @@ extension ProjectSessionQueryFilter
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(
-        FilterCondition.between(
-          property: r'currentProjectId',
-          lower: lower,
-          includeLower: includeLower,
-          upper: upper,
-          includeUpper: includeUpper,
-          caseSensitive: caseSensitive,
-        ),
-      );
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'currentProjectId',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
     });
   }
 
   QueryBuilder<ProjectSession, ProjectSession, QAfterFilterCondition>
-  currentProjectIdStartsWith(String value, {bool caseSensitive = true}) {
+      currentProjectIdStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(
-        FilterCondition.startsWith(
-          property: r'currentProjectId',
-          value: value,
-          caseSensitive: caseSensitive,
-        ),
-      );
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'currentProjectId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
     });
   }
 
   QueryBuilder<ProjectSession, ProjectSession, QAfterFilterCondition>
-  currentProjectIdEndsWith(String value, {bool caseSensitive = true}) {
+      currentProjectIdEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(
-        FilterCondition.endsWith(
-          property: r'currentProjectId',
-          value: value,
-          caseSensitive: caseSensitive,
-        ),
-      );
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'currentProjectId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
     });
   }
 
   QueryBuilder<ProjectSession, ProjectSession, QAfterFilterCondition>
-  currentProjectIdContains(String value, {bool caseSensitive = true}) {
+      currentProjectIdContains(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(
-        FilterCondition.contains(
-          property: r'currentProjectId',
-          value: value,
-          caseSensitive: caseSensitive,
-        ),
-      );
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'currentProjectId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
     });
   }
 
   QueryBuilder<ProjectSession, ProjectSession, QAfterFilterCondition>
-  currentProjectIdMatches(String pattern, {bool caseSensitive = true}) {
+      currentProjectIdMatches(String pattern, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(
-        FilterCondition.matches(
-          property: r'currentProjectId',
-          wildcard: pattern,
-          caseSensitive: caseSensitive,
-        ),
-      );
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'currentProjectId',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
     });
   }
 
   QueryBuilder<ProjectSession, ProjectSession, QAfterFilterCondition>
-  currentProjectIdIsEmpty() {
+      currentProjectIdIsEmpty() {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(
-        FilterCondition.equalTo(property: r'currentProjectId', value: ''),
-      );
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'currentProjectId',
+        value: '',
+      ));
     });
   }
 
   QueryBuilder<ProjectSession, ProjectSession, QAfterFilterCondition>
-  currentProjectIdIsNotEmpty() {
+      currentProjectIdIsNotEmpty() {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(
-        FilterCondition.greaterThan(property: r'currentProjectId', value: ''),
-      );
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'currentProjectId',
+        value: '',
+      ));
     });
   }
 
   QueryBuilder<ProjectSession, ProjectSession, QAfterFilterCondition> idEqualTo(
-    Id value,
-  ) {
+      Id value) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(
-        FilterCondition.equalTo(property: r'id', value: value),
-      );
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'id',
+        value: value,
+      ));
     });
   }
 
   QueryBuilder<ProjectSession, ProjectSession, QAfterFilterCondition>
-  idGreaterThan(Id value, {bool include = false}) {
+      idGreaterThan(
+    Id value, {
+    bool include = false,
+  }) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(
-        FilterCondition.greaterThan(
-          include: include,
-          property: r'id',
-          value: value,
-        ),
-      );
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'id',
+        value: value,
+      ));
     });
   }
 
   QueryBuilder<ProjectSession, ProjectSession, QAfterFilterCondition>
-  idLessThan(Id value, {bool include = false}) {
+      idLessThan(
+    Id value, {
+    bool include = false,
+  }) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(
-        FilterCondition.lessThan(
-          include: include,
-          property: r'id',
-          value: value,
-        ),
-      );
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'id',
+        value: value,
+      ));
     });
   }
 
@@ -391,15 +382,13 @@ extension ProjectSessionQueryFilter
     bool includeUpper = true,
   }) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(
-        FilterCondition.between(
-          property: r'id',
-          lower: lower,
-          includeLower: includeLower,
-          upper: upper,
-          includeUpper: includeUpper,
-        ),
-      );
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'id',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+      ));
     });
   }
 }
@@ -413,14 +402,14 @@ extension ProjectSessionQueryLinks
 extension ProjectSessionQuerySortBy
     on QueryBuilder<ProjectSession, ProjectSession, QSortBy> {
   QueryBuilder<ProjectSession, ProjectSession, QAfterSortBy>
-  sortByCurrentProjectId() {
+      sortByCurrentProjectId() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'currentProjectId', Sort.asc);
     });
   }
 
   QueryBuilder<ProjectSession, ProjectSession, QAfterSortBy>
-  sortByCurrentProjectIdDesc() {
+      sortByCurrentProjectIdDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'currentProjectId', Sort.desc);
     });
@@ -430,14 +419,14 @@ extension ProjectSessionQuerySortBy
 extension ProjectSessionQuerySortThenBy
     on QueryBuilder<ProjectSession, ProjectSession, QSortThenBy> {
   QueryBuilder<ProjectSession, ProjectSession, QAfterSortBy>
-  thenByCurrentProjectId() {
+      thenByCurrentProjectId() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'currentProjectId', Sort.asc);
     });
   }
 
   QueryBuilder<ProjectSession, ProjectSession, QAfterSortBy>
-  thenByCurrentProjectIdDesc() {
+      thenByCurrentProjectIdDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'currentProjectId', Sort.desc);
     });
@@ -459,12 +448,10 @@ extension ProjectSessionQuerySortThenBy
 extension ProjectSessionQueryWhereDistinct
     on QueryBuilder<ProjectSession, ProjectSession, QDistinct> {
   QueryBuilder<ProjectSession, ProjectSession, QDistinct>
-  distinctByCurrentProjectId({bool caseSensitive = true}) {
+      distinctByCurrentProjectId({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addDistinctBy(
-        r'currentProjectId',
-        caseSensitive: caseSensitive,
-      );
+      return query.addDistinctBy(r'currentProjectId',
+          caseSensitive: caseSensitive);
     });
   }
 }
@@ -478,7 +465,7 @@ extension ProjectSessionQueryProperty
   }
 
   QueryBuilder<ProjectSession, String?, QQueryOperations>
-  currentProjectIdProperty() {
+      currentProjectIdProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'currentProjectId');
     });

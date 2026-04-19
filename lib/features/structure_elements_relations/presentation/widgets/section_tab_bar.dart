@@ -18,6 +18,8 @@ class SectionTabBar extends StatelessWidget {
         _buildTab(0, '章节骨架'),
         const SizedBox(width: 32),
         _buildTab(1, '叙事元素'),
+        const SizedBox(width: 32),
+        _buildTab(2, '关联关系'),
       ],
     );
   }
