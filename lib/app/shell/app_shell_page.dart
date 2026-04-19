@@ -59,6 +59,7 @@ class _AppShellPageState extends State<AppShellPage> {
   Project? _currentProject;
   List<Project> _projects = const <Project>[];
   List<StructureChapter> _structureChapters = const <StructureChapter>[];
+  List<NarrativeElement> _narrativeElements = const <NarrativeElement>[];
   List<ProjectRelationType> _relationTypes = const <ProjectRelationType>[];
   List<ProjectRelationGroup> _relationGroups = const <ProjectRelationGroup>[];
   List<StructureChapterCardData> _chapterCards =
@@ -218,6 +219,7 @@ class _AppShellPageState extends State<AppShellPage> {
                         required String title,
                         required String description,
                         required int sortOrder,
+                        required String statusLabel,
                         required List<NarrativeElementDraft> elements,
                       }) async {
                         final chapter = await widget.structureChapterRepository
@@ -233,10 +235,74 @@ class _AppShellPageState extends State<AppShellPage> {
                             chapterId: chapter.chapterId,
                             title: element.title,
                             description: element.description,
+                            status: element.status,
                             photoPaths: element.photoPaths,
                           );
                         }
                         await _refreshProjects();
+                      },
+                ),
+              ),
+            );
+          },
+          onOpenChapter: (index) async {
+            if (_currentProject == null ||
+                index < 0 ||
+                index >= _structureChapters.length) {
+              return;
+            }
+            final chapter = _structureChapters[index];
+            final chapterElements = _narrativeElements
+                .where(
+                  (element) => element.owningChapterId == chapter.chapterId,
+                )
+                .toList();
+            await Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => ChapterEditPage(
+                  existingChapters: _structureChapters,
+                  chapter: chapter,
+                  existingElements: chapterElements,
+                  onOpenExistingElement: (element) async {
+                    return _openNarrativeElementEditor(
+                      element: element,
+                      allowChapterSelection: false,
+                    );
+                  },
+                  onSave:
+                      ({
+                        required String title,
+                        required String description,
+                        required int sortOrder,
+                        required String statusLabel,
+                        required List<NarrativeElementDraft> elements,
+                      }) async {
+                        await _persistChapterEdits(
+                          chapter: chapter,
+                          title: title,
+                          description: description,
+                          sortOrder: sortOrder,
+                          statusLabel: statusLabel,
+                          newElements: elements,
+                        );
+                      },
+                  onComplete:
+                      ({
+                        required String title,
+                        required String description,
+                        required int sortOrder,
+                        required String statusLabel,
+                        required List<NarrativeElementDraft> elements,
+                      }) async {
+                        await _persistChapterEdits(
+                          chapter: chapter,
+                          title: title,
+                          description: description,
+                          sortOrder: sortOrder,
+                          statusLabel: statusLabel,
+                          newElements: elements,
+                          persistChapterLast: true,
+                        );
                       },
                 ),
               ),
@@ -259,6 +325,8 @@ class _AppShellPageState extends State<AppShellPage> {
                         required String title,
                         required String description,
                         required String? chapterId,
+                        required String status,
+                        required String? unlockChapterId,
                         required List<String> photoPaths,
                       }) async {
                         await widget.narrativeElementRepository.createElement(
@@ -266,6 +334,7 @@ class _AppShellPageState extends State<AppShellPage> {
                           chapterId: chapterId,
                           title: title,
                           description: description,
+                          status: status,
                           photoPaths: photoPaths,
                         );
                         await _refreshProjects();
@@ -274,6 +343,25 @@ class _AppShellPageState extends State<AppShellPage> {
                   onImportPhoto: widget.narrativeElementPhotoImporter,
                 ),
               ),
+            );
+          },
+          onOpenElement: (elementId) async {
+            if (_currentProject == null) {
+              return;
+            }
+            NarrativeElement? selectedElement;
+            for (final element in _narrativeElements) {
+              if (element.elementId == elementId) {
+                selectedElement = element;
+                break;
+              }
+            }
+            if (selectedElement == null) {
+              return;
+            }
+            await _openNarrativeElementEditor(
+              element: selectedElement,
+              allowChapterSelection: true,
             );
           },
           onAddRelation: () async {
@@ -404,6 +492,7 @@ class _AppShellPageState extends State<AppShellPage> {
       _currentProject = currentProject;
       _projects = projects;
       _structureChapters = chapters;
+      _narrativeElements = elements;
       _relationTypes = relationTypes;
       _relationGroups = relationGroups;
       _chapterCards = _buildChapterCards(
@@ -434,6 +523,7 @@ class _AppShellPageState extends State<AppShellPage> {
           : null;
       grouped.putIfAbsent(chapterKey, () => <Map<String, dynamic>>[]);
       grouped[chapterKey]!.add(<String, dynamic>{
+        'id': element.elementId,
         'title': element.title,
         'desc': element.description?.trim().isNotEmpty == true
             ? element.description!
@@ -503,6 +593,172 @@ class _AppShellPageState extends State<AppShellPage> {
 
   String _normalizeChapterStatus(String statusLabel) {
     return statusLabel == '完成' ? '完成' : '进行';
+  }
+
+  Future<void> _persistChapterEdits({
+    required StructureChapter chapter,
+    required String title,
+    required String description,
+    required int sortOrder,
+    required String statusLabel,
+    required List<NarrativeElementDraft> newElements,
+    bool persistChapterLast = false,
+  }) async {
+    Future<void> persistChapter() async {
+      await widget.structureChapterRepository.updateChapter(
+        chapterId: chapter.chapterId,
+        title: title,
+        description: description,
+        sortOrder: sortOrder,
+        statusLabel: statusLabel,
+      );
+    }
+
+    Future<void> persistNewElements() async {
+      for (final element in newElements) {
+        await widget.narrativeElementRepository.createElement(
+          projectId: chapter.owningProjectId,
+          chapterId: chapter.chapterId,
+          title: element.title,
+          description: element.description,
+          status: element.status,
+          photoPaths: element.photoPaths,
+        );
+      }
+    }
+
+    Future<void> markExistingElementsReady() async {
+      if (statusLabel != '完成') {
+        return;
+      }
+      for (final element in _narrativeElements) {
+        if (element.owningChapterId != chapter.chapterId) {
+          continue;
+        }
+        await widget.narrativeElementRepository.updateElement(
+          elementId: element.elementId,
+          title: element.title,
+          description: element.description,
+          chapterId: element.owningChapterId,
+          status: 'ready',
+          photoPaths: element.photoPaths,
+        );
+      }
+    }
+
+    if (persistChapterLast) {
+      await markExistingElementsReady();
+      await persistNewElements();
+      await persistChapter();
+    } else {
+      await persistChapter();
+      await persistNewElements();
+    }
+
+    await _refreshProjects();
+  }
+
+  Future<void> _persistElementEdits({
+    required NarrativeElement element,
+    required String title,
+    required String description,
+    required String? chapterId,
+    required String status,
+    required String? unlockChapterId,
+    required List<String> photoPaths,
+  }) async {
+    await widget.narrativeElementRepository.updateElement(
+      elementId: element.elementId,
+      title: title,
+      description: description,
+      chapterId: chapterId,
+      status: status,
+      photoPaths: photoPaths,
+    );
+    if (unlockChapterId != null) {
+      StructureChapter? chapterToUnlock;
+      for (final chapter in _structureChapters) {
+        if (chapter.chapterId == unlockChapterId) {
+          chapterToUnlock = chapter;
+          break;
+        }
+      }
+      if (chapterToUnlock == null) {
+        throw StateError('Structure chapter not found: $unlockChapterId');
+      }
+      final updatedChapter = await widget.structureChapterRepository
+          .updateChapter(
+            chapterId: chapterToUnlock.chapterId,
+            title: chapterToUnlock.title,
+            description: chapterToUnlock.description,
+            sortOrder: chapterToUnlock.sortOrder,
+            statusLabel: '进行',
+          );
+      if (updatedChapter == null) {
+        throw StateError('Failed to unlock structure chapter: $unlockChapterId');
+      }
+    }
+    await _refreshProjects();
+  }
+
+  Future<NarrativeElement?> _openNarrativeElementEditor({
+    required NarrativeElement element,
+    required bool allowChapterSelection,
+  }) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => NarrativeElementEditPage(
+          chapters: _structureChapters,
+          element: element,
+          allowChapterSelection: allowChapterSelection,
+          onSave:
+              ({
+                required String title,
+                required String description,
+                required String? chapterId,
+                required String status,
+                required String? unlockChapterId,
+                required List<String> photoPaths,
+              }) async {
+                await _persistElementEdits(
+                  element: element,
+                  title: title,
+                  description: description,
+                  chapterId: chapterId,
+                  status: status,
+                  unlockChapterId: unlockChapterId,
+                  photoPaths: photoPaths,
+                );
+              },
+          onComplete:
+              ({
+                required String title,
+                required String description,
+                required String? chapterId,
+                required String status,
+                required String? unlockChapterId,
+                required List<String> photoPaths,
+              }) async {
+                await _persistElementEdits(
+                  element: element,
+                  title: title,
+                  description: description,
+                  chapterId: chapterId,
+                  status: status,
+                  unlockChapterId: unlockChapterId,
+                  photoPaths: photoPaths,
+                );
+              },
+        ),
+      ),
+    );
+
+    for (final updatedElement in _narrativeElements) {
+      if (updatedElement.elementId == element.elementId) {
+        return updatedElement;
+      }
+    }
+    return null;
   }
 
   List<String> _chapterPreviewImageSources(List<NarrativeElement> elements) {

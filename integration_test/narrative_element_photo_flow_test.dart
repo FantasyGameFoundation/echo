@@ -482,7 +482,7 @@ void main() {
   );
 
   testWidgets(
-    'new projects show real relation types and add page saves mixed, element-only, and photo-only relation groups',
+    'new projects show real relation types and add page saves a new relation type',
     (tester) async {
       await _setPhoneSurface(binding);
 
@@ -567,75 +567,30 @@ void main() {
       await tester.tap(find.text('添加关联关系'));
       await tester.pumpAndSettle();
 
-      expect(find.text('关 联 关 系'), findsOneWidget);
+      expect(find.text('添 加 关 联 关 系'), findsOneWidget);
+
+      await tester.enterText(
+        find.byKey(const ValueKey('relationTypeNameField')),
+        '时空并置',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('relationTypeDescriptionField')),
+        '同一空间在不同时间中的互文关系',
+      );
+      await tester.tap(find.byKey(const ValueKey('relationTypeSaveButton')));
+      await tester.pumpAndSettle();
+
+      expect(relationRepository.groupsForProject('project-seeded'), isEmpty);
       expect(
-        find.byKey(_relationTypeKeyByName(relationRepository, '呼应')),
-        findsOneWidget,
+        (await relationRepository.listRelationTypesForProject(
+          'project-seeded',
+        )).length,
+        5,
       );
-
-      await tester.tap(
-        find.byKey(_relationTypeKeyByName(relationRepository, '呼应')),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(const ValueKey('relationElementChip-element-a')),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(
-          const ValueKey('relationPhotoItem-/tmp/relation-photo-b2.png'),
-        ),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('relationSaveButton')));
-      await tester.pumpAndSettle();
-
-      expect(find.text('呼应'), findsOneWidget);
-      expect(find.text('1'), findsOneWidget);
-
-      await tester.tap(find.text('添加关联关系'));
-      await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(_relationTypeKeyByName(relationRepository, '对比')),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(const ValueKey('relationElementChip-element-a')),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(const ValueKey('relationElementChip-element-b')),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('relationSaveButton')));
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.text('添加关联关系'));
-      await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(_relationTypeKeyByName(relationRepository, '重复')),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(
-          const ValueKey('relationPhotoItem-/tmp/relation-photo-a2.png'),
-        ),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(
-          const ValueKey('relationPhotoItem-/tmp/relation-photo-b2.png'),
-        ),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('relationSaveButton')));
-      await tester.pumpAndSettle();
-
-      expect(relationRepository.groupsForProject('project-seeded').length, 3);
+      expect(find.text('时空并置'), findsOneWidget);
       expect(find.text('对比'), findsOneWidget);
       expect(find.text('重复'), findsOneWidget);
       expect(find.text('呼应'), findsOneWidget);
-      expect(find.text('1'), findsNWidgets(3));
 
       await _captureScreenshot(
         binding: binding,
@@ -814,6 +769,58 @@ class _MutableStructureChapterRepository implements StructureChapterRepository {
     chapters.sort((left, right) => left.sortOrder.compareTo(right.sortOrder));
     return chapters;
   }
+
+  @override
+  Future<StructureChapter?> updateChapter({
+    required String chapterId,
+    required String title,
+    String? description,
+    required int sortOrder,
+    required String statusLabel,
+  }) async {
+    StructureChapter? targetChapter;
+    for (final chapter in _chapters) {
+      if (chapter.chapterId == chapterId) {
+        targetChapter = chapter;
+        break;
+      }
+    }
+    if (targetChapter == null) {
+      return null;
+    }
+
+    final projectChapters = _chapters
+        .where(
+          (chapter) =>
+              chapter.owningProjectId == targetChapter!.owningProjectId,
+        )
+        .toList();
+    projectChapters.sort(
+      (left, right) => left.sortOrder.compareTo(right.sortOrder),
+    );
+
+    final reorderedChapters = projectChapters
+        .where((chapter) => chapter.chapterId != chapterId)
+        .toList();
+    final normalizedSortOrder = sortOrder.clamp(0, reorderedChapters.length);
+    reorderedChapters.insert(normalizedSortOrder, targetChapter);
+
+    final trimmedDescription = description?.trim();
+    for (var index = 0; index < reorderedChapters.length; index++) {
+      final chapter = reorderedChapters[index];
+      chapter.sortOrder = index;
+      if (chapter.chapterId == chapterId) {
+        chapter.title = title.trim();
+        chapter.description = trimmedDescription?.isNotEmpty == true
+            ? trimmedDescription
+            : null;
+        chapter.statusLabel = statusLabel;
+        chapter.updatedAt = DateTime(2026, 2, 2, index + 1);
+      }
+    }
+
+    return targetChapter;
+  }
 }
 
 class _MutableNarrativeElementRepository implements NarrativeElementRepository {
@@ -830,6 +837,7 @@ class _MutableNarrativeElementRepository implements NarrativeElementRepository {
     String? chapterId,
     required String title,
     String? description,
+    String status = 'finding',
     List<String>? photoPaths,
   }) async {
     final element = NarrativeElement.create(
@@ -838,6 +846,7 @@ class _MutableNarrativeElementRepository implements NarrativeElementRepository {
       chapterId: chapterId,
       elementTitle: title,
       elementDescription: description,
+      elementStatus: status,
       linkedPhotoPaths: photoPaths,
       createdTimestamp: DateTime(2026, 3, 1, 12),
       updatedTimestamp: DateTime(2026, 3, 1, 12),
@@ -855,6 +864,38 @@ class _MutableNarrativeElementRepository implements NarrativeElementRepository {
         .toList();
     elements.sort((left, right) => left.createdAt.compareTo(right.createdAt));
     return elements;
+  }
+
+  @override
+  Future<NarrativeElement> updateElement({
+    required String elementId,
+    required String title,
+    String? description,
+    String? chapterId,
+    required String status,
+    required List<String> photoPaths,
+  }) async {
+    NarrativeElement? targetElement;
+    for (final element in _elements) {
+      if (element.elementId == elementId) {
+        targetElement = element;
+        break;
+      }
+    }
+    if (targetElement == null) {
+      throw StateError('Narrative element not found: $elementId');
+    }
+
+    targetElement.title = title.trim();
+    final trimmedDescription = description?.trim();
+    targetElement.description = trimmedDescription?.isNotEmpty == true
+        ? trimmedDescription
+        : null;
+    targetElement.owningChapterId = chapterId;
+    targetElement.status = status;
+    targetElement.photoPaths = List<String>.from(photoPaths);
+    targetElement.updatedAt = DateTime(2026, 3, 2, 12);
+    return targetElement;
   }
 }
 
@@ -1002,16 +1043,6 @@ class _MutableProjectRelationRepository implements ProjectRelationRepository {
       _typesByProject[projectId] ?? const [],
     );
   }
-}
-
-ValueKey<String> _relationTypeKeyByName(
-  _MutableProjectRelationRepository repository,
-  String relationName,
-) {
-  final relationType = repository._typesByProject['project-seeded']!.firstWhere(
-    (type) => type.name == relationName,
-  );
-  return ValueKey<String>('relationTypeChip-${relationType.relationTypeId}');
 }
 
 ImageProvider<Object> _baseImageProvider(ImageProvider<Object> provider) {

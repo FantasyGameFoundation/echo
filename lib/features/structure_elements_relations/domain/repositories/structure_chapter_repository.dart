@@ -9,4 +9,12 @@ abstract class StructureChapterRepository {
     String? description,
     required int sortOrder,
   });
+
+  Future<StructureChapter?> updateChapter({
+    required String chapterId,
+    required String title,
+    String? description,
+    required int sortOrder,
+    required String statusLabel,
+  });
 }

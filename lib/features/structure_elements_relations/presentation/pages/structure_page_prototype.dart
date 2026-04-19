@@ -20,7 +20,9 @@ class StructurePagePrototype extends StatelessWidget {
     this.projectTitle = '',
     required this.onOpenSidebar,
     required this.onAddChapter,
+    this.onOpenChapter,
     required this.onAddElement,
+    this.onOpenElement,
     required this.onAddRelation,
     required this.onTabChanged,
     required this.onBottomTabChanged,
@@ -33,7 +35,9 @@ class StructurePagePrototype extends StatelessWidget {
   final String projectTitle;
   final VoidCallback onOpenSidebar;
   final VoidCallback onAddChapter;
+  final ValueChanged<int>? onOpenChapter;
   final VoidCallback onAddElement;
+  final ValueChanged<String>? onOpenElement;
   final VoidCallback onAddRelation;
   final ValueChanged<int> onTabChanged;
   final ValueChanged<PrototypeTab> onBottomTabChanged;
@@ -126,6 +130,7 @@ class StructurePagePrototype extends StatelessWidget {
             chapterNumber: chapterCards[index].chapterNumber,
             title: chapterCards[index].title,
             elementCount: chapterCards[index].elementCount.toString(),
+            onTap: onOpenChapter == null ? null : () => onOpenChapter!(index),
             extraTopRightWidget: _buildStatusIndicator(
               chapterCards[index].statusLabel,
             ),
@@ -177,6 +182,9 @@ class StructurePagePrototype extends StatelessWidget {
                       description: item['desc'],
                       status: item['status'],
                       images: item['images'],
+                      onTap: onOpenElement == null
+                          ? null
+                          : () => onOpenElement!(item['id'] as String),
                     );
                   }, childCount: group['elements'].length),
                 ),

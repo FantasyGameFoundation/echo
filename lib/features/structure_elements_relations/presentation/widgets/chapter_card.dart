@@ -8,6 +8,7 @@ class ChapterCard extends StatelessWidget {
     required this.elementCount,
     required this.customContent,
     this.extraTopRightWidget,
+    this.onTap,
   });
 
   final String chapterNumber;
@@ -15,10 +16,11 @@ class ChapterCard extends StatelessWidget {
   final String elementCount;
   final Widget customContent;
   final Widget? extraTopRightWidget;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final cardBody = Container(
       margin: const EdgeInsets.only(bottom: 24),
       padding: const EdgeInsets.all(24),
       color: Colors.white,
@@ -83,5 +85,11 @@ class ChapterCard extends StatelessWidget {
         ],
       ),
     );
+
+    if (onTap == null) {
+      return cardBody;
+    }
+
+    return InkWell(onTap: onTap, child: cardBody);
   }
 }

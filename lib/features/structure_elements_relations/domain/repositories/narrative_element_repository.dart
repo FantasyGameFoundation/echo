@@ -8,6 +8,16 @@ abstract class NarrativeElementRepository {
     String? chapterId,
     required String title,
     String? description,
+    String status = 'finding',
     List<String>? photoPaths,
+  });
+
+  Future<NarrativeElement> updateElement({
+    required String elementId,
+    required String title,
+    String? description,
+    String? chapterId,
+    required String status,
+    required List<String> photoPaths,
   });
 }

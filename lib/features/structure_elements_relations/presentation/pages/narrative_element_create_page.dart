@@ -1,8 +1,11 @@
 import 'dart:io';
+import 'dart:ui';
 
 import 'package:echo/data/media/media_importer.dart';
 import 'package:echo/features/project/presentation/utils/project_cover_picker.dart';
+import 'package:echo/features/structure_elements_relations/domain/entities/narrative_element.dart';
 import 'package:echo/features/structure_elements_relations/domain/entities/structure_chapter.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 typedef ImportNarrativePhoto = Future<String> Function(String sourcePath);
@@ -11,6 +14,8 @@ typedef SaveNarrativeElement =
       required String title,
       required String description,
       required String? chapterId,
+      required String status,
+      required String? unlockChapterId,
       required List<String> photoPaths,
     });
 
@@ -21,7 +26,7 @@ Future<String> importNarrativePhotoToApp(String sourcePath) {
   );
 }
 
-class NarrativeElementCreatePage extends StatefulWidget {
+class NarrativeElementCreatePage extends StatelessWidget {
   const NarrativeElementCreatePage({
     super.key,
     required this.chapters,
@@ -37,37 +42,153 @@ class NarrativeElementCreatePage extends StatefulWidget {
   final ImportNarrativePhoto onImportPhoto;
 
   @override
-  State<NarrativeElementCreatePage> createState() =>
-      _NarrativeElementCreatePageState();
+  Widget build(BuildContext context) {
+    return _NarrativeElementEditorPage(
+      chapters: chapters,
+      pageTitle: '叙 事 元 素',
+      editorElement: null,
+      allowChapterSelection: true,
+      onSave: onSave,
+      onPickPhoto: onPickPhoto,
+      onImportPhoto: onImportPhoto,
+    );
+  }
 }
 
-class _NarrativeElementCreatePageState
-    extends State<NarrativeElementCreatePage> {
+class NarrativeElementEditPage extends StatelessWidget {
+  const NarrativeElementEditPage({
+    super.key,
+    required this.chapters,
+    required this.element,
+    required this.onSave,
+    required this.onComplete,
+    this.allowChapterSelection = true,
+    PickProjectCoverImage? onPickPhoto,
+    ImportNarrativePhoto? onImportPhoto,
+  }) : onPickPhoto = onPickPhoto ?? pickProjectCoverImageFromGallery,
+       onImportPhoto = onImportPhoto ?? importNarrativePhotoToApp;
+
+  final List<StructureChapter> chapters;
+  final NarrativeElement element;
+  final SaveNarrativeElement onSave;
+  final SaveNarrativeElement onComplete;
+  final bool allowChapterSelection;
+  final PickProjectCoverImage onPickPhoto;
+  final ImportNarrativePhoto onImportPhoto;
+
+  @override
+  Widget build(BuildContext context) {
+    return _NarrativeElementEditorPage(
+      chapters: chapters,
+      pageTitle: '叙 事 元 素',
+      editorElement: element,
+      allowChapterSelection: allowChapterSelection,
+      onSave: onSave,
+      onComplete: onComplete,
+      onPickPhoto: onPickPhoto,
+      onImportPhoto: onImportPhoto,
+    );
+  }
+}
+
+class _NarrativeElementEditorPage extends StatefulWidget {
+  const _NarrativeElementEditorPage({
+    required this.chapters,
+    required this.pageTitle,
+    required this.editorElement,
+    required this.allowChapterSelection,
+    required this.onSave,
+    required this.onPickPhoto,
+    required this.onImportPhoto,
+    this.onComplete,
+  });
+
+  final List<StructureChapter> chapters;
+  final String pageTitle;
+  final NarrativeElement? editorElement;
+  final bool allowChapterSelection;
+  final SaveNarrativeElement onSave;
+  final SaveNarrativeElement? onComplete;
+  final PickProjectCoverImage onPickPhoto;
+  final ImportNarrativePhoto onImportPhoto;
+
+  bool get isEditMode => editorElement != null;
+
+  @override
+  State<_NarrativeElementEditorPage> createState() =>
+      _NarrativeElementEditorPageState();
+}
+
+class _NarrativeElementEditorPageState
+    extends State<_NarrativeElementEditorPage> {
   late final TextEditingController _nameController;
   late final TextEditingController _descController;
   late final String? _initialChapterId;
+  late final String _initialTitle;
+  late final String _initialDescription;
+  late final List<String> _initialPhotoPaths;
   String? _selectedChapterId;
   final List<String> _mountedPhotos = <String>[];
   bool _isSaving = false;
+  bool _didUnlockCompletedElement = false;
 
-  bool get _hasChanges {
-    return _nameController.text.trim().isNotEmpty ||
-        _descController.text.trim().isNotEmpty ||
-        _selectedChapterId != _initialChapterId ||
-        _mountedPhotos.isNotEmpty;
+  String get _currentTitle => _nameController.text.trim();
+
+  String get _currentDescription => _descController.text.trim();
+
+  bool get _isCompletedElement =>
+      widget.isEditMode && widget.editorElement?.status == 'ready';
+
+  bool get _isLockedCompletedElement =>
+      _isCompletedElement && !_didUnlockCompletedElement;
+
+  String get _currentStatus {
+    if (!widget.isEditMode) {
+      return 'finding';
+    }
+    if (_isCompletedElement && _didUnlockCompletedElement) {
+      return 'finding';
+    }
+    return widget.editorElement?.status ?? 'finding';
   }
 
-  bool get _canSave => _nameController.text.trim().isNotEmpty && !_isSaving;
+  bool get _hasChanges {
+    return _currentTitle != _initialTitle ||
+        _currentDescription != _initialDescription ||
+        _selectedChapterId != _initialChapterId ||
+        !listEquals(_mountedPhotos, _initialPhotoPaths) ||
+        _didUnlockCompletedElement;
+  }
+
+  bool get _canSave => _currentTitle.isNotEmpty && !_isSaving;
+
+  String? get _unlockChapterId {
+    if (!_didUnlockCompletedElement) {
+      return null;
+    }
+    final selectedChapter = _chapterById(_selectedChapterId);
+    if (selectedChapter?.statusLabel == '完成') {
+      return selectedChapter!.chapterId;
+    }
+    return null;
+  }
 
   @override
   void initState() {
     super.initState();
-    _nameController = TextEditingController();
-    _descController = TextEditingController();
-    _initialChapterId = widget.chapters.isEmpty
-        ? null
-        : widget.chapters.first.chapterId;
+    _initialTitle = widget.editorElement?.title.trim() ?? '';
+    _initialDescription = widget.editorElement?.description?.trim() ?? '';
+    _initialPhotoPaths = List<String>.from(
+      widget.editorElement?.photoPaths ?? const <String>[],
+    );
+    _initialChapterId = widget.allowChapterSelection
+        ? widget.editorElement?.owningChapterId ??
+              (widget.chapters.isEmpty ? null : widget.chapters.first.chapterId)
+        : widget.editorElement?.owningChapterId;
     _selectedChapterId = _initialChapterId;
+    _mountedPhotos.addAll(_initialPhotoPaths);
+    _nameController = TextEditingController(text: _initialTitle);
+    _descController = TextEditingController(text: _initialDescription);
     _nameController.addListener(_onChanged);
     _descController.addListener(_onChanged);
   }
@@ -105,7 +226,7 @@ class _NarrativeElementCreatePageState
       if (!mounted) {
         return;
       }
-      _showImportFailedHint();
+      _showPassiveHint('照片导入失败，请重试');
     }
   }
 
@@ -116,6 +237,10 @@ class _NarrativeElementCreatePageState
   }
 
   Future<void> _save() async {
+    if (_isLockedCompletedElement) {
+      _showPassiveHint('叙事元素已完成无法编辑，请点击右上角继续编辑');
+      return;
+    }
     if (!_canSave) {
       return;
     }
@@ -124,9 +249,11 @@ class _NarrativeElementCreatePageState
       _isSaving = true;
     });
     await widget.onSave(
-      title: _nameController.text.trim(),
-      description: _descController.text.trim(),
+      title: _currentTitle,
+      description: _currentDescription,
       chapterId: _selectedChapterId,
+      status: _currentStatus,
+      unlockChapterId: _unlockChapterId,
       photoPaths: List<String>.from(_mountedPhotos),
     );
     if (!mounted) {
@@ -135,28 +262,245 @@ class _NarrativeElementCreatePageState
     Navigator.of(context).pop();
   }
 
-  void _showImportFailedHint() {
+  Future<void> _completeElement() async {
+    if (_isLockedCompletedElement) {
+      await _unlockCompletedElement();
+      return;
+    }
+    if (!_canSave || widget.onComplete == null) {
+      return;
+    }
+    if (_mountedPhotos.isEmpty) {
+      _showPassiveHint('元素缺少照片，无法完成。');
+      return;
+    }
+
+    setState(() {
+      _isSaving = true;
+    });
+    await widget.onComplete!(
+      title: _currentTitle,
+      description: _currentDescription,
+      chapterId: _selectedChapterId,
+      status: 'ready',
+      unlockChapterId: null,
+      photoPaths: List<String>.from(_mountedPhotos),
+    );
+    if (!mounted) {
+      return;
+    }
+    Navigator.of(context).pop();
+  }
+
+  Future<void> _unlockCompletedElement() async {
+    final selectedChapter = _chapterById(_selectedChapterId);
+    if (selectedChapter?.statusLabel == '完成') {
+      final confirmed = await _showUnlockConfirmationDialog();
+      if (!mounted || !confirmed) {
+        return;
+      }
+      setState(() {
+        _didUnlockCompletedElement = true;
+      });
+      _showPassiveHint('叙事元素现可继续编辑');
+      return;
+    }
+
+    setState(() {
+      _didUnlockCompletedElement = true;
+    });
+    _showPassiveHint('叙事元素现可继续编辑');
+  }
+
+  StructureChapter? _chapterById(String? chapterId) {
+    if (chapterId == null) {
+      return null;
+    }
+    for (final chapter in widget.chapters) {
+      if (chapter.chapterId == chapterId) {
+        return chapter;
+      }
+    }
+    return null;
+  }
+
+  Future<bool> _showUnlockConfirmationDialog() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.4),
+      builder: (dialogContext) {
+        return Dialog(
+          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+          elevation: 0,
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(32, 40, 32, 32),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border.all(color: Colors.black12, width: 1),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '确认更改',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 2.0,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                const Text(
+                  '元素所属章节已完成，需更改为可编辑',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.black54,
+                    height: 1.6,
+                  ),
+                ),
+                const SizedBox(height: 48),
+                Row(
+                  children: [
+                    Expanded(
+                      child: InkWell(
+                        onTap: () => Navigator.of(dialogContext).pop(true),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          decoration: const BoxDecoration(color: Colors.black),
+                          alignment: Alignment.center,
+                          child: const Text(
+                            '修改',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                              letterSpacing: 2.0,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: InkWell(
+                        onTap: () => Navigator.of(dialogContext).pop(false),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.black12),
+                          ),
+                          alignment: Alignment.center,
+                          child: const Text(
+                            '取 消',
+                            style: TextStyle(
+                              color: Colors.black54,
+                              fontSize: 13,
+                              letterSpacing: 2.0,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    return confirmed ?? false;
+  }
+
+  void _showPassiveHint(String message) {
     final messenger = ScaffoldMessenger.of(context);
     messenger.hideCurrentSnackBar();
     messenger.showSnackBar(
       SnackBar(
-        content: Text(
-          '照片导入失败，请重试',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w400,
-            letterSpacing: 1.0,
-            color: Colors.grey.shade700,
+        content: ClipRect(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.72),
+                border: Border.all(color: Colors.black.withValues(alpha: 0.06)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 18,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+              child: Text(
+                message,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w400,
+                  letterSpacing: 1.0,
+                  color: Colors.grey.shade700,
+                ),
+              ),
+            ),
           ),
         ),
-        duration: const Duration(milliseconds: 1600),
+        duration: const Duration(milliseconds: 1400),
         behavior: SnackBarBehavior.floating,
         elevation: 0,
-        backgroundColor: Colors.white.withValues(alpha: 0.94),
+        backgroundColor: Colors.transparent,
         margin: const EdgeInsets.only(left: 88, right: 88, bottom: 96),
-        shape: RoundedRectangleBorder(
-          side: BorderSide(color: Colors.black.withValues(alpha: 0.06)),
+        padding: EdgeInsets.zero,
+        shape: const RoundedRectangleBorder(),
+      ),
+    );
+  }
+
+  Widget _buildSaveButton() {
+    if (_isLockedCompletedElement) {
+      return GestureDetector(
+        key: const ValueKey('narrativeLockedSaveButton'),
+        onTap: _save,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 16),
+          decoration: const BoxDecoration(color: Color(0xFFE2E2E5)),
+          child: const Text(
+            '保 存',
+            style: TextStyle(
+              color: Color(0xFF9E9EA4),
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              letterSpacing: 4.0,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return IgnorePointer(
+      ignoring: !_hasChanges || !_canSave,
+      child: AnimatedOpacity(
+        duration: const Duration(milliseconds: 600),
+        curve: Curves.easeInOut,
+        opacity: _hasChanges ? 1.0 : 0.0,
+        child: GestureDetector(
+          key: const ValueKey('narrativeSaveButton'),
+          onTap: _save,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 16),
+            decoration: const BoxDecoration(color: Colors.black),
+            child: Text(
+              _isSaving ? '保 存 中' : '保 存',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                letterSpacing: 4.0,
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -179,10 +523,12 @@ class _NarrativeElementCreatePageState
                       vertical: 24.0,
                     ),
                     children: [
-                      _buildSectionLabel('所 属 章 节'),
-                      const SizedBox(height: 16),
-                      _buildChapterSelector(),
-                      const SizedBox(height: 48),
+                      if (widget.allowChapterSelection) ...[
+                        _buildSectionLabel('所 属 章 节'),
+                        const SizedBox(height: 16),
+                        _buildChapterSelector(),
+                        const SizedBox(height: 48),
+                      ],
                       _buildNameInput(),
                       const SizedBox(height: 16),
                       _buildDescInput(),
@@ -200,35 +546,7 @@ class _NarrativeElementCreatePageState
               bottom: 40,
               left: 0,
               right: 0,
-              child: Center(
-                child: IgnorePointer(
-                  ignoring: !_hasChanges || !_canSave,
-                  child: AnimatedOpacity(
-                    duration: const Duration(milliseconds: 600),
-                    curve: Curves.easeInOut,
-                    opacity: _hasChanges ? 1.0 : 0.0,
-                    child: GestureDetector(
-                      onTap: _save,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 48,
-                          vertical: 16,
-                        ),
-                        decoration: const BoxDecoration(color: Colors.black),
-                        child: Text(
-                          _isSaving ? '保 存 中' : '保 存',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                            letterSpacing: 4.0,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+              child: Center(child: _buildSaveButton()),
             ),
           ],
         ),
@@ -237,6 +555,28 @@ class _NarrativeElementCreatePageState
   }
 
   Widget _buildTopBar() {
+    final rightActionLabel = _isLockedCompletedElement ? '继续编辑' : '元素完成';
+    final rightAction = widget.isEditMode
+        ? TextButton(
+            key: const ValueKey('narrativeCompleteButton'),
+            onPressed: _isSaving ? null : _completeElement,
+            style: TextButton.styleFrom(
+              padding: EdgeInsets.zero,
+              minimumSize: const Size(80, 32),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: Text(
+              rightActionLabel,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                letterSpacing: 1.0,
+                color: Colors.black87,
+              ),
+            ),
+          )
+        : const SizedBox(width: 48);
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
       child: Row(
@@ -250,16 +590,16 @@ class _NarrativeElementCreatePageState
             ),
             onPressed: () => Navigator.of(context).pop(),
           ),
-          const Text(
-            '叙 事 元 素',
-            style: TextStyle(
+          Text(
+            widget.pageTitle,
+            style: const TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w500,
               letterSpacing: 4.0,
               color: Colors.black87,
             ),
           ),
-          const SizedBox(width: 48),
+          rightAction,
         ],
       ),
     );

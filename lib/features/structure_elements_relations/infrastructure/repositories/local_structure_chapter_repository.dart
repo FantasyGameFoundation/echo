@@ -66,4 +66,57 @@ class LocalStructureChapterRepository implements StructureChapterRepository {
 
     return chapter;
   }
+
+  @override
+  Future<StructureChapter?> updateChapter({
+    required String chapterId,
+    required String title,
+    String? description,
+    required int sortOrder,
+    required String statusLabel,
+  }) async {
+    final database = await _database();
+    final targetChapter = await database.structureChapters
+        .filter()
+        .chapterIdEqualTo(chapterId)
+        .findFirst();
+    if (targetChapter == null) {
+      return null;
+    }
+
+    final projectChapters = await database.structureChapters
+        .filter()
+        .owningProjectIdEqualTo(targetChapter.owningProjectId)
+        .findAll();
+    projectChapters.sort(
+      (left, right) => left.sortOrder.compareTo(right.sortOrder),
+    );
+
+    final reorderedChapters = projectChapters
+        .where((chapter) => chapter.chapterId != chapterId)
+        .toList();
+    final normalizedSortOrder = sortOrder.clamp(0, reorderedChapters.length);
+    reorderedChapters.insert(normalizedSortOrder, targetChapter);
+
+    final trimmedDescription = description?.trim();
+    final now = DateTime.now();
+    for (var index = 0; index < reorderedChapters.length; index++) {
+      final chapter = reorderedChapters[index];
+      chapter.sortOrder = index;
+      if (chapter.chapterId == chapterId) {
+        chapter.title = title.trim();
+        chapter.description = trimmedDescription?.isNotEmpty == true
+            ? trimmedDescription
+            : null;
+        chapter.statusLabel = statusLabel;
+        chapter.updatedAt = now;
+      }
+    }
+
+    await database.writeTxn(() async {
+      await database.structureChapters.putAll(reorderedChapters);
+    });
+
+    return targetChapter;
+  }
 }

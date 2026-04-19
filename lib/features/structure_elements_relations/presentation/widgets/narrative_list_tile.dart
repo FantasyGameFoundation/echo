@@ -10,16 +10,18 @@ class NarrativeListTile extends StatelessWidget {
     required this.description,
     required this.status,
     this.images = const <String>[],
+    this.onTap,
   });
 
   final String title;
   final String description;
   final ElementStatus status;
   final List<String> images;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final tileBody = Container(
       margin: const EdgeInsets.only(bottom: 12, left: 24, right: 24),
       padding: const EdgeInsets.all(16),
       decoration: const BoxDecoration(color: Colors.white),
@@ -64,6 +66,12 @@ class NarrativeListTile extends StatelessWidget {
         ],
       ),
     );
+
+    if (onTap == null) {
+      return tileBody;
+    }
+
+    return InkWell(onTap: onTap, child: tileBody);
   }
 
   Widget _buildAssociatedThumbnails() {

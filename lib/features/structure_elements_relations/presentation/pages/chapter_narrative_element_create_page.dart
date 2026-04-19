@@ -1,8 +1,10 @@
 import 'dart:io';
+import 'dart:ui';
 
 import 'package:echo/data/media/media_importer.dart';
 import 'package:echo/features/project/presentation/utils/project_cover_picker.dart';
 import 'package:echo/features/structure_elements_relations/presentation/models/narrative_element_draft.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 typedef ImportDraftNarrativePhoto = Future<String> Function(String sourcePath);
@@ -17,13 +19,17 @@ Future<String> importDraftNarrativePhotoToApp(String sourcePath) {
 class ChapterNarrativeElementCreatePage extends StatefulWidget {
   const ChapterNarrativeElementCreatePage({
     super.key,
+    this.initialDraft,
     PickProjectCoverImage? onPickPhoto,
     ImportDraftNarrativePhoto? onImportPhoto,
   }) : onPickPhoto = onPickPhoto ?? pickProjectCoverImageFromGallery,
        onImportPhoto = onImportPhoto ?? importDraftNarrativePhotoToApp;
 
+  final NarrativeElementDraft? initialDraft;
   final PickProjectCoverImage onPickPhoto;
   final ImportDraftNarrativePhoto onImportPhoto;
+
+  bool get isEditMode => initialDraft != null;
 
   @override
   State<ChapterNarrativeElementCreatePage> createState() =>
@@ -34,21 +40,51 @@ class _ChapterNarrativeElementCreatePageState
     extends State<ChapterNarrativeElementCreatePage> {
   late final TextEditingController _nameController;
   late final TextEditingController _descController;
+  late final String _initialTitle;
+  late final String _initialDescription;
+  late final List<String> _initialPhotoPaths;
   final List<String> _mountedPhotos = <String>[];
+  bool _didUnlockCompletedElement = false;
 
-  bool get _hasChanges {
-    return _nameController.text.trim().isNotEmpty ||
-        _descController.text.trim().isNotEmpty ||
-        _mountedPhotos.isNotEmpty;
+  String get _currentTitle => _nameController.text.trim();
+
+  String get _currentDescription => _descController.text.trim();
+
+  bool get _isCompletedElement => widget.initialDraft?.status == 'ready';
+
+  bool get _isLockedCompletedElement =>
+      widget.isEditMode && _isCompletedElement && !_didUnlockCompletedElement;
+
+  String get _currentStatus {
+    if (!widget.isEditMode) {
+      return 'finding';
+    }
+    if (_isCompletedElement && _didUnlockCompletedElement) {
+      return 'finding';
+    }
+    return widget.initialDraft?.status ?? 'finding';
   }
 
-  bool get _canSave => _nameController.text.trim().isNotEmpty;
+  bool get _hasChanges {
+    return _currentTitle != _initialTitle ||
+        _currentDescription != _initialDescription ||
+        !listEquals(_mountedPhotos, _initialPhotoPaths) ||
+        _didUnlockCompletedElement;
+  }
+
+  bool get _canSave => _currentTitle.isNotEmpty;
 
   @override
   void initState() {
     super.initState();
-    _nameController = TextEditingController();
-    _descController = TextEditingController();
+    _initialTitle = widget.initialDraft?.title.trim() ?? '';
+    _initialDescription = widget.initialDraft?.description.trim() ?? '';
+    _initialPhotoPaths = List<String>.from(
+      widget.initialDraft?.photoPaths ?? const <String>[],
+    );
+    _mountedPhotos.addAll(_initialPhotoPaths);
+    _nameController = TextEditingController(text: _initialTitle);
+    _descController = TextEditingController(text: _initialDescription);
     _nameController.addListener(_onChanged);
     _descController.addListener(_onChanged);
   }
@@ -86,7 +122,7 @@ class _ChapterNarrativeElementCreatePageState
       if (!mounted) {
         return;
       }
-      _showImportFailedHint();
+      _showPassiveHint('照片导入失败，请重试');
     }
   }
 
@@ -97,41 +133,138 @@ class _ChapterNarrativeElementCreatePageState
   }
 
   void _save() {
+    if (_isLockedCompletedElement) {
+      _showPassiveHint('叙事元素已完成无法编辑，请点击右上角继续编辑');
+      return;
+    }
     if (!_canSave) {
       return;
     }
 
     Navigator.of(context).pop(
       NarrativeElementDraft(
-        title: _nameController.text.trim(),
-        description: _descController.text.trim(),
+        title: _currentTitle,
+        description: _currentDescription,
         photoPaths: List<String>.from(_mountedPhotos),
+        status: _currentStatus,
       ),
     );
   }
 
-  void _showImportFailedHint() {
+  void _completeElement() {
+    if (_isLockedCompletedElement) {
+      setState(() {
+        _didUnlockCompletedElement = true;
+      });
+      _showPassiveHint('叙事元素现可继续编辑');
+      return;
+    }
+    if (!_canSave) {
+      return;
+    }
+    if (_mountedPhotos.isEmpty) {
+      _showPassiveHint('元素缺少照片，无法完成。');
+      return;
+    }
+
+    Navigator.of(context).pop(
+      NarrativeElementDraft(
+        title: _currentTitle,
+        description: _currentDescription,
+        photoPaths: List<String>.from(_mountedPhotos),
+        status: 'ready',
+      ),
+    );
+  }
+
+  void _showPassiveHint(String message) {
     final messenger = ScaffoldMessenger.of(context);
     messenger.hideCurrentSnackBar();
     messenger.showSnackBar(
       SnackBar(
-        content: Text(
-          '照片导入失败，请重试',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w400,
-            letterSpacing: 1.0,
-            color: Colors.grey.shade700,
+        content: ClipRect(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.72),
+                border: Border.all(color: Colors.black.withValues(alpha: 0.06)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 18,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+              child: Text(
+                message,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w400,
+                  letterSpacing: 1.0,
+                  color: Colors.grey.shade700,
+                ),
+              ),
+            ),
           ),
         ),
-        duration: const Duration(milliseconds: 1600),
+        duration: const Duration(milliseconds: 1400),
         behavior: SnackBarBehavior.floating,
         elevation: 0,
-        backgroundColor: Colors.white.withValues(alpha: 0.94),
+        backgroundColor: Colors.transparent,
         margin: const EdgeInsets.only(left: 88, right: 88, bottom: 96),
-        shape: RoundedRectangleBorder(
-          side: BorderSide(color: Colors.black.withValues(alpha: 0.06)),
+        padding: EdgeInsets.zero,
+        shape: const RoundedRectangleBorder(),
+      ),
+    );
+  }
+
+  Widget _buildSaveButton() {
+    if (_isLockedCompletedElement) {
+      return GestureDetector(
+        key: const ValueKey('chapterDraftLockedSaveButton'),
+        onTap: _save,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 16),
+          decoration: const BoxDecoration(color: Color(0xFFE2E2E5)),
+          child: const Text(
+            '保 存',
+            style: TextStyle(
+              color: Color(0xFF9E9EA4),
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              letterSpacing: 4.0,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return IgnorePointer(
+      ignoring: !_hasChanges || !_canSave,
+      child: AnimatedOpacity(
+        duration: const Duration(milliseconds: 600),
+        curve: Curves.easeInOut,
+        opacity: _hasChanges ? 1.0 : 0.0,
+        child: GestureDetector(
+          key: const ValueKey('chapterDraftElementSaveButton'),
+          onTap: _save,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 16),
+            decoration: const BoxDecoration(color: Colors.black),
+            child: const Text(
+              '保 存',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                letterSpacing: 4.0,
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -171,35 +304,7 @@ class _ChapterNarrativeElementCreatePageState
               bottom: 40,
               left: 0,
               right: 0,
-              child: Center(
-                child: IgnorePointer(
-                  ignoring: !_hasChanges || !_canSave,
-                  child: AnimatedOpacity(
-                    duration: const Duration(milliseconds: 600),
-                    curve: Curves.easeInOut,
-                    opacity: _hasChanges ? 1.0 : 0.0,
-                    child: GestureDetector(
-                      onTap: _save,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 48,
-                          vertical: 16,
-                        ),
-                        decoration: const BoxDecoration(color: Colors.black),
-                        child: const Text(
-                          '保 存',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                            letterSpacing: 4.0,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+              child: Center(child: _buildSaveButton()),
             ),
           ],
         ),
@@ -208,6 +313,28 @@ class _ChapterNarrativeElementCreatePageState
   }
 
   Widget _buildTopBar() {
+    final rightActionLabel = _isLockedCompletedElement ? '继续编辑' : '元素完成';
+    final rightAction = widget.isEditMode
+        ? TextButton(
+            key: const ValueKey('chapterDraftCompleteButton'),
+            onPressed: _completeElement,
+            style: TextButton.styleFrom(
+              padding: EdgeInsets.zero,
+              minimumSize: const Size(80, 32),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: Text(
+              rightActionLabel,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                letterSpacing: 1.0,
+                color: Colors.black87,
+              ),
+            ),
+          )
+        : const SizedBox(width: 48);
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
       child: Row(
@@ -230,7 +357,7 @@ class _ChapterNarrativeElementCreatePageState
               color: Colors.black87,
             ),
           ),
-          const SizedBox(width: 48),
+          rightAction,
         ],
       ),
     );
