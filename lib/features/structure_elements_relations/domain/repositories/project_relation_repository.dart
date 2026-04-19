@@ -20,6 +20,8 @@ abstract class ProjectRelationRepository {
     required String description,
   });
 
+  Future<bool> deleteRelationType(String relationTypeId);
+
   Future<List<ProjectRelationGroup>> listRelationGroupsForProject(
     String projectId,
   );
@@ -33,4 +35,6 @@ abstract class ProjectRelationRepository {
     required String relationTypeId,
     required List<ProjectRelationDraftMember> members,
   });
+
+  Future<bool> deleteRelationGroup(String relationGroupId);
 }

@@ -595,6 +595,92 @@ void main() {
   });
 
   testWidgets(
+    'chapter edit page shows delete action and removes chapter while unassigning elements',
+    (tester) async {
+      final projectRepository = _InMemoryProjectRepository(
+        initialProjects: <Project>[
+          Project.create(
+            id: 'project-chapter-delete',
+            projectTitle: '章节删除测试',
+            projectThemeStatement: '验证章节删除流程',
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+        ],
+        currentProjectId: 'project-chapter-delete',
+      );
+      final chapterRepository = _InMemoryStructureChapterRepository(
+        initialChapters: <StructureChapter>[
+          StructureChapter.create(
+            id: 'chapter-delete',
+            projectId: 'project-chapter-delete',
+            chapterTitle: '待删除章节',
+            chapterDescription: '即将删除',
+            chapterSortOrder: 0,
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+        ],
+      );
+      final elementRepository = _InMemoryNarrativeElementRepository(
+        initialElements: <NarrativeElement>[
+          NarrativeElement.create(
+            id: 'element-stays',
+            projectId: 'project-chapter-delete',
+            chapterId: 'chapter-delete',
+            elementTitle: '保留元素',
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        EchoApp(
+          projectRepository: projectRepository,
+          structureChapterRepository: chapterRepository,
+          narrativeElementRepository: elementRepository,
+          projectRelationRepository: _InMemoryProjectRelationRepository(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('待删除章节'));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('chapterDeleteButton')), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('chapterDeleteButton')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('确 认 删 除'), findsOneWidget);
+      expect(find.text('删除后，本章节会从结构中移除，章节内元素将保留并转入未分配章节。'), findsOneWidget);
+
+      await tester.tap(
+        find.descendant(of: find.byType(Dialog), matching: find.text('删 除')),
+      );
+      await tester.pumpAndSettle();
+
+      final chapters = await chapterRepository.listChaptersForProject(
+        'project-chapter-delete',
+      );
+      final elements = await elementRepository.listElementsForProject(
+        'project-chapter-delete',
+      );
+
+      expect(chapters, isEmpty);
+      expect(elements.single.owningChapterId, isNull);
+      expect(find.text('待删除章节'), findsNothing);
+
+      await tester.tap(find.text('叙事元素'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('保留元素'), findsOneWidget);
+      expect(find.text('未 分 配 章 节'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
     'ongoing chapter completion button shows passive hints for invalid chapters',
     (tester) async {
       var completionCalls = 0;
@@ -640,6 +726,7 @@ void main() {
                   }) async {
                     completionCalls += 1;
                   },
+              onDelete: () async {},
             ),
           ),
         );
@@ -811,6 +898,7 @@ void main() {
                 }) async {
                   completeCalls += 1;
                 },
+            onDelete: () async {},
           ),
         ),
       );
@@ -906,6 +994,7 @@ void main() {
                   required String statusLabel,
                   required List<NarrativeElementDraft> elements,
                 }) async {},
+            onDelete: () async {},
           ),
         ),
       );
@@ -963,14 +1052,16 @@ void main() {
               ),
             ],
             onOpenExistingElement: (element) async {
-              return NarrativeElement.create(
-                id: element.elementId,
-                projectId: element.owningProjectId,
-                chapterId: element.owningChapterId,
-                elementTitle: element.title,
-                linkedPhotoPaths: <String>['/tmp/fixed.png'],
-                createdTimestamp: element.createdAt,
-                updatedTimestamp: DateTime(2026, 1, 2),
+              return ChapterElementEditorResult.updated(
+                NarrativeElement.create(
+                  id: element.elementId,
+                  projectId: element.owningProjectId,
+                  chapterId: element.owningChapterId,
+                  elementTitle: element.title,
+                  linkedPhotoPaths: <String>['/tmp/fixed.png'],
+                  createdTimestamp: element.createdAt,
+                  updatedTimestamp: DateTime(2026, 1, 2),
+                ),
               );
             },
             onSave:
@@ -991,6 +1082,7 @@ void main() {
                 }) async {
                   completeCalls += 1;
                 },
+            onDelete: () async {},
           ),
         ),
       );
@@ -1009,6 +1101,75 @@ void main() {
 
       expect(completeCalls, 1);
       expect(find.text('章节缺图元素元素缺少照片，无法完成。'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'chapter edit page removes existing element snapshot after nested delete result',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ChapterEditPage(
+            existingChapters: <StructureChapter>[
+              StructureChapter.create(
+                id: 'chapter-a',
+                projectId: 'project-a',
+                chapterTitle: '第一章',
+                chapterSortOrder: 0,
+                createdTimestamp: DateTime(2026),
+                updatedTimestamp: DateTime(2026),
+              ),
+            ],
+            chapter: StructureChapter.create(
+              id: 'chapter-a',
+              projectId: 'project-a',
+              chapterTitle: '第一章',
+              chapterSortOrder: 0,
+              createdTimestamp: DateTime(2026),
+              updatedTimestamp: DateTime(2026),
+            ),
+            existingElements: <NarrativeElement>[
+              NarrativeElement.create(
+                id: 'element-delete',
+                projectId: 'project-a',
+                chapterId: 'chapter-a',
+                elementTitle: '会被删除的元素',
+                linkedPhotoPaths: <String>['/tmp/fixed.png'],
+                createdTimestamp: DateTime(2026),
+                updatedTimestamp: DateTime(2026),
+              ),
+            ],
+            onOpenExistingElement: (element) async {
+              return ChapterElementEditorResult.deleted(element.elementId);
+            },
+            onSave:
+                ({
+                  required String title,
+                  required String description,
+                  required int sortOrder,
+                  required String statusLabel,
+                  required List<NarrativeElementDraft> elements,
+                }) async {},
+            onComplete:
+                ({
+                  required String title,
+                  required String description,
+                  required int sortOrder,
+                  required String statusLabel,
+                  required List<NarrativeElementDraft> elements,
+                }) async {},
+            onDelete: () async {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('会被删除的元素'), findsOneWidget);
+
+      await tester.tap(find.text('会被删除的元素'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('会被删除的元素'), findsNothing);
     },
   );
 
@@ -1157,6 +1318,106 @@ void main() {
   });
 
   testWidgets(
+    'narrative element edit page shows delete action and removes linked relation groups',
+    (tester) async {
+      final projectRepository = _InMemoryProjectRepository(
+        initialProjects: <Project>[
+          Project.create(
+            id: 'project-element-delete',
+            projectTitle: '元素删除测试',
+            projectThemeStatement: '验证元素删除流程',
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+        ],
+        currentProjectId: 'project-element-delete',
+      );
+      final chapterRepository = _InMemoryStructureChapterRepository(
+        initialChapters: <StructureChapter>[
+          StructureChapter.create(
+            id: 'chapter-a',
+            projectId: 'project-element-delete',
+            chapterTitle: '第一章',
+            chapterSortOrder: 0,
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+        ],
+      );
+      final elementRepository = _InMemoryNarrativeElementRepository(
+        initialElements: <NarrativeElement>[
+          NarrativeElement.create(
+            id: 'element-delete',
+            projectId: 'project-element-delete',
+            chapterId: 'chapter-a',
+            elementTitle: '待删除元素',
+            linkedPhotoPaths: <String>['/tmp/delete.png'],
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+        ],
+      );
+      final relationRepository = _InMemoryProjectRelationRepository();
+      final relationType =
+          (await relationRepository.listRelationTypesForProject(
+            'project-element-delete',
+          )).firstWhere((type) => type.name == '对比');
+      await relationRepository.createRelationGroup(
+        projectId: 'project-element-delete',
+        relationTypeId: relationType.relationTypeId,
+        members: const <ProjectRelationDraftMember>[
+          ProjectRelationDraftMember.element(elementId: 'element-delete'),
+          ProjectRelationDraftMember.photo(
+            photoPath: '/tmp/delete.png',
+            sourceElementId: 'element-delete',
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        EchoApp(
+          projectRepository: projectRepository,
+          structureChapterRepository: chapterRepository,
+          narrativeElementRepository: elementRepository,
+          projectRelationRepository: relationRepository,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('叙事元素'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('待删除元素'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('narrativeDeleteButton')),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byKey(const ValueKey('narrativeDeleteButton')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('确 认 删 除'), findsOneWidget);
+      expect(find.text('删除后，该元素及其关联关系引用会一并移除，当前页面将返回列表。'), findsOneWidget);
+
+      await tester.tap(
+        find.descendant(of: find.byType(Dialog), matching: find.text('删 除')),
+      );
+      await tester.pumpAndSettle();
+
+      final elements = await elementRepository.listElementsForProject(
+        'project-element-delete',
+      );
+      final relationGroups = await relationRepository
+          .listRelationGroupsForProject('project-element-delete');
+
+      expect(elements, isEmpty);
+      expect(relationGroups, isEmpty);
+      expect(find.text('待删除元素'), findsNothing);
+    },
+  );
+
+  testWidgets(
     'ongoing narrative element completion button shows passive hint when no photo exists',
     (tester) async {
       var completeCalls = 0;
@@ -1202,6 +1463,7 @@ void main() {
                 }) async {
                   completeCalls += 1;
                 },
+            onDelete: () async {},
           ),
         ),
       );
@@ -1339,6 +1601,7 @@ void main() {
                   required String? unlockChapterId,
                   required List<String> photoPaths,
                 }) async {},
+            onDelete: () async {},
           ),
         ),
       );
@@ -1431,6 +1694,7 @@ void main() {
                   required String? unlockChapterId,
                   required List<String> photoPaths,
                 }) async {},
+            onDelete: () async {},
           ),
         ),
       );
@@ -1517,6 +1781,7 @@ void main() {
                   required String? unlockChapterId,
                   required List<String> photoPaths,
                 }) async {},
+            onDelete: () async {},
           ),
         ),
       );
@@ -2146,6 +2411,142 @@ void main() {
     },
   );
 
+  testWidgets(
+    'relation edit page shows delete action and removes relation type with linked groups',
+    (tester) async {
+      final projectRepository = _InMemoryProjectRepository(
+        initialProjects: <Project>[
+          Project.create(
+            id: 'project-relation-delete',
+            projectTitle: '关系删除测试',
+            projectThemeStatement: '验证关系删除流程',
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+        ],
+        currentProjectId: 'project-relation-delete',
+      );
+      final relationRepository = _InMemoryProjectRelationRepository();
+      final relationType =
+          (await relationRepository.listRelationTypesForProject(
+            'project-relation-delete',
+          )).firstWhere((type) => type.name == '对比');
+      await relationRepository.createRelationGroup(
+        projectId: 'project-relation-delete',
+        relationTypeId: relationType.relationTypeId,
+        members: const <ProjectRelationDraftMember>[
+          ProjectRelationDraftMember.element(elementId: 'element-a'),
+          ProjectRelationDraftMember.element(elementId: 'element-b'),
+        ],
+      );
+
+      await tester.pumpWidget(
+        EchoApp(
+          projectRepository: projectRepository,
+          structureChapterRepository: _InMemoryStructureChapterRepository(),
+          narrativeElementRepository: _InMemoryNarrativeElementRepository(),
+          projectRelationRepository: relationRepository,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('关联关系'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('对比'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('relationTypeDeleteButton')),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byKey(const ValueKey('relationTypeDeleteButton')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('确 认 删 除'), findsOneWidget);
+      expect(find.text('删除后，该关系类型及其关联关系集合会一并移除，当前页面将返回列表。'), findsOneWidget);
+
+      await tester.tap(
+        find.descendant(of: find.byType(Dialog), matching: find.text('删 除')),
+      );
+      await tester.pumpAndSettle();
+
+      final relationTypes = await relationRepository
+          .listRelationTypesForProject('project-relation-delete');
+      final relationGroups = await relationRepository
+          .listRelationGroupsForProject('project-relation-delete');
+
+      expect(
+        relationTypes.where(
+          (type) => type.relationTypeId == relationType.relationTypeId,
+        ),
+        isEmpty,
+      );
+      expect(relationGroups, isEmpty);
+      expect(find.text('对比'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'deleting the last visible relation type keeps the relation list empty after refresh',
+    (tester) async {
+      final projectRepository = _InMemoryProjectRepository(
+        initialProjects: <Project>[
+          Project.create(
+            id: 'project-last-relation-delete',
+            projectTitle: '最后关系删除测试',
+            projectThemeStatement: '验证最后一个关系类型删除后不会回填默认值',
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+        ],
+        currentProjectId: 'project-last-relation-delete',
+      );
+      final relationRepository = _InMemoryProjectRelationRepository();
+      final allRelationTypes = await relationRepository
+          .listRelationTypesForProject('project-last-relation-delete');
+      final targetRelationType = allRelationTypes.firstWhere(
+        (type) => type.name == '对比',
+      );
+      for (final relationType in allRelationTypes) {
+        if (relationType.relationTypeId == targetRelationType.relationTypeId) {
+          continue;
+        }
+        await relationRepository.deleteRelationType(
+          relationType.relationTypeId,
+        );
+      }
+
+      await tester.pumpWidget(
+        EchoApp(
+          projectRepository: projectRepository,
+          structureChapterRepository: _InMemoryStructureChapterRepository(),
+          narrativeElementRepository: _InMemoryNarrativeElementRepository(),
+          projectRelationRepository: relationRepository,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('关联关系'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('对比'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('relationTypeDeleteButton')));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.descendant(of: find.byType(Dialog), matching: find.text('删 除')),
+      );
+      await tester.pumpAndSettle();
+
+      final visibleRelationTypes = await relationRepository
+          .listRelationTypesForProject('project-last-relation-delete');
+
+      expect(visibleRelationTypes, isEmpty);
+      expect(find.text('对比'), findsNothing);
+      expect(find.text('添加关联关系'), findsOneWidget);
+    },
+  );
+
   testWidgets('organize page keeps core curation markers after extraction', (
     tester,
   ) async {
@@ -2443,6 +2844,33 @@ class _InMemoryStructureChapterRepository
 
     return targetChapter;
   }
+
+  @override
+  Future<bool> deleteChapter(String chapterId) async {
+    final targetIndex = _chapters.indexWhere(
+      (chapter) => chapter.chapterId == chapterId,
+    );
+    if (targetIndex < 0) {
+      return false;
+    }
+
+    final deletedChapter = _chapters.removeAt(targetIndex);
+    final remainingChapters =
+        _chapters
+            .where(
+              (chapter) =>
+                  chapter.owningProjectId == deletedChapter.owningProjectId,
+            )
+            .toList()
+          ..sort((left, right) => left.sortOrder.compareTo(right.sortOrder));
+
+    for (var index = 0; index < remainingChapters.length; index++) {
+      remainingChapters[index].sortOrder = index;
+      remainingChapters[index].updatedAt = DateTime(2026, 1, 7, index + 1);
+    }
+
+    return true;
+  }
 }
 
 class _InMemoryNarrativeElementRepository
@@ -2518,9 +2946,26 @@ class _InMemoryNarrativeElementRepository
     targetElement.updatedAt = DateTime(2026, 1, 5);
     return targetElement;
   }
+
+  @override
+  Future<bool> deleteElement(String elementId) async {
+    final targetIndex = _elements.indexWhere(
+      (element) => element.elementId == elementId,
+    );
+    if (targetIndex < 0) {
+      return false;
+    }
+
+    _elements.removeAt(targetIndex);
+    return true;
+  }
 }
 
 class _InMemoryProjectRelationRepository implements ProjectRelationRepository {
+  static const String _hiddenRelationTypeName = '__echo_hidden_relation_type__';
+  static const String _hiddenRelationTypeDescription =
+      '__echo_hidden_relation_type__';
+
   final Map<String, List<ProjectRelationType>> _typesByProject =
       <String, List<ProjectRelationType>>{};
   final Map<String, List<ProjectRelationGroup>> _groupsByProject =
@@ -2548,6 +2993,24 @@ class _InMemoryProjectRelationRepository implements ProjectRelationRepository {
           ),
         )
         .toList();
+  }
+
+  bool _isHiddenRelationType(ProjectRelationType relationType) {
+    return relationType.name == _hiddenRelationTypeName &&
+        relationType.description == _hiddenRelationTypeDescription;
+  }
+
+  ProjectRelationType _buildHiddenRelationType(String projectId) {
+    final now = DateTime(2026, 1, 8);
+    return ProjectRelationType.create(
+      id: 'type-$projectId-hidden',
+      projectId: projectId,
+      relationName: _hiddenRelationTypeName,
+      relationDescription: _hiddenRelationTypeDescription,
+      relationSortOrder: -1,
+      createdTimestamp: now,
+      updatedTimestamp: now,
+    );
   }
 
   @override
@@ -2599,6 +3062,52 @@ class _InMemoryProjectRelationRepository implements ProjectRelationRepository {
   }
 
   @override
+  Future<bool> deleteRelationType(String relationTypeId) async {
+    String? projectId;
+    ProjectRelationType? targetType;
+    for (final entry in _typesByProject.entries) {
+      for (final relationType in entry.value) {
+        if (relationType.relationTypeId == relationTypeId) {
+          projectId = entry.key;
+          targetType = relationType;
+          break;
+        }
+      }
+      if (targetType != null) {
+        break;
+      }
+    }
+    if (projectId == null || targetType == null) {
+      return false;
+    }
+
+    _typesByProject[projectId]!.remove(targetType);
+    final hasVisibleTypes = _typesByProject[projectId]!.any(
+      (relationType) => !_isHiddenRelationType(relationType),
+    );
+    final hasHiddenPlaceholder = _typesByProject[projectId]!.any(
+      _isHiddenRelationType,
+    );
+    if (!hasVisibleTypes && !hasHiddenPlaceholder) {
+      _typesByProject[projectId]!.add(_buildHiddenRelationType(projectId));
+    }
+    final relationGroups =
+        (_groupsByProject[projectId] ?? <ProjectRelationGroup>[])
+            .where((group) => group.linkedRelationTypeId == relationTypeId)
+            .toList();
+    final groupIds = relationGroups
+        .map((group) => group.relationGroupId)
+        .toSet();
+    _groupsByProject[projectId]?.removeWhere(
+      (group) => groupIds.contains(group.relationGroupId),
+    );
+    _membersByProject[projectId]?.removeWhere(
+      (member) => groupIds.contains(member.owningGroupId),
+    );
+    return true;
+  }
+
+  @override
   Future<ProjectRelationGroup> createRelationGroup({
     required String projectId,
     required String relationTypeId,
@@ -2643,6 +3152,25 @@ class _InMemoryProjectRelationRepository implements ProjectRelationRepository {
   }
 
   @override
+  Future<bool> deleteRelationGroup(String relationGroupId) async {
+    for (final entry in _groupsByProject.entries) {
+      final targetIndex = entry.value.indexWhere(
+        (group) => group.relationGroupId == relationGroupId,
+      );
+      if (targetIndex < 0) {
+        continue;
+      }
+
+      entry.value.removeAt(targetIndex);
+      _membersByProject[entry.key]?.removeWhere(
+        (member) => member.owningGroupId == relationGroupId,
+      );
+      return true;
+    }
+    return false;
+  }
+
+  @override
   Future<List<ProjectRelationGroup>> listRelationGroupsForProject(
     String projectId,
   ) async {
@@ -2668,7 +3196,9 @@ class _InMemoryProjectRelationRepository implements ProjectRelationRepository {
   ) async {
     await _ensureDefaults(projectId);
     return List<ProjectRelationType>.from(
-      _typesByProject[projectId] ?? const [],
+      (_typesByProject[projectId] ?? const <ProjectRelationType>[]).where(
+        (relationType) => !_isHiddenRelationType(relationType),
+      ),
     );
   }
 }

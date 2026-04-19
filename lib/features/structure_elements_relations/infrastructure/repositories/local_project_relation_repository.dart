@@ -7,6 +7,9 @@ import 'package:echo/features/structure_elements_relations/domain/project_relati
 import 'package:echo/features/structure_elements_relations/domain/repositories/project_relation_repository.dart';
 import 'package:isar/isar.dart';
 
+const _hiddenRelationTypeName = '__echo_hidden_relation_type__';
+const _hiddenRelationTypeDescription = '__echo_hidden_relation_type__';
+
 class LocalProjectRelationRepository implements ProjectRelationRepository {
   LocalProjectRelationRepository({Future<Isar> Function()? openIsar})
     : _openIsar = openIsar ?? openProjectIsar;
@@ -16,6 +19,23 @@ class LocalProjectRelationRepository implements ProjectRelationRepository {
 
   Future<Isar> _database() {
     return _isarFuture ??= _openIsar();
+  }
+
+  bool _isHiddenRelationType(ProjectRelationType relationType) {
+    return relationType.name == _hiddenRelationTypeName &&
+        relationType.description == _hiddenRelationTypeDescription;
+  }
+
+  ProjectRelationType _buildHiddenRelationType(String projectId) {
+    final now = DateTime.now();
+    return ProjectRelationType.create(
+      projectId: projectId,
+      relationName: _hiddenRelationTypeName,
+      relationDescription: _hiddenRelationTypeDescription,
+      relationSortOrder: -1,
+      createdTimestamp: now,
+      updatedTimestamp: now,
+    );
   }
 
   Future<void> _ensureDefaultRelationTypes(String projectId) async {
@@ -60,7 +80,9 @@ class LocalProjectRelationRepository implements ProjectRelationRepository {
     relationTypes.sort(
       (left, right) => left.sortOrder.compareTo(right.sortOrder),
     );
-    return relationTypes;
+    return relationTypes
+        .where((relationType) => !_isHiddenRelationType(relationType))
+        .toList();
   }
 
   @override
@@ -123,6 +145,67 @@ class LocalProjectRelationRepository implements ProjectRelationRepository {
     });
 
     return relationType;
+  }
+
+  @override
+  Future<bool> deleteRelationType(String relationTypeId) async {
+    final database = await _database();
+    final relationType = await database.projectRelationTypes
+        .filter()
+        .relationTypeIdEqualTo(relationTypeId)
+        .findFirst();
+    if (relationType == null) {
+      return false;
+    }
+
+    final relationGroups = await database.projectRelationGroups
+        .filter()
+        .linkedRelationTypeIdEqualTo(relationTypeId)
+        .findAll();
+    final groupIds = relationGroups
+        .map((group) => group.relationGroupId)
+        .toSet();
+    final relationMembers = groupIds.isEmpty
+        ? const <ProjectRelationMember>[]
+        : (await database.projectRelationMembers
+                  .filter()
+                  .owningProjectIdEqualTo(relationType.owningProjectId)
+                  .findAll())
+              .where((member) => groupIds.contains(member.owningGroupId))
+              .toList();
+    final projectRelationTypes = await database.projectRelationTypes
+        .filter()
+        .owningProjectIdEqualTo(relationType.owningProjectId)
+        .findAll();
+    final remainingVisibleTypes = projectRelationTypes.where(
+      (current) =>
+          current.relationTypeId != relationTypeId &&
+          !_isHiddenRelationType(current),
+    );
+    final hiddenPlaceholder = projectRelationTypes.where(_isHiddenRelationType);
+    final shouldPersistHiddenPlaceholder =
+        remainingVisibleTypes.isEmpty && hiddenPlaceholder.isEmpty;
+
+    await database.writeTxn(() async {
+      if (relationMembers.isNotEmpty) {
+        await database.projectRelationMembers.deleteAll(
+          relationMembers.map((member) => member.isarId).toList(),
+        );
+      }
+      if (relationGroups.isNotEmpty) {
+        await database.projectRelationGroups.deleteAll(
+          relationGroups.map((group) => group.isarId).toList(),
+        );
+      }
+      await database.projectRelationTypes.delete(relationType.isarId);
+      if (shouldPersistHiddenPlaceholder) {
+        await database.projectRelationTypes.put(
+          _buildHiddenRelationType(relationType.owningProjectId),
+        );
+      }
+    });
+
+    return true;
   }
 
   @override
@@ -203,5 +286,33 @@ class LocalProjectRelationRepository implements ProjectRelationRepository {
     });
 
     return relationGroup;
+  }
+
+  @override
+  Future<bool> deleteRelationGroup(String relationGroupId) async {
+    final database = await _database();
+    final relationGroup = await database.projectRelationGroups
+        .filter()
+        .relationGroupIdEqualTo(relationGroupId)
+        .findFirst();
+    if (relationGroup == null) {
+      return false;
+    }
+
+    final relationMembers = await database.projectRelationMembers
+        .filter()
+        .owningGroupIdEqualTo(relationGroupId)
+        .findAll();
+
+    await database.writeTxn(() async {
+      if (relationMembers.isNotEmpty) {
+        await database.projectRelationMembers.deleteAll(
+          relationMembers.map((member) => member.isarId).toList(),
+        );
+      }
+      await database.projectRelationGroups.delete(relationGroup.isarId);
+    });
+
+    return true;
   }
 }

@@ -90,4 +90,22 @@ class LocalNarrativeElementRepository implements NarrativeElementRepository {
 
     return element;
   }
+
+  @override
+  Future<bool> deleteElement(String elementId) async {
+    final database = await _database();
+    final element = await database.narrativeElements
+        .filter()
+        .elementIdEqualTo(elementId)
+        .findFirst();
+    if (element == null) {
+      return false;
+    }
+
+    await database.writeTxn(() async {
+      await database.narrativeElements.delete(element.isarId);
+    });
+
+    return true;
+  }
 }

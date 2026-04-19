@@ -1,4 +1,6 @@
 import 'package:echo/features/structure_elements_relations/domain/entities/project_relation_type.dart';
+import 'package:echo/features/structure_elements_relations/presentation/widgets/editor_bottom_action_bar.dart';
+import 'package:echo/features/structure_elements_relations/presentation/widgets/editor_confirmation_dialog.dart';
 import 'package:flutter/material.dart';
 
 typedef CreateProjectRelationType =
@@ -14,17 +16,20 @@ class ProjectRelationCreatePage extends StatefulWidget {
     super.key,
     required this.onCreateRelationType,
   }) : relationType = null,
-       onUpdateRelationType = null;
+       onUpdateRelationType = null,
+       onDeleteRelationType = null;
 
   const ProjectRelationCreatePage.edit({
     super.key,
     required this.relationType,
     required this.onUpdateRelationType,
+    required this.onDeleteRelationType,
   }) : onCreateRelationType = null;
 
   final ProjectRelationType? relationType;
   final CreateProjectRelationType? onCreateRelationType;
   final UpdateProjectRelationType? onUpdateRelationType;
+  final Future<void> Function()? onDeleteRelationType;
 
   bool get isEditMode => relationType != null;
 
@@ -38,26 +43,19 @@ enum _RelationTargetType { element, photo, both }
 class _ProjectRelationCreatePageState extends State<ProjectRelationCreatePage> {
   late final TextEditingController _nameController;
   late final TextEditingController _descController;
-  late final String _initialName;
-  late final String _initialDescription;
   _RelationTargetType _selectedType = _RelationTargetType.both;
   bool _isSaving = false;
-
-  bool get _hasChanges {
-    return _nameController.text.trim() != _initialName ||
-        _descController.text.trim() != _initialDescription;
-  }
 
   bool get _canSave => _nameController.text.trim().isNotEmpty && !_isSaving;
 
   @override
   void initState() {
     super.initState();
-    _initialName = widget.relationType?.name.trim() ?? '';
-    _initialDescription = widget.relationType?.description.trim() ?? '';
-    _nameController = TextEditingController(text: _initialName)
+    final initialName = widget.relationType?.name.trim() ?? '';
+    final initialDescription = widget.relationType?.description.trim() ?? '';
+    _nameController = TextEditingController(text: initialName)
       ..addListener(_handleChanged);
-    _descController = TextEditingController(text: _initialDescription)
+    _descController = TextEditingController(text: initialDescription)
       ..addListener(_handleChanged);
   }
 
@@ -101,6 +99,31 @@ class _ProjectRelationCreatePageState extends State<ProjectRelationCreatePage> {
       return;
     }
 
+    Navigator.of(context).pop();
+  }
+
+  Future<void> _deleteRelationType() async {
+    if (_isSaving || widget.onDeleteRelationType == null) {
+      return;
+    }
+
+    final confirmed = await showEditorConfirmationDialog(
+      context: context,
+      title: '确 认 删 除',
+      content: '删除后，该关系类型及其关联关系集合会一并移除，当前页面将返回列表。',
+      actionText: '删 除',
+    );
+    if (!confirmed || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _isSaving = true;
+    });
+    await widget.onDeleteRelationType!();
+    if (!mounted) {
+      return;
+    }
     Navigator.of(context).pop();
   }
 
@@ -172,37 +195,22 @@ class _ProjectRelationCreatePageState extends State<ProjectRelationCreatePage> {
               ],
             ),
             Positioned(
-              bottom: 40,
+              bottom: 32,
               left: 0,
               right: 0,
               child: Center(
-                child: IgnorePointer(
-                  ignoring: !_hasChanges || !_canSave,
-                  child: AnimatedOpacity(
-                    opacity: _hasChanges ? 1.0 : 0.0,
-                    duration: const Duration(milliseconds: 600),
-                    curve: Curves.easeInOut,
-                    child: GestureDetector(
-                      key: const ValueKey('relationTypeSaveButton'),
-                      onTap: _save,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 48,
-                          vertical: 16,
-                        ),
-                        decoration: const BoxDecoration(color: Colors.black),
-                        child: Text(
-                          _isSaving ? '保 存 中' : '保 存',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                            letterSpacing: 4.0,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
+                child: EditorBottomActionBar(
+                  leftLabel: _isSaving ? '保 存 中' : '保 存',
+                  leftKey: const ValueKey('relationTypeSaveButton'),
+                  leftTone: EditorBottomActionTone.primary,
+                  leftEnabled: _canSave,
+                  onLeftTap: _save,
+                  rightLabel: widget.isEditMode ? '删 除' : null,
+                  rightKey: widget.isEditMode
+                      ? const ValueKey('relationTypeDeleteButton')
+                      : null,
+                  rightEnabled: !_isSaving,
+                  onRightTap: widget.isEditMode ? _deleteRelationType : null,
                 ),
               ),
             ),

@@ -5,7 +5,8 @@ import 'package:echo/data/media/media_importer.dart';
 import 'package:echo/features/project/presentation/utils/project_cover_picker.dart';
 import 'package:echo/features/structure_elements_relations/domain/entities/narrative_element.dart';
 import 'package:echo/features/structure_elements_relations/domain/entities/structure_chapter.dart';
-import 'package:flutter/foundation.dart';
+import 'package:echo/features/structure_elements_relations/presentation/widgets/editor_bottom_action_bar.dart';
+import 'package:echo/features/structure_elements_relations/presentation/widgets/editor_confirmation_dialog.dart';
 import 'package:flutter/material.dart';
 
 typedef ImportNarrativePhoto = Future<String> Function(String sourcePath);
@@ -62,6 +63,7 @@ class NarrativeElementEditPage extends StatelessWidget {
     required this.element,
     required this.onSave,
     required this.onComplete,
+    required this.onDelete,
     this.allowChapterSelection = true,
     PickProjectCoverImage? onPickPhoto,
     ImportNarrativePhoto? onImportPhoto,
@@ -72,6 +74,7 @@ class NarrativeElementEditPage extends StatelessWidget {
   final NarrativeElement element;
   final SaveNarrativeElement onSave;
   final SaveNarrativeElement onComplete;
+  final Future<void> Function() onDelete;
   final bool allowChapterSelection;
   final PickProjectCoverImage onPickPhoto;
   final ImportNarrativePhoto onImportPhoto;
@@ -85,6 +88,7 @@ class NarrativeElementEditPage extends StatelessWidget {
       allowChapterSelection: allowChapterSelection,
       onSave: onSave,
       onComplete: onComplete,
+      onDelete: onDelete,
       onPickPhoto: onPickPhoto,
       onImportPhoto: onImportPhoto,
     );
@@ -101,6 +105,7 @@ class _NarrativeElementEditorPage extends StatefulWidget {
     required this.onPickPhoto,
     required this.onImportPhoto,
     this.onComplete,
+    this.onDelete,
   });
 
   final List<StructureChapter> chapters;
@@ -109,6 +114,7 @@ class _NarrativeElementEditorPage extends StatefulWidget {
   final bool allowChapterSelection;
   final SaveNarrativeElement onSave;
   final SaveNarrativeElement? onComplete;
+  final Future<void> Function()? onDelete;
   final PickProjectCoverImage onPickPhoto;
   final ImportNarrativePhoto onImportPhoto;
 
@@ -123,10 +129,6 @@ class _NarrativeElementEditorPageState
     extends State<_NarrativeElementEditorPage> {
   late final TextEditingController _nameController;
   late final TextEditingController _descController;
-  late final String? _initialChapterId;
-  late final String _initialTitle;
-  late final String _initialDescription;
-  late final List<String> _initialPhotoPaths;
   String? _selectedChapterId;
   final List<String> _mountedPhotos = <String>[];
   bool _isSaving = false;
@@ -152,14 +154,6 @@ class _NarrativeElementEditorPageState
     return widget.editorElement?.status ?? 'finding';
   }
 
-  bool get _hasChanges {
-    return _currentTitle != _initialTitle ||
-        _currentDescription != _initialDescription ||
-        _selectedChapterId != _initialChapterId ||
-        !listEquals(_mountedPhotos, _initialPhotoPaths) ||
-        _didUnlockCompletedElement;
-  }
-
   bool get _canSave => _currentTitle.isNotEmpty && !_isSaving;
 
   String? get _unlockChapterId {
@@ -176,19 +170,19 @@ class _NarrativeElementEditorPageState
   @override
   void initState() {
     super.initState();
-    _initialTitle = widget.editorElement?.title.trim() ?? '';
-    _initialDescription = widget.editorElement?.description?.trim() ?? '';
-    _initialPhotoPaths = List<String>.from(
+    final initialTitle = widget.editorElement?.title.trim() ?? '';
+    final initialDescription = widget.editorElement?.description?.trim() ?? '';
+    final initialPhotoPaths = List<String>.from(
       widget.editorElement?.photoPaths ?? const <String>[],
     );
-    _initialChapterId = widget.allowChapterSelection
+    final initialChapterId = widget.allowChapterSelection
         ? widget.editorElement?.owningChapterId ??
               (widget.chapters.isEmpty ? null : widget.chapters.first.chapterId)
         : widget.editorElement?.owningChapterId;
-    _selectedChapterId = _initialChapterId;
-    _mountedPhotos.addAll(_initialPhotoPaths);
-    _nameController = TextEditingController(text: _initialTitle);
-    _descController = TextEditingController(text: _initialDescription);
+    _selectedChapterId = initialChapterId;
+    _mountedPhotos.addAll(initialPhotoPaths);
+    _nameController = TextEditingController(text: initialTitle);
+    _descController = TextEditingController(text: initialDescription);
     _nameController.addListener(_onChanged);
     _descController.addListener(_onChanged);
   }
@@ -325,92 +319,39 @@ class _NarrativeElementEditorPageState
   }
 
   Future<bool> _showUnlockConfirmationDialog() async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showEditorConfirmationDialog(
       context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.4),
-      builder: (dialogContext) {
-        return Dialog(
-          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-          elevation: 0,
-          child: Container(
-            padding: const EdgeInsets.fromLTRB(32, 40, 32, 32),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border.all(color: Colors.black12, width: 1),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  '确认更改',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 2.0,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                const Text(
-                  '元素所属章节已完成，需更改为可编辑',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.black54,
-                    height: 1.6,
-                  ),
-                ),
-                const SizedBox(height: 48),
-                Row(
-                  children: [
-                    Expanded(
-                      child: InkWell(
-                        onTap: () => Navigator.of(dialogContext).pop(true),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          decoration: const BoxDecoration(color: Colors.black),
-                          alignment: Alignment.center,
-                          child: const Text(
-                            '修改',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 13,
-                              letterSpacing: 2.0,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: InkWell(
-                        onTap: () => Navigator.of(dialogContext).pop(false),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          decoration: BoxDecoration(
-                            border: Border.all(color: Colors.black12),
-                          ),
-                          alignment: Alignment.center,
-                          child: const Text(
-                            '取 消',
-                            style: TextStyle(
-                              color: Colors.black54,
-                              fontSize: 13,
-                              letterSpacing: 2.0,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+      title: '确认更改',
+      content: '元素所属章节已完成，需更改为可编辑',
+      actionText: '修改',
     );
 
-    return confirmed ?? false;
+    return confirmed;
+  }
+
+  Future<void> _deleteElement() async {
+    if (_isSaving || widget.onDelete == null) {
+      return;
+    }
+
+    final confirmed = await showEditorConfirmationDialog(
+      context: context,
+      title: '确 认 删 除',
+      content: '删除后，该元素及其关联关系引用会一并移除，当前页面将返回列表。',
+      actionText: '删 除',
+    );
+    if (!confirmed || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _isSaving = true;
+    });
+    await widget.onDelete!();
+    if (!mounted) {
+      return;
+    }
+    Navigator.of(context).pop();
   }
 
   void _showPassiveHint(String message) {
@@ -458,51 +399,22 @@ class _NarrativeElementEditorPageState
     );
   }
 
-  Widget _buildSaveButton() {
-    if (_isLockedCompletedElement) {
-      return GestureDetector(
-        key: const ValueKey('narrativeLockedSaveButton'),
-        onTap: _save,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 16),
-          decoration: const BoxDecoration(color: Color(0xFFE2E2E5)),
-          child: const Text(
-            '保 存',
-            style: TextStyle(
-              color: Color(0xFF9E9EA4),
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-              letterSpacing: 4.0,
-            ),
-          ),
-        ),
-      );
-    }
-
-    return IgnorePointer(
-      ignoring: !_hasChanges || !_canSave,
-      child: AnimatedOpacity(
-        duration: const Duration(milliseconds: 600),
-        curve: Curves.easeInOut,
-        opacity: _hasChanges ? 1.0 : 0.0,
-        child: GestureDetector(
-          key: const ValueKey('narrativeSaveButton'),
-          onTap: _save,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 16),
-            decoration: const BoxDecoration(color: Colors.black),
-            child: Text(
-              _isSaving ? '保 存 中' : '保 存',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                letterSpacing: 4.0,
-              ),
-            ),
-          ),
-        ),
+  Widget _buildBottomActions() {
+    final isLocked = _isLockedCompletedElement;
+    return EditorBottomActionBar(
+      leftLabel: _isSaving ? '保 存 中' : '保 存',
+      leftKey: ValueKey(
+        isLocked ? 'narrativeLockedSaveButton' : 'narrativeSaveButton',
       ),
+      leftTone: EditorBottomActionTone.primary,
+      leftEnabled: isLocked || _canSave,
+      onLeftTap: _save,
+      rightLabel: widget.isEditMode ? '删 除' : null,
+      rightKey: widget.isEditMode
+          ? const ValueKey('narrativeDeleteButton')
+          : null,
+      rightEnabled: !_isSaving,
+      onRightTap: widget.isEditMode ? _deleteElement : null,
     );
   }
 
@@ -543,10 +455,10 @@ class _NarrativeElementEditorPageState
               ],
             ),
             Positioned(
-              bottom: 40,
+              bottom: 32,
               left: 0,
               right: 0,
-              child: Center(child: _buildSaveButton()),
+              child: Center(child: _buildBottomActions()),
             ),
           ],
         ),

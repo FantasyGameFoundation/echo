@@ -4,6 +4,8 @@ import 'package:echo/features/structure_elements_relations/domain/entities/narra
 import 'package:echo/features/structure_elements_relations/domain/entities/structure_chapter.dart';
 import 'package:echo/features/structure_elements_relations/presentation/models/narrative_element_draft.dart';
 import 'package:echo/features/structure_elements_relations/presentation/pages/chapter_narrative_element_create_page.dart';
+import 'package:echo/features/structure_elements_relations/presentation/widgets/editor_bottom_action_bar.dart';
+import 'package:echo/features/structure_elements_relations/presentation/widgets/editor_confirmation_dialog.dart';
 import 'package:flutter/material.dart';
 
 typedef SaveChapter =
@@ -16,6 +18,19 @@ typedef SaveChapter =
     });
 
 typedef UpdateChapter = SaveChapter;
+
+class ChapterElementEditorResult {
+  const ChapterElementEditorResult.updated(this.element)
+    : deletedElementId = null;
+
+  const ChapterElementEditorResult.deleted(this.deletedElementId)
+    : element = null;
+
+  final NarrativeElement? element;
+  final String? deletedElementId;
+
+  bool get wasDeleted => deletedElementId != null;
+}
 
 class ChapterCreatePage extends StatelessWidget {
   const ChapterCreatePage({
@@ -47,6 +62,7 @@ class ChapterEditPage extends StatelessWidget {
     required this.existingElements,
     required this.onSave,
     required this.onComplete,
+    required this.onDelete,
     this.onOpenExistingElement,
   });
 
@@ -55,7 +71,8 @@ class ChapterEditPage extends StatelessWidget {
   final List<NarrativeElement> existingElements;
   final UpdateChapter onSave;
   final UpdateChapter onComplete;
-  final Future<NarrativeElement?> Function(NarrativeElement element)?
+  final Future<void> Function() onDelete;
+  final Future<ChapterElementEditorResult?> Function(NarrativeElement element)?
   onOpenExistingElement;
 
   @override
@@ -67,6 +84,7 @@ class ChapterEditPage extends StatelessWidget {
       existingElements: existingElements,
       onSave: onSave,
       onComplete: onComplete,
+      onDelete: onDelete,
       onOpenExistingElement: onOpenExistingElement,
     );
   }
@@ -80,6 +98,7 @@ class _ChapterEditorPage extends StatefulWidget {
     required this.existingElements,
     required this.onSave,
     this.onComplete,
+    this.onDelete,
     this.onOpenExistingElement,
   });
 
@@ -89,7 +108,8 @@ class _ChapterEditorPage extends StatefulWidget {
   final List<NarrativeElement> existingElements;
   final UpdateChapter onSave;
   final UpdateChapter? onComplete;
-  final Future<NarrativeElement?> Function(NarrativeElement element)?
+  final Future<void> Function()? onDelete;
+  final Future<ChapterElementEditorResult?> Function(NarrativeElement element)?
   onOpenExistingElement;
 
   bool get isEditMode => editorChapter != null;
@@ -102,9 +122,6 @@ class _ChapterEditorPageState extends State<_ChapterEditorPage> {
   late final TextEditingController _titleController;
   late final TextEditingController _descController;
   late final List<_ChapterSequenceItem> _chapterItems;
-  late final int _initialEditableIndex;
-  late final String _initialTitle;
-  late final String _initialDescription;
   late final List<NarrativeElement> _persistedElements;
   final List<NarrativeElementDraft> _draftElements = <NarrativeElementDraft>[];
   bool _isSaving = false;
@@ -133,26 +150,17 @@ class _ChapterEditorPageState extends State<_ChapterEditorPage> {
     return widget.editorChapter?.statusLabel ?? '进行';
   }
 
-  bool get _hasChanges {
-    return _currentTitle != _initialTitle ||
-        _currentDescription != _initialDescription ||
-        _draftElements.isNotEmpty ||
-        _didUnlockCompletedChapter ||
-        _currentEditableIndex != _initialEditableIndex;
-  }
-
   bool get _canSave => _currentTitle.isNotEmpty && !_isSaving;
 
   @override
   void initState() {
     super.initState();
-    _initialTitle = widget.editorChapter?.title.trim() ?? '';
-    _initialDescription = widget.editorChapter?.description?.trim() ?? '';
+    final initialTitle = widget.editorChapter?.title.trim() ?? '';
+    final initialDescription = widget.editorChapter?.description?.trim() ?? '';
     _persistedElements = List<NarrativeElement>.from(widget.existingElements);
-    _titleController = TextEditingController(text: _initialTitle);
-    _descController = TextEditingController(text: _initialDescription);
+    _titleController = TextEditingController(text: initialTitle);
+    _descController = TextEditingController(text: initialDescription);
     _chapterItems = _buildSequenceItems();
-    _initialEditableIndex = _chapterItems.indexWhere((item) => item.isEditable);
     _titleController.addListener(_onChanged);
     _descController.addListener(_onChanged);
   }
@@ -247,12 +255,20 @@ class _ChapterEditorPageState extends State<_ChapterEditorPage> {
       return;
     }
 
-    final updatedElement = await widget.onOpenExistingElement!(element);
-    if (!mounted || updatedElement == null) {
+    final editorResult = await widget.onOpenExistingElement!(element);
+    if (!mounted || editorResult == null) {
       return;
     }
 
     setState(() {
+      if (editorResult.wasDeleted) {
+        _persistedElements.removeWhere(
+          (current) => current.elementId == editorResult.deletedElementId,
+        );
+        return;
+      }
+
+      final updatedElement = editorResult.element!;
       final targetIndex = _persistedElements.indexWhere(
         (current) => current.elementId == updatedElement.elementId,
       );
@@ -266,91 +282,14 @@ class _ChapterEditorPageState extends State<_ChapterEditorPage> {
   }
 
   Future<void> _removeDraftElement(NarrativeElementDraft element) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showEditorConfirmationDialog(
       context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.4),
-      builder: (dialogContext) {
-        return Dialog(
-          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-          elevation: 0,
-          child: Container(
-            padding: const EdgeInsets.fromLTRB(32, 40, 32, 32),
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.black12, width: 1),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  '确 认 移 除',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 2.0,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  '将元素 "${element.title}" 从本章节中移除？',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: Colors.black54,
-                    height: 1.6,
-                  ),
-                ),
-                const SizedBox(height: 48),
-                Row(
-                  children: [
-                    Expanded(
-                      child: InkWell(
-                        onTap: () => Navigator.of(dialogContext).pop(true),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          decoration: const BoxDecoration(color: Colors.black),
-                          alignment: Alignment.center,
-                          child: const Text(
-                            '移 除',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 13,
-                              letterSpacing: 2.0,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: InkWell(
-                        onTap: () => Navigator.of(dialogContext).pop(false),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          decoration: BoxDecoration(
-                            border: Border.all(color: Colors.black12),
-                          ),
-                          alignment: Alignment.center,
-                          child: const Text(
-                            '取 消',
-                            style: TextStyle(
-                              color: Colors.black54,
-                              fontSize: 13,
-                              letterSpacing: 2.0,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+      title: '确 认 移 除',
+      content: '将元素 "${element.title}" 从本章节中移除？',
+      actionText: '移 除',
     );
 
-    if (confirmed == true && mounted) {
+    if (confirmed && mounted) {
       setState(() {
         _draftElements.remove(element);
       });
@@ -436,6 +375,31 @@ class _ChapterEditorPageState extends State<_ChapterEditorPage> {
     Navigator.of(context).pop();
   }
 
+  Future<void> _deleteChapter() async {
+    if (_isSaving || widget.onDelete == null) {
+      return;
+    }
+
+    final confirmed = await showEditorConfirmationDialog(
+      context: context,
+      title: '确 认 删 除',
+      content: '删除后，本章节会从结构中移除，章节内元素将保留并转入未分配章节。',
+      actionText: '删 除',
+    );
+    if (!confirmed || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _isSaving = true;
+    });
+    await widget.onDelete!();
+    if (!mounted) {
+      return;
+    }
+    Navigator.of(context).pop();
+  }
+
   String? _completionValidationMessage() {
     final combinedElements = <_CompletionElementState>[
       for (final element in _persistedElements)
@@ -508,50 +472,22 @@ class _ChapterEditorPageState extends State<_ChapterEditorPage> {
     );
   }
 
-  Widget _buildSaveButton() {
-    if (_isLockedCompletedChapter) {
-      return GestureDetector(
-        key: const ValueKey('chapterLockedSaveButton'),
-        onTap: _save,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 16),
-          decoration: const BoxDecoration(color: Color(0xFFE2E2E5)),
-          child: const Text(
-            '保 存',
-            style: TextStyle(
-              color: Color(0xFF9E9EA4),
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-              letterSpacing: 4.0,
-            ),
-          ),
-        ),
-      );
-    }
-
-    return IgnorePointer(
-      ignoring: !_hasChanges || !_canSave,
-      child: AnimatedOpacity(
-        duration: const Duration(milliseconds: 600),
-        curve: Curves.easeInOut,
-        opacity: _hasChanges ? 1.0 : 0.0,
-        child: GestureDetector(
-          onTap: _save,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 16),
-            decoration: const BoxDecoration(color: Colors.black),
-            child: Text(
-              _isSaving ? '保 存 中' : '保 存',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                letterSpacing: 4.0,
-              ),
-            ),
-          ),
-        ),
+  Widget _buildBottomActions() {
+    final isLocked = _isLockedCompletedChapter;
+    return EditorBottomActionBar(
+      leftLabel: _isSaving ? '保 存 中' : '保 存',
+      leftKey: ValueKey(
+        isLocked ? 'chapterLockedSaveButton' : 'chapterSaveButton',
       ),
+      leftTone: EditorBottomActionTone.primary,
+      leftEnabled: isLocked || _canSave,
+      onLeftTap: _save,
+      rightLabel: widget.isEditMode ? '删 除' : null,
+      rightKey: widget.isEditMode
+          ? const ValueKey('chapterDeleteButton')
+          : null,
+      rightEnabled: !_isSaving,
+      onRightTap: widget.isEditMode ? _deleteChapter : null,
     );
   }
 
@@ -588,10 +524,10 @@ class _ChapterEditorPageState extends State<_ChapterEditorPage> {
               ],
             ),
             Positioned(
-              bottom: 40,
+              bottom: 32,
               left: 0,
               right: 0,
-              child: Center(child: _buildSaveButton()),
+              child: Center(child: _buildBottomActions()),
             ),
           ],
         ),

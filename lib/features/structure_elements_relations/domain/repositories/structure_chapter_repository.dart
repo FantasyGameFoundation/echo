@@ -17,4 +17,6 @@ abstract class StructureChapterRepository {
     required int sortOrder,
     required String statusLabel,
   });
+
+  Future<bool> deleteChapter(String chapterId);
 }

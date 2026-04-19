@@ -20,4 +20,6 @@ abstract class NarrativeElementRepository {
     required String status,
     required List<String> photoPaths,
   });
+
+  Future<bool> deleteElement(String elementId);
 }

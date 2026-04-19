@@ -119,4 +119,40 @@ class LocalStructureChapterRepository implements StructureChapterRepository {
 
     return targetChapter;
   }
+
+  @override
+  Future<bool> deleteChapter(String chapterId) async {
+    final database = await _database();
+    final targetChapter = await database.structureChapters
+        .filter()
+        .chapterIdEqualTo(chapterId)
+        .findFirst();
+    if (targetChapter == null) {
+      return false;
+    }
+
+    final remainingChapters = await database.structureChapters
+        .filter()
+        .owningProjectIdEqualTo(targetChapter.owningProjectId)
+        .findAll();
+    remainingChapters.removeWhere((chapter) => chapter.chapterId == chapterId);
+    remainingChapters.sort(
+      (left, right) => left.sortOrder.compareTo(right.sortOrder),
+    );
+
+    final now = DateTime.now();
+    for (var index = 0; index < remainingChapters.length; index++) {
+      remainingChapters[index].sortOrder = index;
+      remainingChapters[index].updatedAt = now;
+    }
+
+    await database.writeTxn(() async {
+      if (remainingChapters.isNotEmpty) {
+        await database.structureChapters.putAll(remainingChapters);
+      }
+      await database.structureChapters.delete(targetChapter.isarId);
+    });
+
+    return true;
+  }
 }

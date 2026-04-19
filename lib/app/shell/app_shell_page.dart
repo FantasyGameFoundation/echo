@@ -12,6 +12,7 @@ import 'package:echo/features/project/presentation/widgets/project_sidebar.dart'
 import 'package:echo/features/structure_elements_relations/domain/element_status.dart';
 import 'package:echo/features/structure_elements_relations/domain/entities/narrative_element.dart';
 import 'package:echo/features/structure_elements_relations/domain/entities/project_relation_group.dart';
+import 'package:echo/features/structure_elements_relations/domain/entities/project_relation_member.dart';
 import 'package:echo/features/structure_elements_relations/domain/entities/project_relation_type.dart';
 import 'package:echo/features/structure_elements_relations/domain/entities/structure_chapter.dart';
 import 'package:echo/features/structure_elements_relations/domain/repositories/narrative_element_repository.dart';
@@ -62,6 +63,8 @@ class _AppShellPageState extends State<AppShellPage> {
   List<NarrativeElement> _narrativeElements = const <NarrativeElement>[];
   List<ProjectRelationType> _relationTypes = const <ProjectRelationType>[];
   List<ProjectRelationGroup> _relationGroups = const <ProjectRelationGroup>[];
+  List<ProjectRelationMember> _relationMembers =
+      const <ProjectRelationMember>[];
   List<StructureChapterCardData> _chapterCards =
       const <StructureChapterCardData>[];
   List<Map<String, dynamic>> _narrativeElementGroups =
@@ -286,6 +289,9 @@ class _AppShellPageState extends State<AppShellPage> {
                           newElements: elements,
                         );
                       },
+                  onDelete: () async {
+                    await _deleteChapter(chapter);
+                  },
                   onComplete:
                       ({
                         required String title,
@@ -410,6 +416,9 @@ class _AppShellPageState extends State<AppShellPage> {
                         await _refreshProjects();
                         return updatedRelationType;
                       },
+                  onDeleteRelationType: () async {
+                    await _deleteRelationType(relationType);
+                  },
                 ),
               ),
             );
@@ -511,6 +520,11 @@ class _AppShellPageState extends State<AppShellPage> {
         : await widget.projectRelationRepository.listRelationGroupsForProject(
             currentProject.projectId,
           );
+    final relationMembers = currentProject == null
+        ? const <ProjectRelationMember>[]
+        : await widget.projectRelationRepository.listRelationMembersForProject(
+            currentProject.projectId,
+          );
     if (!mounted) {
       return;
     }
@@ -522,6 +536,7 @@ class _AppShellPageState extends State<AppShellPage> {
       _narrativeElements = elements;
       _relationTypes = relationTypes;
       _relationGroups = relationGroups;
+      _relationMembers = relationMembers;
       _chapterCards = _buildChapterCards(
         chapters: chapters,
         elements: elements,
@@ -685,6 +700,34 @@ class _AppShellPageState extends State<AppShellPage> {
     await _refreshProjects();
   }
 
+  Future<void> _deleteChapter(StructureChapter chapter) async {
+    final chapterElements = _narrativeElements
+        .where((element) => element.owningChapterId == chapter.chapterId)
+        .toList();
+
+    for (final element in chapterElements) {
+      await widget.narrativeElementRepository.updateElement(
+        elementId: element.elementId,
+        title: element.title,
+        description: element.description,
+        chapterId: null,
+        status: element.status,
+        photoPaths: element.photoPaths,
+      );
+    }
+
+    final deleted = await widget.structureChapterRepository.deleteChapter(
+      chapter.chapterId,
+    );
+    if (!deleted) {
+      throw StateError(
+        'Failed to delete structure chapter: ${chapter.chapterId}',
+      );
+    }
+
+    await _refreshProjects();
+  }
+
   Future<void> _persistElementEdits({
     required NarrativeElement element,
     required String title,
@@ -730,7 +773,52 @@ class _AppShellPageState extends State<AppShellPage> {
     await _refreshProjects();
   }
 
-  Future<NarrativeElement?> _openNarrativeElementEditor({
+  Future<void> _deleteElement(NarrativeElement element) async {
+    await _deleteRelationGroupsReferencingElement(element.elementId);
+
+    final deleted = await widget.narrativeElementRepository.deleteElement(
+      element.elementId,
+    );
+    if (!deleted) {
+      throw StateError(
+        'Failed to delete narrative element: ${element.elementId}',
+      );
+    }
+
+    await _refreshProjects();
+  }
+
+  Future<void> _deleteRelationGroupsReferencingElement(String elementId) async {
+    final relationGroupIds = _relationMembers
+        .where(
+          (member) =>
+              member.linkedElementId == elementId ||
+              member.linkedSourceElementId == elementId,
+        )
+        .map((member) => member.owningGroupId)
+        .toSet();
+
+    for (final relationGroupId in relationGroupIds) {
+      await widget.projectRelationRepository.deleteRelationGroup(
+        relationGroupId,
+      );
+    }
+  }
+
+  Future<void> _deleteRelationType(ProjectRelationType relationType) async {
+    final deleted = await widget.projectRelationRepository.deleteRelationType(
+      relationType.relationTypeId,
+    );
+    if (!deleted) {
+      throw StateError(
+        'Failed to delete project relation type: ${relationType.relationTypeId}',
+      );
+    }
+
+    await _refreshProjects();
+  }
+
+  Future<ChapterElementEditorResult?> _openNarrativeElementEditor({
     required NarrativeElement element,
     required bool allowChapterSelection,
   }) async {
@@ -759,6 +847,9 @@ class _AppShellPageState extends State<AppShellPage> {
                   photoPaths: photoPaths,
                 );
               },
+          onDelete: () async {
+            await _deleteElement(element);
+          },
           onComplete:
               ({
                 required String title,
@@ -784,10 +875,10 @@ class _AppShellPageState extends State<AppShellPage> {
 
     for (final updatedElement in _narrativeElements) {
       if (updatedElement.elementId == element.elementId) {
-        return updatedElement;
+        return ChapterElementEditorResult.updated(updatedElement);
       }
     }
-    return null;
+    return ChapterElementEditorResult.deleted(element.elementId);
   }
 
   List<String> _chapterPreviewImageSources(List<NarrativeElement> elements) {
