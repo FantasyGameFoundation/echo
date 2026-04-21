@@ -24,6 +24,7 @@ import 'package:echo/features/structure_elements_relations/presentation/models/s
 import 'package:echo/features/structure_elements_relations/presentation/pages/chapter_create_page.dart';
 import 'package:echo/features/structure_elements_relations/presentation/pages/narrative_element_create_page.dart';
 import 'package:echo/features/structure_elements_relations/presentation/pages/project_relation_create_page.dart';
+import 'package:echo/features/structure_elements_relations/presentation/pages/project_relation_group_page.dart';
 import 'package:echo/features/structure_elements_relations/presentation/pages/structure_page_prototype.dart';
 import 'package:echo/features/timeline/presentation/pages/timeline_page_prototype.dart';
 import 'package:echo/shared/models/prototype_tab.dart';
@@ -402,8 +403,14 @@ class _AppShellPageState extends State<AppShellPage> {
             final relationType = _relationTypes[index];
             await Navigator.of(context).push(
               MaterialPageRoute(
-                builder: (_) => ProjectRelationCreatePage.edit(
+                builder: (_) => ProjectRelationGroupPage(
+                  projectId: _currentProject!.projectId,
+                  projectRelationRepository: widget.projectRelationRepository,
                   relationType: relationType,
+                  relationGroups: _relationGroups,
+                  relationMembers: _relationMembers,
+                  narrativeElements: _narrativeElements,
+                  chapters: _structureChapters,
                   onUpdateRelationType:
                       ({required name, required description}) async {
                         final updatedRelationType = await widget
@@ -422,6 +429,7 @@ class _AppShellPageState extends State<AppShellPage> {
                 ),
               ),
             );
+            await _refreshProjects();
           },
           onTabChanged: (index) {
             setState(() {

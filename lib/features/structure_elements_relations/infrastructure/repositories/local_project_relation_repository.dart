@@ -242,6 +242,8 @@ class LocalProjectRelationRepository implements ProjectRelationRepository {
   Future<ProjectRelationGroup> createRelationGroup({
     required String projectId,
     required String relationTypeId,
+    String? title,
+    String? description,
     required List<ProjectRelationDraftMember> members,
   }) async {
     if (members.length < 2) {
@@ -263,6 +265,12 @@ class LocalProjectRelationRepository implements ProjectRelationRepository {
     final relationGroup = ProjectRelationGroup.create(
       projectId: projectId,
       relationTypeId: relationTypeId,
+      relationGroupTitle: title?.trim().isNotEmpty == true
+          ? title!.trim()
+          : null,
+      relationGroupDescription: description?.trim().isNotEmpty == true
+          ? description!.trim()
+          : null,
       createdTimestamp: now,
       updatedTimestamp: now,
     );
@@ -283,6 +291,69 @@ class LocalProjectRelationRepository implements ProjectRelationRepository {
     await database.writeTxn(() async {
       await database.projectRelationGroups.put(relationGroup);
       await database.projectRelationMembers.putAll(relationMembers);
+    });
+
+    return relationGroup;
+  }
+
+  @override
+  Future<ProjectRelationGroup> updateRelationGroup({
+    required String relationGroupId,
+    String? title,
+    String? description,
+    required List<ProjectRelationDraftMember> members,
+  }) async {
+    if (members.length < 2) {
+      throw ArgumentError(
+        'A relation group must contain at least two selections.',
+      );
+    }
+
+    final database = await _database();
+    final relationGroup = await database.projectRelationGroups
+        .filter()
+        .relationGroupIdEqualTo(relationGroupId)
+        .findFirst();
+    if (relationGroup == null) {
+      throw StateError('Relation group not found: $relationGroupId');
+    }
+
+    final existingMembers = await database.projectRelationMembers
+        .filter()
+        .owningGroupIdEqualTo(relationGroupId)
+        .findAll();
+
+    final now = DateTime.now();
+    relationGroup.title = title?.trim().isNotEmpty == true
+        ? title!.trim()
+        : null;
+    relationGroup.description = description?.trim().isNotEmpty == true
+        ? description!.trim()
+        : null;
+    relationGroup.updatedAt = now;
+
+    final updatedMembers = <ProjectRelationMember>[
+      for (var index = 0; index < members.length; index++)
+        ProjectRelationMember.create(
+          projectId: relationGroup.owningProjectId,
+          groupId: relationGroup.relationGroupId,
+          targetKind: members[index].kind.name,
+          elementId: members[index].elementId,
+          photoPath: members[index].photoPath,
+          sourceElementId: members[index].sourceElementId,
+          sortOrder: index,
+          createdTimestamp: now,
+        ),
+    ];
+
+    await database.writeTxn(() async {
+      await database.projectRelationGroups.put(relationGroup);
+      if (existingMembers.isNotEmpty) {
+        await database.projectRelationMembers.deleteAll(
+          existingMembers.map((member) => member.isarId).toList(),
+        );
+      }
+      await database.projectRelationMembers.putAll(updatedMembers);
     });
 
     return relationGroup;

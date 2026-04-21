@@ -1,3 +1,4 @@
+import 'package:echo/features/structure_elements_relations/domain/element_status.dart';
 import 'package:echo/features/structure_elements_relations/presentation/models/structure_chapter_card_data.dart';
 import 'package:echo/features/structure_elements_relations/presentation/models/structure_relation_card_data.dart';
 import 'package:echo/features/structure_elements_relations/presentation/widgets/chapter_card.dart';
@@ -10,7 +11,7 @@ import 'package:echo/shared/models/prototype_tab.dart';
 import 'package:echo/shared/widgets/custom_bottom_nav_bar.dart';
 import 'package:flutter/material.dart';
 
-class StructurePagePrototype extends StatelessWidget {
+class StructurePagePrototype extends StatefulWidget {
   const StructurePagePrototype({
     super.key,
     required this.currentTabIndex,
@@ -45,6 +46,71 @@ class StructurePagePrototype extends StatelessWidget {
   final ValueChanged<PrototypeTab> onBottomTabChanged;
 
   @override
+  State<StructurePagePrototype> createState() => _StructurePagePrototypeState();
+}
+
+enum _ElementFilter { all, finding, ready }
+
+class _StructurePagePrototypeState extends State<StructurePagePrototype> {
+  _ElementFilter _activeElementFilter = _ElementFilter.all;
+
+  int get _findingElementCount => _countElementsByStatus(ElementStatus.finding);
+
+  int get _readyElementCount => _countElementsByStatus(ElementStatus.ready);
+
+  int _countElementsByStatus(ElementStatus status) {
+    var count = 0;
+    for (final group in widget.elementGroups) {
+      final elements = group['elements'];
+      if (elements is! List) {
+        continue;
+      }
+      for (final element in elements) {
+        if (element is Map<String, dynamic> && element['status'] == status) {
+          count += 1;
+        }
+      }
+    }
+    return count;
+  }
+
+  List<Map<String, dynamic>> get _visibleElementGroups {
+    if (_activeElementFilter == _ElementFilter.all) {
+      return widget.elementGroups;
+    }
+
+    final targetStatus = switch (_activeElementFilter) {
+      _ElementFilter.finding => ElementStatus.finding,
+      _ElementFilter.ready => ElementStatus.ready,
+      _ElementFilter.all => null,
+    };
+
+    if (targetStatus == null) {
+      return widget.elementGroups;
+    }
+
+    final visibleGroups = <Map<String, dynamic>>[];
+    for (final group in widget.elementGroups) {
+      final elements = group['elements'];
+      if (elements is! List) {
+        continue;
+      }
+      final filteredElements = elements.where((element) {
+        return element is Map<String, dynamic> &&
+            element['status'] == targetStatus;
+      }).toList();
+      if (filteredElements.isEmpty) {
+        continue;
+      }
+      visibleGroups.add(<String, dynamic>{
+        ...group,
+        'elements': filteredElements,
+      });
+    }
+    return visibleGroups;
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF7F7F9),
@@ -58,8 +124,8 @@ class StructurePagePrototype extends StatelessWidget {
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: SectionTabBar(
-                  selectedIndex: currentTabIndex,
-                  onTabChanged: onTabChanged,
+                  selectedIndex: widget.currentTabIndex,
+                  onTabChanged: widget.onTabChanged,
                 ),
               ),
             ),
@@ -67,7 +133,7 @@ class StructurePagePrototype extends StatelessWidget {
             Expanded(child: _buildCurrentSection()),
             CustomBottomNavBar(
               activeTab: PrototypeTab.structure,
-              onChangeTab: onBottomTabChanged,
+              onChangeTab: widget.onBottomTabChanged,
             ),
           ],
         ),
@@ -76,7 +142,7 @@ class StructurePagePrototype extends StatelessWidget {
   }
 
   Widget _buildCurrentSection() {
-    switch (currentTabIndex) {
+    switch (widget.currentTabIndex) {
       case 0:
         return _buildChaptersView();
       case 1:
@@ -95,13 +161,13 @@ class StructurePagePrototype extends StatelessWidget {
         children: [
           IconButton(
             icon: const Icon(Icons.menu, color: Colors.black87),
-            onPressed: onOpenSidebar,
+            onPressed: widget.onOpenSidebar,
           ),
           Expanded(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12.0),
               child: Text(
-                projectTitle,
+                widget.projectTitle,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
@@ -127,19 +193,22 @@ class StructurePagePrototype extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 24.0),
       children: [
-        for (var index = 0; index < chapterCards.length; index++)
+        for (var index = 0; index < widget.chapterCards.length; index++)
           ChapterCard(
-            chapterNumber: chapterCards[index].chapterNumber,
-            title: chapterCards[index].title,
-            elementCount: chapterCards[index].elementCount.toString(),
-            onTap: onOpenChapter == null ? null : () => onOpenChapter!(index),
+            chapterNumber: widget.chapterCards[index].chapterNumber,
+            title: widget.chapterCards[index].title,
+            elementCount: widget.chapterCards[index].elementCount.toString(),
+            onTap: widget.onOpenChapter == null
+                ? null
+                : () => widget.onOpenChapter!(index),
             extraTopRightWidget: _buildStatusIndicator(
-              chapterCards[index].statusLabel,
+              widget.chapterCards[index].statusLabel,
             ),
-            customContent: chapterCards[index].previewImageSources.isEmpty
-                ? _buildDescriptionText(chapterCards[index].description)
+            customContent:
+                widget.chapterCards[index].previewImageSources.isEmpty
+                ? _buildDescriptionText(widget.chapterCards[index].description)
                 : _buildChapterPhotoStrip(
-                    chapterCards[index].previewImageSources,
+                    widget.chapterCards[index].previewImageSources,
                   ),
           ),
         _buildAddChapterButton(),
@@ -155,13 +224,23 @@ class StructurePagePrototype extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 24.0),
           child: Row(
             children: [
-              _buildFilterTab('全部', isActive: true),
+              _buildFilterTab(
+                '全部',
+                isActive: _activeElementFilter == _ElementFilter.all,
+                onTap: () => _setElementFilter(_ElementFilter.all),
+              ),
               const SizedBox(width: 24),
-              _buildFilterTab('寻找中 (12)', isActive: false),
+              _buildFilterTab(
+                '寻找中 ($_findingElementCount)',
+                isActive: _activeElementFilter == _ElementFilter.finding,
+                onTap: () => _setElementFilter(_ElementFilter.finding),
+              ),
               const SizedBox(width: 24),
-              _buildFilterTab('已就绪 (5)', isActive: false),
-              const Spacer(),
-              const Icon(Icons.search, color: Colors.black87, size: 20),
+              _buildFilterTab(
+                '已就绪 ($_readyElementCount)',
+                isActive: _activeElementFilter == _ElementFilter.ready,
+                onTap: () => _setElementFilter(_ElementFilter.ready),
+              ),
             ],
           ),
         ),
@@ -169,7 +248,7 @@ class StructurePagePrototype extends StatelessWidget {
         Expanded(
           child: CustomScrollView(
             slivers: [
-              for (final group in elementGroups) ...[
+              for (final group in _visibleElementGroups) ...[
                 SliverPersistentHeader(
                   pinned: false,
                   delegate: StickyChapterHeaderDelegate(
@@ -184,9 +263,9 @@ class StructurePagePrototype extends StatelessWidget {
                       description: item['desc'],
                       status: item['status'],
                       images: item['images'],
-                      onTap: onOpenElement == null
+                      onTap: widget.onOpenElement == null
                           ? null
-                          : () => onOpenElement!(item['id'] as String),
+                          : () => widget.onOpenElement!(item['id'] as String),
                     );
                   }, childCount: group['elements'].length),
                 ),
@@ -212,14 +291,16 @@ class StructurePagePrototype extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 24.0),
       children: [
-        for (final relation in relationCards)
+        for (final relation in widget.relationCards)
           RelationCard(
             name: relation.name,
             description: relation.description,
             setCount: relation.setCount,
-            onTap: onOpenRelation == null
+            onTap: widget.onOpenRelation == null
                 ? null
-                : () => onOpenRelation!(relationCards.indexOf(relation)),
+                : () => widget.onOpenRelation!(
+                    widget.relationCards.indexOf(relation),
+                  ),
           ),
         _buildAddRelationButton(),
         const SizedBox(height: 40),
@@ -227,23 +308,39 @@ class StructurePagePrototype extends StatelessWidget {
     );
   }
 
-  Widget _buildFilterTab(String title, {required bool isActive}) {
-    return Container(
-      padding: const EdgeInsets.only(bottom: 4),
-      decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(
-            color: isActive ? const Color(0xFF333333) : Colors.transparent,
-            width: 2,
+  void _setElementFilter(_ElementFilter filter) {
+    if (_activeElementFilter == filter) {
+      return;
+    }
+    setState(() {
+      _activeElementFilter = filter;
+    });
+  }
+
+  Widget _buildFilterTab(
+    String title, {
+    required bool isActive,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.only(bottom: 4),
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(
+              color: isActive ? const Color(0xFF333333) : Colors.transparent,
+              width: 2,
+            ),
           ),
         ),
-      ),
-      child: Text(
-        title,
-        style: TextStyle(
-          fontSize: 14,
-          fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-          color: isActive ? const Color(0xFF333333) : Colors.grey.shade400,
+        child: Text(
+          title,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+            color: isActive ? const Color(0xFF333333) : Colors.grey.shade400,
+          ),
         ),
       ),
     );
@@ -251,7 +348,7 @@ class StructurePagePrototype extends StatelessWidget {
 
   Widget _buildAddElementButton() {
     return InkWell(
-      onTap: onAddElement,
+      onTap: widget.onAddElement,
       child: Container(
         height: 64,
         width: double.infinity,
@@ -391,7 +488,7 @@ class StructurePagePrototype extends StatelessWidget {
 
   Widget _buildAddChapterButton() {
     return InkWell(
-      onTap: onAddChapter,
+      onTap: widget.onAddChapter,
       child: Container(
         height: 64,
         width: double.infinity,
@@ -419,7 +516,7 @@ class StructurePagePrototype extends StatelessWidget {
 
   Widget _buildAddRelationButton() {
     return InkWell(
-      onTap: onAddRelation,
+      onTap: widget.onAddRelation,
       child: Container(
         height: 64,
         margin: const EdgeInsets.symmetric(vertical: 8),

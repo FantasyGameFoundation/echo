@@ -33,6 +33,15 @@ abstract class ProjectRelationRepository {
   Future<ProjectRelationGroup> createRelationGroup({
     required String projectId,
     required String relationTypeId,
+    String? title,
+    String? description,
+    required List<ProjectRelationDraftMember> members,
+  });
+
+  Future<ProjectRelationGroup> updateRelationGroup({
+    required String relationGroupId,
+    String? title,
+    String? description,
     required List<ProjectRelationDraftMember> members,
   });
 

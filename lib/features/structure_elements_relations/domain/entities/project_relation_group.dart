@@ -11,11 +11,15 @@ class ProjectRelationGroup {
     String? id,
     required String projectId,
     required String relationTypeId,
+    String? relationGroupTitle,
+    String? relationGroupDescription,
     DateTime? createdTimestamp,
     DateTime? updatedTimestamp,
   }) : relationGroupId = id ?? const Uuid().v4(),
        owningProjectId = projectId,
        linkedRelationTypeId = relationTypeId,
+       title = relationGroupTitle,
+       description = relationGroupDescription,
        createdAt = createdTimestamp ?? DateTime.now(),
        updatedAt = updatedTimestamp ?? DateTime.now();
 
@@ -30,6 +34,8 @@ class ProjectRelationGroup {
   @Index()
   late String linkedRelationTypeId;
 
+  String? title;
+  String? description;
   late DateTime createdAt;
   late DateTime updatedAt;
 }

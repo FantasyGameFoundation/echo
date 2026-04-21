@@ -1238,6 +1238,104 @@ void main() {
     },
   );
 
+  testWidgets(
+    'narrative element tab filters list and hides empty chapter headers',
+    (tester) async {
+      final projectRepository = _InMemoryProjectRepository(
+        initialProjects: <Project>[
+          Project.create(
+            id: 'project-element-counts',
+            projectTitle: '元素计数测试',
+            projectThemeStatement: '验证叙事元素状态计数',
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+        ],
+        currentProjectId: 'project-element-counts',
+      );
+      final chapterRepository = _InMemoryStructureChapterRepository(
+        initialChapters: <StructureChapter>[
+          StructureChapter.create(
+            id: 'chapter-finding',
+            projectId: 'project-element-counts',
+            chapterTitle: '第一章：寻找线索',
+            chapterSortOrder: 0,
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+          StructureChapter.create(
+            id: 'chapter-ready',
+            projectId: 'project-element-counts',
+            chapterTitle: '第二章：完成确认',
+            chapterSortOrder: 1,
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+        ],
+      );
+      final narrativeElementRepository = _InMemoryNarrativeElementRepository(
+        initialElements: <NarrativeElement>[
+          NarrativeElement.create(
+            id: 'element-finding',
+            projectId: 'project-element-counts',
+            chapterId: 'chapter-finding',
+            elementTitle: '寻找中的元素',
+            elementStatus: 'finding',
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+          NarrativeElement.create(
+            id: 'element-ready',
+            projectId: 'project-element-counts',
+            chapterId: 'chapter-ready',
+            elementTitle: '已就绪的元素',
+            elementStatus: 'ready',
+            linkedPhotoPaths: <String>['/tmp/ready.png'],
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        EchoApp(
+          projectRepository: projectRepository,
+          structureChapterRepository: chapterRepository,
+          narrativeElementRepository: narrativeElementRepository,
+          projectRelationRepository: _InMemoryProjectRelationRepository(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('叙事元素'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('寻找中 (1)'), findsOneWidget);
+      expect(find.text('已就绪 (1)'), findsOneWidget);
+      expect(find.byIcon(Icons.search), findsNothing);
+      expect(find.text('寻找中的元素'), findsOneWidget);
+      expect(find.text('已就绪的元素'), findsOneWidget);
+      expect(find.textContaining('第一章：寻找线索'), findsOneWidget);
+      expect(find.textContaining('第二章：完成确认'), findsOneWidget);
+
+      await tester.tap(find.text('已就绪 (1)'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('寻找中的元素'), findsNothing);
+      expect(find.text('已就绪的元素'), findsOneWidget);
+      expect(find.textContaining('第一章：寻找线索'), findsNothing);
+      expect(find.textContaining('第二章：完成确认'), findsOneWidget);
+
+      await tester.tap(find.text('寻找中 (1)'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('寻找中的元素'), findsOneWidget);
+      expect(find.text('已就绪的元素'), findsNothing);
+      expect(find.textContaining('第一章：寻找线索'), findsOneWidget);
+      expect(find.textContaining('第二章：完成确认'), findsNothing);
+    },
+  );
+
   testWidgets('tapping a narrative element card opens edit page and saves it', (
     tester,
   ) async {
@@ -2361,7 +2459,7 @@ void main() {
   });
 
   testWidgets(
-    'relation card opens edit page and only name/description are editable',
+    'relation card opens relation group page and edit button opens relation editor',
     (tester) async {
       final projectRepository = _InMemoryProjectRepository(
         initialProjects: <Project>[
@@ -2375,13 +2473,65 @@ void main() {
         ],
         currentProjectId: 'project-relation-edit',
       );
+      final chapterRepository = _InMemoryStructureChapterRepository(
+        initialChapters: <StructureChapter>[
+          StructureChapter.create(
+            id: 'chapter-relation-a',
+            projectId: 'project-relation-edit',
+            chapterTitle: '第一章：河岸',
+            chapterSortOrder: 0,
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+          StructureChapter.create(
+            id: 'chapter-relation-b',
+            projectId: 'project-relation-edit',
+            chapterTitle: '第二章：旧厂',
+            chapterSortOrder: 1,
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+        ],
+      );
+      final narrativeElementRepository = _InMemoryNarrativeElementRepository(
+        initialElements: <NarrativeElement>[
+          NarrativeElement.create(
+            id: 'element-river',
+            projectId: 'project-relation-edit',
+            chapterId: 'chapter-relation-a',
+            elementTitle: '江边水塔',
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+          NarrativeElement.create(
+            id: 'element-factory',
+            projectId: 'project-relation-edit',
+            chapterId: 'chapter-relation-b',
+            elementTitle: '旧厂烟囱',
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+        ],
+      );
       final relationRepository = _InMemoryProjectRelationRepository();
+      final relationType =
+          (await relationRepository.listRelationTypesForProject(
+            'project-relation-edit',
+          )).firstWhere((type) => type.name == '对比');
+      await relationRepository.createRelationGroup(
+        projectId: 'project-relation-edit',
+        relationTypeId: relationType.relationTypeId,
+        members: const <ProjectRelationDraftMember>[
+          ProjectRelationDraftMember.element(elementId: 'element-river'),
+          ProjectRelationDraftMember.element(elementId: 'element-factory'),
+        ],
+      );
 
       await tester.pumpWidget(
         EchoApp(
           projectRepository: projectRepository,
-          structureChapterRepository: _InMemoryStructureChapterRepository(),
-          narrativeElementRepository: _InMemoryNarrativeElementRepository(),
+          structureChapterRepository: chapterRepository,
+          narrativeElementRepository: narrativeElementRepository,
           projectRelationRepository: relationRepository,
         ),
       );
@@ -2390,6 +2540,20 @@ void main() {
       await tester.tap(find.text('关联关系'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('对比'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('relationGroupPageTitle')),
+        findsOneWidget,
+      );
+      expect(find.text('编辑关系'), findsOneWidget);
+      expect(find.text('江边水塔 / 旧厂烟囱'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('addRelationGroupButton')),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text('编辑关系'));
       await tester.pumpAndSettle();
 
       expect(find.text('编 辑 关 联 关 系'), findsOneWidget);
@@ -2407,7 +2571,517 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('新的对比'), findsOneWidget);
+
+      await tester.tap(find.byIcon(Icons.arrow_back_ios_new).first);
+      await tester.pumpAndSettle();
+
+      expect(find.text('新的对比'), findsOneWidget);
       expect(find.text('更新后的对比说明'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'relation group page shows only add group button when no groups exist',
+    (tester) async {
+      final projectRepository = _InMemoryProjectRepository(
+        initialProjects: <Project>[
+          Project.create(
+            id: 'project-relation-preview',
+            projectTitle: '关系预览测试',
+            projectThemeStatement: '验证关联关系详情预览',
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+        ],
+        currentProjectId: 'project-relation-preview',
+      );
+      final chapterRepository = _InMemoryStructureChapterRepository(
+        initialChapters: <StructureChapter>[
+          StructureChapter.create(
+            id: 'chapter-preview',
+            projectId: 'project-relation-preview',
+            chapterTitle: '第一章：样例章节',
+            chapterSortOrder: 0,
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+        ],
+      );
+      final narrativeElementRepository = _InMemoryNarrativeElementRepository(
+        initialElements: <NarrativeElement>[
+          NarrativeElement.create(
+            id: 'element-preview-a',
+            projectId: 'project-relation-preview',
+            chapterId: 'chapter-preview',
+            elementTitle: '河岸石阶',
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+          NarrativeElement.create(
+            id: 'element-preview-b',
+            projectId: 'project-relation-preview',
+            chapterId: 'chapter-preview',
+            elementTitle: '旧船缆绳',
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        EchoApp(
+          projectRepository: projectRepository,
+          structureChapterRepository: chapterRepository,
+          narrativeElementRepository: narrativeElementRepository,
+          projectRelationRepository: _InMemoryProjectRelationRepository(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('关联关系'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('呼应'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('当前还没有关联组，请点击下方按钮创建。'), findsNothing);
+      expect(find.text('形态的往复映照'), findsNothing);
+      expect(find.text('从局部裂隙到整体张力'), findsNothing);
+      await tester.scrollUntilVisible(
+        find.text('添 加 关 系 组'),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('addRelationGroupButton')),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets(
+    'add relation group page creates a real relation group from detail page',
+    (tester) async {
+      final projectRepository = _InMemoryProjectRepository(
+        initialProjects: <Project>[
+          Project.create(
+            id: 'project-relation-create-group',
+            projectTitle: '关系组创建测试',
+            projectThemeStatement: '验证新增关联组流程',
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+        ],
+        currentProjectId: 'project-relation-create-group',
+      );
+      final chapterRepository = _InMemoryStructureChapterRepository(
+        initialChapters: <StructureChapter>[
+          StructureChapter.create(
+            id: 'chapter-create-group-a',
+            projectId: 'project-relation-create-group',
+            chapterTitle: '第一章：样本 A',
+            chapterSortOrder: 0,
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+          StructureChapter.create(
+            id: 'chapter-create-group-b',
+            projectId: 'project-relation-create-group',
+            chapterTitle: '第二章：样本 B',
+            chapterSortOrder: 1,
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+        ],
+      );
+      final narrativeElementRepository = _InMemoryNarrativeElementRepository(
+        initialElements: <NarrativeElement>[
+          NarrativeElement.create(
+            id: 'element-create-group-a',
+            projectId: 'project-relation-create-group',
+            chapterId: 'chapter-create-group-a',
+            elementTitle: '河岸台阶',
+            linkedPhotoPaths: <String>['/tmp/create-group-a.jpg'],
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+          NarrativeElement.create(
+            id: 'element-create-group-b',
+            projectId: 'project-relation-create-group',
+            chapterId: 'chapter-create-group-b',
+            elementTitle: '风化岩面',
+            linkedPhotoPaths: <String>['/tmp/create-group-b.jpg'],
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+        ],
+      );
+      final relationRepository = _InMemoryProjectRelationRepository();
+
+      await tester.pumpWidget(
+        EchoApp(
+          projectRepository: projectRepository,
+          structureChapterRepository: chapterRepository,
+          narrativeElementRepository: narrativeElementRepository,
+          projectRelationRepository: relationRepository,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('关联关系'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('呼应'));
+      await tester.pumpAndSettle();
+
+      await tester.scrollUntilVisible(
+        find.text('添 加 关 系 组'),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('addRelationGroupButton')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('relationGroupTitleField')),
+        findsOneWidget,
+      );
+      final editorTitleBeforeInput = tester.widget<Text>(
+        find.byKey(const ValueKey('relationGroupEditorTitle')),
+      );
+      expect(editorTitleBeforeInput.data, isEmpty);
+      expect(
+        find.byKey(const ValueKey('relationGroupAddNodePlaceholder')),
+        findsOneWidget,
+      );
+
+      await tester.tap(
+        find.byKey(const ValueKey('relationGroupAddNodePlaceholder')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('选 择 关 联 内 容'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('completeRelationGroupSelectionButton')),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('河岸台阶'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('风化岩面'));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('completeRelationGroupSelectionButton')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('河岸台阶'), findsOneWidget);
+      expect(find.text('风化岩面'), findsOneWidget);
+
+      await tester.enterText(
+        find.byKey(const ValueKey('relationGroupTitleField')),
+        '河岸风化的结构呼应',
+      );
+      await tester.pumpAndSettle();
+      final editorTitleAfterInput = tester.widget<Text>(
+        find.byKey(const ValueKey('relationGroupEditorTitle')),
+      );
+      expect(editorTitleAfterInput.data, '河岸风化的结构呼应');
+      await tester.enterText(
+        find.byKey(const ValueKey('relationGroupDescriptionField')),
+        '真实创建后应在详情页出现这一组关系。',
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('completeRelationGroupButton')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('河岸风化的结构呼应'), findsOneWidget);
+      expect(find.text('真实创建后应在详情页出现这一组关系。'), findsOneWidget);
+      expect(find.text('当前还没有关联组，请点击下方按钮创建。'), findsNothing);
+      expect(
+        find.byKey(const ValueKey('relationGroupElementTile-河岸台阶')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('relationGroupElementTile-风化岩面')),
+        findsOneWidget,
+      );
+
+      final relationGroups = await relationRepository
+          .listRelationGroupsForProject('project-relation-create-group');
+      final createdGroup = relationGroups.singleWhere(
+        (group) => group.title == '河岸风化的结构呼应',
+      );
+      final relationMembers = await relationRepository
+          .listRelationMembersForProject('project-relation-create-group');
+
+      expect(createdGroup.description, '真实创建后应在详情页出现这一组关系。');
+      expect(
+        relationMembers.where(
+          (member) => member.owningGroupId == createdGroup.relationGroupId,
+        ),
+        hasLength(greaterThanOrEqualTo(2)),
+      );
+    },
+  );
+
+  testWidgets(
+    'tapping a relation group card opens edit page and saves updates',
+    (tester) async {
+      final projectRepository = _InMemoryProjectRepository(
+        initialProjects: <Project>[
+          Project.create(
+            id: 'project-relation-group-edit',
+            projectTitle: '关系组编辑测试',
+            projectThemeStatement: '验证关系组编辑流程',
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+        ],
+        currentProjectId: 'project-relation-group-edit',
+      );
+      final chapterRepository = _InMemoryStructureChapterRepository(
+        initialChapters: <StructureChapter>[
+          StructureChapter.create(
+            id: 'chapter-group-edit-a',
+            projectId: 'project-relation-group-edit',
+            chapterTitle: '第一章：江岸',
+            chapterSortOrder: 0,
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+          StructureChapter.create(
+            id: 'chapter-group-edit-b',
+            projectId: 'project-relation-group-edit',
+            chapterTitle: '第二章：山坳',
+            chapterSortOrder: 1,
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+        ],
+      );
+      final narrativeElementRepository = _InMemoryNarrativeElementRepository(
+        initialElements: <NarrativeElement>[
+          NarrativeElement.create(
+            id: 'element-group-edit-a',
+            projectId: 'project-relation-group-edit',
+            chapterId: 'chapter-group-edit-a',
+            elementTitle: '岸边石阶',
+            linkedPhotoPaths: <String>['/tmp/group-edit-a.jpg'],
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+          NarrativeElement.create(
+            id: 'element-group-edit-b',
+            projectId: 'project-relation-group-edit',
+            chapterId: 'chapter-group-edit-b',
+            elementTitle: '被风吹弯的草',
+            linkedPhotoPaths: <String>['/tmp/group-edit-b.jpg'],
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+        ],
+      );
+      final relationRepository = _InMemoryProjectRelationRepository();
+      final relationType =
+          (await relationRepository.listRelationTypesForProject(
+            'project-relation-group-edit',
+          )).firstWhere((type) => type.name == '呼应');
+      final createdGroup = await relationRepository.createRelationGroup(
+        projectId: 'project-relation-group-edit',
+        relationTypeId: relationType.relationTypeId,
+        title: '原始关系组标题',
+        description: '原始关系组说明',
+        members: const <ProjectRelationDraftMember>[
+          ProjectRelationDraftMember.element(elementId: 'element-group-edit-a'),
+          ProjectRelationDraftMember.element(elementId: 'element-group-edit-b'),
+        ],
+      );
+
+      await tester.pumpWidget(
+        EchoApp(
+          projectRepository: projectRepository,
+          structureChapterRepository: chapterRepository,
+          narrativeElementRepository: narrativeElementRepository,
+          projectRelationRepository: relationRepository,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('关联关系'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('呼应'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('原始关系组标题'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('relationGroupTitleField')),
+        findsOneWidget,
+      );
+      final editorTitle = tester.widget<Text>(
+        find.byKey(const ValueKey('relationGroupEditorTitle')),
+      );
+      expect(editorTitle.data, '原始关系组标题');
+
+      await tester.enterText(
+        find.byKey(const ValueKey('relationGroupTitleField')),
+        '更新后的关系组标题',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('relationGroupDescriptionField')),
+        '更新后的关系组说明',
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('completeRelationGroupButton')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('更新后的关系组标题'), findsOneWidget);
+      expect(find.text('更新后的关系组说明'), findsOneWidget);
+
+      final relationGroups = await relationRepository
+          .listRelationGroupsForProject('project-relation-group-edit');
+      final updatedGroup = relationGroups.singleWhere(
+        (group) => group.relationGroupId == createdGroup.relationGroupId,
+      );
+      expect(updatedGroup.title, '更新后的关系组标题');
+      expect(updatedGroup.description, '更新后的关系组说明');
+    },
+  );
+
+  testWidgets(
+    'relation group photo thumbnail opens full screen viewer and supports horizontal paging',
+    (tester) async {
+      final projectRepository = _InMemoryProjectRepository(
+        initialProjects: <Project>[
+          Project.create(
+            id: 'project-relation-fullscreen',
+            projectTitle: '关系全屏查看测试',
+            projectThemeStatement: '验证关系组照片全屏查看',
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+        ],
+        currentProjectId: 'project-relation-fullscreen',
+      );
+      final chapterRepository = _InMemoryStructureChapterRepository(
+        initialChapters: <StructureChapter>[
+          StructureChapter.create(
+            id: 'chapter-fullscreen-a',
+            projectId: 'project-relation-fullscreen',
+            chapterTitle: '第一章：河岸线',
+            chapterSortOrder: 0,
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+          StructureChapter.create(
+            id: 'chapter-fullscreen-b',
+            projectId: 'project-relation-fullscreen',
+            chapterTitle: '第二章：风化带',
+            chapterSortOrder: 1,
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+        ],
+      );
+      final narrativeElementRepository = _InMemoryNarrativeElementRepository(
+        initialElements: <NarrativeElement>[
+          NarrativeElement.create(
+            id: 'element-fullscreen-a',
+            projectId: 'project-relation-fullscreen',
+            chapterId: 'chapter-fullscreen-a',
+            elementTitle: '沿岸石壁',
+            linkedPhotoPaths: <String>['/tmp/relation-fullscreen-a.jpg'],
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+          NarrativeElement.create(
+            id: 'element-fullscreen-b',
+            projectId: 'project-relation-fullscreen',
+            chapterId: 'chapter-fullscreen-b',
+            elementTitle: '风化裂缝',
+            linkedPhotoPaths: <String>['/tmp/relation-fullscreen-b.jpg'],
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+        ],
+      );
+      final relationRepository = _InMemoryProjectRelationRepository();
+      final relationType =
+          (await relationRepository.listRelationTypesForProject(
+            'project-relation-fullscreen',
+          )).firstWhere((type) => type.name == '呼应');
+      await relationRepository.createRelationGroup(
+        projectId: 'project-relation-fullscreen',
+        relationTypeId: relationType.relationTypeId,
+        members: const <ProjectRelationDraftMember>[
+          ProjectRelationDraftMember.element(elementId: 'element-fullscreen-a'),
+          ProjectRelationDraftMember.element(elementId: 'element-fullscreen-b'),
+        ],
+      );
+
+      await tester.pumpWidget(
+        EchoApp(
+          projectRepository: projectRepository,
+          structureChapterRepository: chapterRepository,
+          narrativeElementRepository: narrativeElementRepository,
+          projectRelationRepository: relationRepository,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('关联关系'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('呼应'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const ValueKey('relationGroupThumbnail-group-1-0')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('relationFullscreenPageView')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('relationFullscreenTypeLabel')),
+        findsOneWidget,
+      );
+      final typeLabel = tester.widget<Text>(
+        find.byKey(const ValueKey('relationFullscreenTypeLabel')),
+      );
+      expect(typeLabel.data, '呼应');
+      expect(
+        find.byKey(const ValueKey('relationFullscreenNodeTitle')),
+        findsOneWidget,
+      );
+      expect(find.text('沿岸石壁'), findsOneWidget);
+      expect(find.text('CH.01'), findsOneWidget);
+      expect(find.text('1 / 2'), findsOneWidget);
+
+      await tester.fling(
+        find.byKey(const ValueKey('relationFullscreenPageView')),
+        const Offset(-400, 0),
+        1000,
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('风化裂缝'), findsOneWidget);
+      expect(find.text('CH.02'), findsOneWidget);
+      expect(find.text('2 / 2'), findsOneWidget);
+
+      await tester.tap(
+        find.byKey(const ValueKey('relationFullscreenCloseButton')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('relationGroupPageTitle')),
+        findsOneWidget,
+      );
     },
   );
 
@@ -2453,6 +3127,9 @@ void main() {
       await tester.tap(find.text('关联关系'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('对比'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('编辑关系'));
       await tester.pumpAndSettle();
 
       expect(
@@ -2530,6 +3207,8 @@ void main() {
       await tester.tap(find.text('关联关系'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('对比'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('编辑关系'));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('relationTypeDeleteButton')));
       await tester.pumpAndSettle();
@@ -3111,6 +3790,8 @@ class _InMemoryProjectRelationRepository implements ProjectRelationRepository {
   Future<ProjectRelationGroup> createRelationGroup({
     required String projectId,
     required String relationTypeId,
+    String? title,
+    String? description,
     required List<ProjectRelationDraftMember> members,
   }) async {
     if (members.length < 2) {
@@ -3125,6 +3806,12 @@ class _InMemoryProjectRelationRepository implements ProjectRelationRepository {
       id: 'group-${(_groupsByProject[projectId]?.length ?? 0) + 1}',
       projectId: projectId,
       relationTypeId: relationTypeId,
+      relationGroupTitle: title?.trim().isNotEmpty == true
+          ? title!.trim()
+          : null,
+      relationGroupDescription: description?.trim().isNotEmpty == true
+          ? description!.trim()
+          : null,
       createdTimestamp: now,
       updatedTimestamp: now,
     );
@@ -3149,6 +3836,58 @@ class _InMemoryProjectRelationRepository implements ProjectRelationRepository {
     _membersByProject.putIfAbsent(projectId, () => <ProjectRelationMember>[]);
     _membersByProject[projectId]!.addAll(relationMembers);
     return relationGroup;
+  }
+
+  @override
+  Future<ProjectRelationGroup> updateRelationGroup({
+    required String relationGroupId,
+    String? title,
+    String? description,
+    required List<ProjectRelationDraftMember> members,
+  }) async {
+    if (members.length < 2) {
+      throw ArgumentError(
+        'A relation group must contain at least two selections.',
+      );
+    }
+
+    for (final entry in _groupsByProject.entries) {
+      for (final group in entry.value) {
+        if (group.relationGroupId != relationGroupId) {
+          continue;
+        }
+
+        final now = DateTime(2026, 1, 9);
+        group.title = title?.trim().isNotEmpty == true ? title!.trim() : null;
+        group.description = description?.trim().isNotEmpty == true
+            ? description!.trim()
+            : null;
+        group.updatedAt = now;
+
+        final rebuiltMembers = <ProjectRelationMember>[
+          for (var index = 0; index < members.length; index++)
+            ProjectRelationMember.create(
+              id: 'member-${entry.key}-$relationGroupId-${index + 1}',
+              projectId: entry.key,
+              groupId: relationGroupId,
+              targetKind: members[index].kind.name,
+              elementId: members[index].elementId,
+              photoPath: members[index].photoPath,
+              sourceElementId: members[index].sourceElementId,
+              sortOrder: index,
+              createdTimestamp: now,
+            ),
+        ];
+        _membersByProject[entry.key] ??= <ProjectRelationMember>[];
+        _membersByProject[entry.key]!.removeWhere(
+          (member) => member.owningGroupId == relationGroupId,
+        );
+        _membersByProject[entry.key]!.addAll(rebuiltMembers);
+        return group;
+      }
+    }
+
+    throw StateError('Relation group not found: $relationGroupId');
   }
 
   @override
