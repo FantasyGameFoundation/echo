@@ -41,18 +41,25 @@ class ProjectRelationCreatePage extends StatefulWidget {
 class _ProjectRelationCreatePageState extends State<ProjectRelationCreatePage> {
   late final TextEditingController _nameController;
   late final TextEditingController _descController;
+  late final String _initialName;
+  late final String _initialDescription;
   bool _isSaving = false;
+  bool _didFinishEditing = false;
 
   bool get _canSave => _nameController.text.trim().isNotEmpty && !_isSaving;
+
+  bool get _hasUnsavedChanges =>
+      _nameController.text.trim() != _initialName ||
+      _descController.text.trim() != _initialDescription;
 
   @override
   void initState() {
     super.initState();
-    final initialName = widget.relationType?.name.trim() ?? '';
-    final initialDescription = widget.relationType?.description.trim() ?? '';
-    _nameController = TextEditingController(text: initialName)
+    _initialName = widget.relationType?.name.trim() ?? '';
+    _initialDescription = widget.relationType?.description.trim() ?? '';
+    _nameController = TextEditingController(text: _initialName)
       ..addListener(_handleChanged);
-    _descController = TextEditingController(text: initialDescription)
+    _descController = TextEditingController(text: _initialDescription)
       ..addListener(_handleChanged);
   }
 
@@ -69,6 +76,22 @@ class _ProjectRelationCreatePageState extends State<ProjectRelationCreatePage> {
     if (mounted) {
       setState(() {});
     }
+  }
+
+  Future<bool> _confirmDiscardUnsavedChanges() async {
+    if (_didFinishEditing || _isSaving || !_hasUnsavedChanges) {
+      return true;
+    }
+    return showDiscardUnsavedChangesDialog(context: context);
+  }
+
+  Future<void> _handleBackNavigation() async {
+    final shouldPop = await _confirmDiscardUnsavedChanges();
+    if (!mounted || !shouldPop) {
+      return;
+    }
+    _didFinishEditing = true;
+    Navigator.of(context).pop();
   }
 
   Future<void> _save() async {
@@ -96,6 +119,7 @@ class _ProjectRelationCreatePageState extends State<ProjectRelationCreatePage> {
       return;
     }
 
+    _didFinishEditing = true;
     Navigator.of(context).pop();
   }
 
@@ -107,7 +131,7 @@ class _ProjectRelationCreatePageState extends State<ProjectRelationCreatePage> {
     final confirmed = await showEditorConfirmationDialog(
       context: context,
       title: '确 认 删 除',
-      content: '删除后，该关系类型及其关联关系集合会一并移除，当前页面将返回列表。',
+      content: '删除后，仅当前关系类型及其下属关联组会移除；元素、照片与章节内容会保留，当前页面将返回列表。',
       actionText: '删 除',
     );
     if (!confirmed || !mounted) {
@@ -121,93 +145,111 @@ class _ProjectRelationCreatePageState extends State<ProjectRelationCreatePage> {
     if (!mounted) {
       return;
     }
+    _didFinishEditing = true;
     Navigator.of(context).pop();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF7F7F9),
-      body: SafeArea(
-        child: Stack(
-          children: [
-            Column(
-              children: [
-                _buildTopBar(),
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 32.0,
-                      vertical: 40.0,
-                    ),
-                    physics: const BouncingScrollPhysics(),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildSectionLabel('关 系 名 称'),
-                        const SizedBox(height: 8),
-                        TextField(
-                          key: const ValueKey('relationTypeNameField'),
-                          controller: _nameController,
-                          style: const TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 2.0,
-                            color: Colors.black87,
-                          ),
-                          decoration: _buildInputDecoration('例如：视觉呼应、时空对比...'),
-                        ),
-                        const SizedBox(height: 48),
-                        _buildSectionLabel('关 系 描 述'),
-                        const SizedBox(height: 12),
-                        TextField(
-                          key: const ValueKey('relationTypeDescriptionField'),
-                          controller: _descController,
-                          maxLines: null,
-                          minLines: 3,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontStyle: FontStyle.italic,
-                            fontWeight: FontWeight.w300,
-                            color: Colors.black54,
-                            height: 1.8,
-                          ),
-                          decoration: const InputDecoration(
-                            hintText: '描述这组关系背后的叙事逻辑...',
-                            hintStyle: TextStyle(
-                              color: Colors.black12,
-                              fontStyle: FontStyle.italic,
+    return PopScope<void>(
+      canPop: _didFinishEditing || _isSaving || !_hasUnsavedChanges,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) {
+          return;
+        }
+        final navigator = Navigator.of(context);
+        final shouldPop = await _confirmDiscardUnsavedChanges();
+        if (!mounted || !shouldPop) {
+          return;
+        }
+        _didFinishEditing = true;
+        navigator.pop();
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF7F7F9),
+        body: SafeArea(
+          child: Stack(
+            children: [
+              Column(
+                children: [
+                  _buildTopBar(),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 32.0,
+                        vertical: 40.0,
+                      ),
+                      physics: const BouncingScrollPhysics(),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildSectionLabel('关 系 名 称'),
+                          const SizedBox(height: 8),
+                          TextField(
+                            key: const ValueKey('relationTypeNameField'),
+                            controller: _nameController,
+                            style: const TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 2.0,
+                              color: Colors.black87,
                             ),
-                            border: InputBorder.none,
+                            decoration: _buildInputDecoration(
+                              '例如：视觉呼应、时空对比...',
+                            ),
                           ),
-                        ),
-                      ],
+                          const SizedBox(height: 48),
+                          _buildSectionLabel('关 系 描 述'),
+                          const SizedBox(height: 12),
+                          TextField(
+                            key: const ValueKey('relationTypeDescriptionField'),
+                            controller: _descController,
+                            maxLines: null,
+                            minLines: 3,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontStyle: FontStyle.italic,
+                              fontWeight: FontWeight.w300,
+                              color: Colors.black54,
+                              height: 1.8,
+                            ),
+                            decoration: const InputDecoration(
+                              hintText: '描述这组关系背后的叙事逻辑...',
+                              hintStyle: TextStyle(
+                                color: Colors.black12,
+                                fontStyle: FontStyle.italic,
+                              ),
+                              border: InputBorder.none,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              ],
-            ),
-            Positioned(
-              bottom: 32,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: EditorBottomActionBar(
-                  leftLabel: _isSaving ? '保 存 中' : '保 存',
-                  leftKey: const ValueKey('relationTypeSaveButton'),
-                  leftTone: EditorBottomActionTone.primary,
-                  leftEnabled: _canSave,
-                  onLeftTap: _save,
-                  rightLabel: widget.isEditMode ? '删 除' : null,
-                  rightKey: widget.isEditMode
-                      ? const ValueKey('relationTypeDeleteButton')
-                      : null,
-                  rightEnabled: !_isSaving,
-                  onRightTap: widget.isEditMode ? _deleteRelationType : null,
+                ],
+              ),
+              Positioned(
+                bottom: 32,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: EditorBottomActionBar(
+                    leftLabel: _isSaving ? '保 存 中' : '保 存',
+                    leftKey: const ValueKey('relationTypeSaveButton'),
+                    leftTone: EditorBottomActionTone.primary,
+                    leftEnabled: _canSave,
+                    onLeftTap: _save,
+                    rightLabel: widget.isEditMode ? '删 除' : null,
+                    rightKey: widget.isEditMode
+                        ? const ValueKey('relationTypeDeleteButton')
+                        : null,
+                    rightEnabled: !_isSaving,
+                    onRightTap: widget.isEditMode ? _deleteRelationType : null,
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -225,7 +267,7 @@ class _ProjectRelationCreatePageState extends State<ProjectRelationCreatePage> {
               color: Colors.black87,
               size: 18,
             ),
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: _handleBackNavigation,
           ),
           Text(
             widget.isEditMode ? '编 辑 关 系 类 型' : '添 加 关 系 类 型',

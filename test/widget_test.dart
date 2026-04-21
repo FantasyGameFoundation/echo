@@ -29,6 +29,8 @@ import 'package:echo/features/structure_elements_relations/presentation/models/s
 import 'package:echo/features/structure_elements_relations/presentation/pages/chapter_create_page.dart';
 import 'package:echo/features/structure_elements_relations/presentation/pages/chapter_narrative_element_create_page.dart';
 import 'package:echo/features/structure_elements_relations/presentation/pages/narrative_element_create_page.dart';
+import 'package:echo/features/structure_elements_relations/presentation/pages/project_relation_create_page.dart';
+import 'package:echo/features/structure_elements_relations/presentation/pages/project_relation_group_create_page.dart';
 import 'package:echo/features/structure_elements_relations/presentation/pages/structure_page_prototype.dart';
 import 'package:echo/features/structure_elements_relations/presentation/widgets/narrative_list_tile.dart';
 import 'package:echo/features/timeline/presentation/pages/timeline_page_prototype.dart';
@@ -596,7 +598,7 @@ void main() {
   });
 
   testWidgets(
-    'chapter edit page shows delete action and removes chapter while unassigning elements',
+    'delete confirmation: chapter edit page shows delete action and removes chapter while unassigning elements',
     (tester) async {
       final projectRepository = _InMemoryProjectRepository(
         initialProjects: <Project>[
@@ -655,7 +657,10 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('确 认 删 除'), findsOneWidget);
-      expect(find.text('删除后，本章节会从结构中移除，章节内元素将保留并转入未分配章节。'), findsOneWidget);
+      expect(
+        find.text('删除后，仅当前章节会从结构中移除；章节内元素会保留并转入未分配；其他章节与关系内容不受影响。'),
+        findsOneWidget,
+      );
 
       await tester.tap(
         find.descendant(of: find.byType(Dialog), matching: find.text('删 除')),
@@ -838,7 +843,7 @@ void main() {
   );
 
   testWidgets(
-    'completed chapter blocks save until continue editing is tapped',
+    'complete/editing rules: completed chapter blocks save until continue editing is tapped',
     (tester) async {
       var saveCalls = 0;
       var completeCalls = 0;
@@ -914,7 +919,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('chapterLockedSaveButton')));
       await tester.pumpAndSettle();
 
-      expect(find.text('章节已完成无法保存，如需编辑请点击右上角继续编辑'), findsOneWidget);
+      expect(find.text('章节已完成，请先点击右上角继续编辑'), findsOneWidget);
       expect(saveCalls, 0);
 
       await tester.tap(find.byKey(const ValueKey('chapterCompleteButton')));
@@ -937,7 +942,7 @@ void main() {
   );
 
   testWidgets(
-    'completed chapter can unlock edit then save later changes as ongoing',
+    'complete/editing rules: completed chapter can unlock edit then save later changes as ongoing',
     (tester) async {
       var saveCalls = 0;
       String? savedStatusLabel;
@@ -1417,7 +1422,7 @@ void main() {
   });
 
   testWidgets(
-    'narrative element edit page shows delete action and removes linked relation groups',
+    'delete confirmation: narrative element edit page shows delete action and removes linked relation groups',
     (tester) async {
       final projectRepository = _InMemoryProjectRepository(
         initialProjects: <Project>[
@@ -1497,7 +1502,10 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('确 认 删 除'), findsOneWidget);
-      expect(find.text('删除后，该元素及其关联关系引用会一并移除，当前页面将返回列表。'), findsOneWidget);
+      expect(
+        find.text('删除后，仅当前元素及引用它的关联关系会移除；章节与关系类型会保留，当前页面将返回列表。'),
+        findsOneWidget,
+      );
 
       await tester.tap(
         find.descendant(of: find.byType(Dialog), matching: find.text('删 除')),
@@ -1715,18 +1723,20 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('narrativeLockedSaveButton')));
       await tester.pumpAndSettle();
 
-      expect(find.text('叙事元素已完成无法编辑，请点击右上角继续编辑'), findsOneWidget);
+      expect(find.text('叙事元素已完成，请先点击右上角继续编辑'), findsOneWidget);
       expect(saveCalls, 0);
 
       await tester.tap(find.byKey(const ValueKey('narrativeCompleteButton')));
       await tester.pumpAndSettle();
 
-      expect(find.text('确认更改'), findsOneWidget);
-      expect(find.text('元素所属章节已完成，需更改为可编辑'), findsOneWidget);
-      await tester.tap(find.text('修改'));
+      expect(find.text('确认继续编辑'), findsOneWidget);
+      expect(find.text('继续编辑该元素后，所属章节也会恢复为可编辑状态。'), findsOneWidget);
+      await tester.tap(
+        find.descendant(of: find.byType(Dialog), matching: find.text('继续编辑')),
+      );
       await tester.pumpAndSettle();
 
-      expect(find.text('叙事元素现可继续编辑'), findsOneWidget);
+      expect(find.text('叙事元素及所属章节现可继续编辑'), findsOneWidget);
       expect(find.text('元素完成'), findsOneWidget);
       expect(
         find.byKey(const ValueKey('narrativeLockedSaveButton')),
@@ -1743,7 +1753,7 @@ void main() {
   );
 
   testWidgets(
-    'completed element inside completed chapter requires confirmation before continue editing',
+    'complete/editing rules: completed element inside completed chapter requires confirmation before continue editing',
     (tester) async {
       var saveCalls = 0;
       String? savedUnlockChapterId;
@@ -1802,10 +1812,12 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('narrativeCompleteButton')));
       await tester.pumpAndSettle();
 
-      expect(find.text('确认更改'), findsOneWidget);
-      expect(find.text('元素所属章节已完成，需更改为可编辑'), findsOneWidget);
+      expect(find.text('确认继续编辑'), findsOneWidget);
+      expect(find.text('继续编辑该元素后，所属章节也会恢复为可编辑状态。'), findsOneWidget);
 
-      await tester.tap(find.text('修改'));
+      await tester.tap(
+        find.descendant(of: find.byType(Dialog), matching: find.text('继续编辑')),
+      );
       await tester.pumpAndSettle();
 
       await tester.ensureVisible(
@@ -1823,7 +1835,67 @@ void main() {
   );
 
   testWidgets(
-    'completed narrative element unlocks the newly selected completed chapter when reassigned',
+    'complete/editing rules: completed element inside ongoing chapter continues editing without confirmation',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: NarrativeElementEditPage(
+            chapters: <StructureChapter>[
+              StructureChapter.create(
+                id: 'chapter-ongoing',
+                projectId: 'project-a',
+                chapterTitle: '第一章',
+                chapterStatus: '进行',
+                chapterSortOrder: 0,
+                createdTimestamp: DateTime(2026),
+                updatedTimestamp: DateTime(2026),
+              ),
+            ],
+            element: NarrativeElement.create(
+              id: 'element-ready-ongoing',
+              projectId: 'project-a',
+              chapterId: 'chapter-ongoing',
+              elementTitle: '完成元素',
+              elementStatus: 'ready',
+              linkedPhotoPaths: <String>['/tmp/done.png'],
+              createdTimestamp: DateTime(2026),
+              updatedTimestamp: DateTime(2026),
+            ),
+            onSave:
+                ({
+                  required String title,
+                  required String description,
+                  required String? chapterId,
+                  required String status,
+                  required String? unlockChapterId,
+                  required List<String> photoPaths,
+                }) async {},
+            onComplete:
+                ({
+                  required String title,
+                  required String description,
+                  required String? chapterId,
+                  required String status,
+                  required String? unlockChapterId,
+                  required List<String> photoPaths,
+                }) async {},
+            onDelete: () async {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('narrativeCompleteButton')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('确认继续编辑'), findsNothing);
+      expect(find.text('叙事元素现可继续编辑'), findsOneWidget);
+      expect(find.text('元素完成'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'complete/editing rules: completed narrative element unlocks the newly selected completed chapter when reassigned',
     (tester) async {
       String? savedUnlockChapterId;
 
@@ -1891,7 +1963,9 @@ void main() {
 
       await tester.tap(find.byKey(const ValueKey('narrativeCompleteButton')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('修改'));
+      await tester.tap(
+        find.descendant(of: find.byType(Dialog), matching: find.text('继续编辑')),
+      );
       await tester.pumpAndSettle();
 
       await tester.ensureVisible(
@@ -3076,6 +3150,600 @@ void main() {
   );
 
   testWidgets(
+    'delete confirmation: relation group edit page deletes relation group and refreshes detail page',
+    (tester) async {
+      final projectRepository = _InMemoryProjectRepository(
+        initialProjects: <Project>[
+          Project.create(
+            id: 'project-relation-group-delete',
+            projectTitle: '关系组删除测试',
+            projectThemeStatement: '验证关系组删除闭环',
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+        ],
+        currentProjectId: 'project-relation-group-delete',
+      );
+      final chapterRepository = _InMemoryStructureChapterRepository(
+        initialChapters: <StructureChapter>[
+          StructureChapter.create(
+            id: 'chapter-group-delete-a',
+            projectId: 'project-relation-group-delete',
+            chapterTitle: '第一章：江岸',
+            chapterSortOrder: 0,
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+          StructureChapter.create(
+            id: 'chapter-group-delete-b',
+            projectId: 'project-relation-group-delete',
+            chapterTitle: '第二章：山体',
+            chapterSortOrder: 1,
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+        ],
+      );
+      final narrativeElementRepository = _InMemoryNarrativeElementRepository(
+        initialElements: <NarrativeElement>[
+          NarrativeElement.create(
+            id: 'element-group-delete-a',
+            projectId: 'project-relation-group-delete',
+            chapterId: 'chapter-group-delete-a',
+            elementTitle: '沿岸石壁',
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+          NarrativeElement.create(
+            id: 'element-group-delete-b',
+            projectId: 'project-relation-group-delete',
+            chapterId: 'chapter-group-delete-b',
+            elementTitle: '风化裂缝',
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+        ],
+      );
+      final relationRepository = _InMemoryProjectRelationRepository();
+      final relationType =
+          (await relationRepository.listRelationTypesForProject(
+            'project-relation-group-delete',
+          )).firstWhere((type) => type.name == '呼应');
+      final relationGroup = await relationRepository.createRelationGroup(
+        projectId: 'project-relation-group-delete',
+        relationTypeId: relationType.relationTypeId,
+        title: '待删除关系组',
+        description: '删除后详情页应立即刷新。',
+        members: const <ProjectRelationDraftMember>[
+          ProjectRelationDraftMember.element(
+            elementId: 'element-group-delete-a',
+          ),
+          ProjectRelationDraftMember.element(
+            elementId: 'element-group-delete-b',
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        EchoApp(
+          projectRepository: projectRepository,
+          structureChapterRepository: chapterRepository,
+          narrativeElementRepository: narrativeElementRepository,
+          projectRelationRepository: relationRepository,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('关联关系'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('呼应'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('待删除关系组'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('relationGroupDeleteButton')),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byKey(const ValueKey('relationGroupDeleteButton')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('确 认 删 除'), findsOneWidget);
+      expect(
+        find.text('删除后，仅当前关系组及其成员会移除；关系类型、元素与照片会保留，当前页面将返回详情。'),
+        findsOneWidget,
+      );
+
+      await tester.tap(
+        find.descendant(of: find.byType(Dialog), matching: find.text('删 除')),
+      );
+      await tester.pumpAndSettle();
+
+      final relationGroups = await relationRepository
+          .listRelationGroupsForProject('project-relation-group-delete');
+      final relationMembers = await relationRepository
+          .listRelationMembersForProject('project-relation-group-delete');
+
+      expect(
+        relationGroups.where(
+          (group) => group.relationGroupId == relationGroup.relationGroupId,
+        ),
+        isEmpty,
+      );
+      expect(
+        relationMembers.where(
+          (member) => member.owningGroupId == relationGroup.relationGroupId,
+        ),
+        isEmpty,
+      );
+      expect(
+        find.byKey(const ValueKey('relationGroupPageTitle')),
+        findsOneWidget,
+      );
+      expect(find.text('待删除关系组'), findsNothing);
+      expect(
+        find.byKey(const ValueKey('addRelationGroupButton')),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets(
+    'unsaved changes: chapter edit page pops immediately when there are no unsaved changes',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) {
+              return Scaffold(
+                body: Center(
+                  child: TextButton(
+                    key: const ValueKey('openChapterEditorButton'),
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => ChapterEditPage(
+                            existingChapters: <StructureChapter>[
+                              StructureChapter.create(
+                                id: 'chapter-unsaved-clean',
+                                projectId: 'project-unsaved-clean',
+                                chapterTitle: '无改动章节',
+                                chapterSortOrder: 0,
+                                createdTimestamp: DateTime(2026),
+                                updatedTimestamp: DateTime(2026),
+                              ),
+                            ],
+                            chapter: StructureChapter.create(
+                              id: 'chapter-unsaved-clean',
+                              projectId: 'project-unsaved-clean',
+                              chapterTitle: '无改动章节',
+                              chapterSortOrder: 0,
+                              createdTimestamp: DateTime(2026),
+                              updatedTimestamp: DateTime(2026),
+                            ),
+                            existingElements: const <NarrativeElement>[],
+                            onSave:
+                                ({
+                                  required title,
+                                  required description,
+                                  required sortOrder,
+                                  required statusLabel,
+                                  required elements,
+                                }) async {},
+                            onComplete:
+                                ({
+                                  required title,
+                                  required description,
+                                  required sortOrder,
+                                  required statusLabel,
+                                  required elements,
+                                }) async {},
+                            onDelete: () async {},
+                          ),
+                        ),
+                      );
+                    },
+                    child: const Text('open'),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('openChapterEditorButton')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.arrow_back_ios_new));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('openChapterEditorButton')),
+        findsOneWidget,
+      );
+      expect(find.text('放 弃 更 改'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'unsaved changes: chapter edit page confirms before leaving when there are unsaved changes',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) {
+              return Scaffold(
+                body: Center(
+                  child: TextButton(
+                    key: const ValueKey('openChapterUnsavedEditorButton'),
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => ChapterEditPage(
+                            existingChapters: <StructureChapter>[
+                              StructureChapter.create(
+                                id: 'chapter-unsaved-dirty',
+                                projectId: 'project-unsaved-dirty',
+                                chapterTitle: '原始章节',
+                                chapterSortOrder: 0,
+                                createdTimestamp: DateTime(2026),
+                                updatedTimestamp: DateTime(2026),
+                              ),
+                            ],
+                            chapter: StructureChapter.create(
+                              id: 'chapter-unsaved-dirty',
+                              projectId: 'project-unsaved-dirty',
+                              chapterTitle: '原始章节',
+                              chapterSortOrder: 0,
+                              createdTimestamp: DateTime(2026),
+                              updatedTimestamp: DateTime(2026),
+                            ),
+                            existingElements: const <NarrativeElement>[],
+                            onSave:
+                                ({
+                                  required title,
+                                  required description,
+                                  required sortOrder,
+                                  required statusLabel,
+                                  required elements,
+                                }) async {},
+                            onComplete:
+                                ({
+                                  required title,
+                                  required description,
+                                  required sortOrder,
+                                  required statusLabel,
+                                  required elements,
+                                }) async {},
+                            onDelete: () async {},
+                          ),
+                        ),
+                      );
+                    },
+                    child: const Text('open'),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const ValueKey('openChapterUnsavedEditorButton')),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('chapterCreateTitleField')),
+        '已修改章节',
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.arrow_back_ios_new));
+      await tester.pumpAndSettle();
+
+      expect(find.text('放 弃 更 改'), findsOneWidget);
+      expect(find.text('当前页面仍有未保存改动，返回后这些更改将丢失。'), findsOneWidget);
+      await tester.tap(
+        find.descendant(of: find.byType(Dialog), matching: find.text('放 弃')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('openChapterUnsavedEditorButton')),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets(
+    'unsaved changes: narrative edit page confirms before leaving when there are unsaved changes',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) {
+              return Scaffold(
+                body: Center(
+                  child: TextButton(
+                    key: const ValueKey('openNarrativeUnsavedEditorButton'),
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => NarrativeElementEditPage(
+                            chapters: <StructureChapter>[
+                              StructureChapter.create(
+                                id: 'chapter-narrative-unsaved',
+                                projectId: 'project-narrative-unsaved',
+                                chapterTitle: '第一章',
+                                chapterSortOrder: 0,
+                                createdTimestamp: DateTime(2026),
+                                updatedTimestamp: DateTime(2026),
+                              ),
+                            ],
+                            element: NarrativeElement.create(
+                              id: 'element-narrative-unsaved',
+                              projectId: 'project-narrative-unsaved',
+                              chapterId: 'chapter-narrative-unsaved',
+                              elementTitle: '原始元素',
+                              linkedPhotoPaths: <String>['/tmp/original.jpg'],
+                              createdTimestamp: DateTime(2026),
+                              updatedTimestamp: DateTime(2026),
+                            ),
+                            onSave:
+                                ({
+                                  required title,
+                                  required description,
+                                  required chapterId,
+                                  required status,
+                                  required unlockChapterId,
+                                  required photoPaths,
+                                }) async {},
+                            onComplete:
+                                ({
+                                  required title,
+                                  required description,
+                                  required chapterId,
+                                  required status,
+                                  required unlockChapterId,
+                                  required photoPaths,
+                                }) async {},
+                            onDelete: () async {},
+                          ),
+                        ),
+                      );
+                    },
+                    child: const Text('open'),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const ValueKey('openNarrativeUnsavedEditorButton')),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('narrativeElementNameField')),
+        '已修改元素',
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.arrow_back_ios_new));
+      await tester.pumpAndSettle();
+
+      expect(find.text('放 弃 更 改'), findsOneWidget);
+      expect(find.text('当前页面仍有未保存改动，返回后这些更改将丢失。'), findsOneWidget);
+      await tester.tap(
+        find.descendant(of: find.byType(Dialog), matching: find.text('放 弃')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('openNarrativeUnsavedEditorButton')),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets(
+    'unsaved changes: relation group edit page confirms before leaving when there are unsaved changes',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) {
+              return Scaffold(
+                body: Center(
+                  child: TextButton(
+                    key: const ValueKey('openRelationGroupUnsavedEditorButton'),
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => ProjectRelationGroupCreatePage(
+                            relationType: ProjectRelationType.create(
+                              id: 'relation-type-unsaved',
+                              projectId: 'project-relation-unsaved',
+                              relationName: '呼应',
+                              relationDescription: '测试关系',
+                              relationSortOrder: 0,
+                              createdTimestamp: DateTime(2026),
+                              updatedTimestamp: DateTime(2026),
+                            ),
+                            narrativeElements: <NarrativeElement>[
+                              NarrativeElement.create(
+                                id: 'element-relation-unsaved-a',
+                                projectId: 'project-relation-unsaved',
+                                chapterId: 'chapter-relation-unsaved',
+                                elementTitle: '元素 A',
+                                createdTimestamp: DateTime(2026),
+                                updatedTimestamp: DateTime(2026),
+                              ),
+                              NarrativeElement.create(
+                                id: 'element-relation-unsaved-b',
+                                projectId: 'project-relation-unsaved',
+                                chapterId: 'chapter-relation-unsaved',
+                                elementTitle: '元素 B',
+                                createdTimestamp: DateTime(2026),
+                                updatedTimestamp: DateTime(2026),
+                              ),
+                            ],
+                            chapters: <StructureChapter>[
+                              StructureChapter.create(
+                                id: 'chapter-relation-unsaved',
+                                projectId: 'project-relation-unsaved',
+                                chapterTitle: '第一章',
+                                chapterSortOrder: 0,
+                                createdTimestamp: DateTime(2026),
+                                updatedTimestamp: DateTime(2026),
+                              ),
+                            ],
+                            initialTitle: '原始关系组',
+                            initialDescription: '原始说明',
+                            initialMembers: const <ProjectRelationDraftMember>[
+                              ProjectRelationDraftMember.element(
+                                elementId: 'element-relation-unsaved-a',
+                              ),
+                              ProjectRelationDraftMember.element(
+                                elementId: 'element-relation-unsaved-b',
+                              ),
+                            ],
+                            onCreateRelationGroup:
+                                ({
+                                  required title,
+                                  required description,
+                                  required members,
+                                }) async {},
+                            onUpdateRelationGroup:
+                                ({
+                                  required title,
+                                  required description,
+                                  required members,
+                                }) async {},
+                            onDeleteRelationGroup: () async {},
+                          ),
+                        ),
+                      );
+                    },
+                    child: const Text('open'),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const ValueKey('openRelationGroupUnsavedEditorButton')),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('relationGroupTitleField')),
+        '已修改关系组',
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.arrow_back_ios_new));
+      await tester.pumpAndSettle();
+
+      expect(find.text('放 弃 更 改'), findsOneWidget);
+      expect(find.text('当前页面仍有未保存改动，返回后这些更改将丢失。'), findsOneWidget);
+      await tester.tap(
+        find.descendant(of: find.byType(Dialog), matching: find.text('放 弃')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('openRelationGroupUnsavedEditorButton')),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets(
+    'unsaved changes: relation type edit page confirms before leaving when there are unsaved changes',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) {
+              return Scaffold(
+                body: Center(
+                  child: TextButton(
+                    key: const ValueKey('openRelationTypeUnsavedEditorButton'),
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => ProjectRelationCreatePage.edit(
+                            relationType: ProjectRelationType.create(
+                              id: 'relation-type-editor-unsaved',
+                              projectId: 'project-relation-type-unsaved',
+                              relationName: '原始关系',
+                              relationDescription: '原始描述',
+                              relationSortOrder: 0,
+                              createdTimestamp: DateTime(2026),
+                              updatedTimestamp: DateTime(2026),
+                            ),
+                            onUpdateRelationType:
+                                ({required name, required description}) async {
+                                  return ProjectRelationType.create(
+                                    id: 'relation-type-editor-unsaved',
+                                    projectId: 'project-relation-type-unsaved',
+                                    relationName: name,
+                                    relationDescription: description,
+                                    relationSortOrder: 0,
+                                    createdTimestamp: DateTime(2026),
+                                    updatedTimestamp: DateTime(2026),
+                                  );
+                                },
+                            onDeleteRelationType: () async {},
+                          ),
+                        ),
+                      );
+                    },
+                    child: const Text('open'),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const ValueKey('openRelationTypeUnsavedEditorButton')),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('relationTypeNameField')),
+        '已修改关系类型',
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.arrow_back_ios_new));
+      await tester.pumpAndSettle();
+
+      expect(find.text('放 弃 更 改'), findsOneWidget);
+      expect(find.text('当前页面仍有未保存改动，返回后这些更改将丢失。'), findsOneWidget);
+      await tester.tap(
+        find.descendant(of: find.byType(Dialog), matching: find.text('放 弃')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('openRelationTypeUnsavedEditorButton')),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets(
     'relation group photo thumbnail opens full screen viewer and supports horizontal paging',
     (tester) async {
       final projectRepository = _InMemoryProjectRepository(
@@ -3141,8 +3809,14 @@ void main() {
         projectId: 'project-relation-fullscreen',
         relationTypeId: relationType.relationTypeId,
         members: const <ProjectRelationDraftMember>[
-          ProjectRelationDraftMember.element(elementId: 'element-fullscreen-a'),
-          ProjectRelationDraftMember.element(elementId: 'element-fullscreen-b'),
+          ProjectRelationDraftMember.photo(
+            photoPath: '/tmp/relation-fullscreen-a.jpg',
+            sourceElementId: 'element-fullscreen-a',
+          ),
+          ProjectRelationDraftMember.photo(
+            photoPath: '/tmp/relation-fullscreen-b.jpg',
+            sourceElementId: 'element-fullscreen-b',
+          ),
         ],
       );
 
@@ -3210,7 +3884,7 @@ void main() {
   );
 
   testWidgets(
-    'relation edit page shows delete action and removes relation type with linked groups',
+    'delete confirmation: relation edit page shows delete action and removes relation type with linked groups',
     (tester) async {
       final projectRepository = _InMemoryProjectRepository(
         initialProjects: <Project>[
@@ -3265,7 +3939,10 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('确 认 删 除'), findsOneWidget);
-      expect(find.text('删除后，该关系类型及其关联关系集合会一并移除，当前页面将返回列表。'), findsOneWidget);
+      expect(
+        find.text('删除后，仅当前关系类型及其下属关联组会移除；元素、照片与章节内容会保留，当前页面将返回列表。'),
+        findsOneWidget,
+      );
 
       await tester.tap(
         find.descendant(of: find.byType(Dialog), matching: find.text('删 除')),

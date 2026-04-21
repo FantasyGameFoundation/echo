@@ -7,6 +7,7 @@ import 'package:echo/features/structure_elements_relations/domain/entities/narra
 import 'package:echo/features/structure_elements_relations/domain/entities/structure_chapter.dart';
 import 'package:echo/features/structure_elements_relations/presentation/widgets/editor_bottom_action_bar.dart';
 import 'package:echo/features/structure_elements_relations/presentation/widgets/editor_confirmation_dialog.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 typedef ImportNarrativePhoto = Future<String> Function(String sourcePath);
@@ -129,10 +130,15 @@ class _NarrativeElementEditorPageState
     extends State<_NarrativeElementEditorPage> {
   late final TextEditingController _nameController;
   late final TextEditingController _descController;
+  late final String _initialTitle;
+  late final String _initialDescription;
+  late final String? _initialChapterId;
+  late final List<String> _initialPhotoPaths;
   String? _selectedChapterId;
   final List<String> _mountedPhotos = <String>[];
   bool _isSaving = false;
   bool _didUnlockCompletedElement = false;
+  bool _didFinishEditing = false;
 
   String get _currentTitle => _nameController.text.trim();
 
@@ -156,6 +162,13 @@ class _NarrativeElementEditorPageState
 
   bool get _canSave => _currentTitle.isNotEmpty && !_isSaving;
 
+  bool get _hasUnsavedChanges =>
+      _currentTitle != _initialTitle ||
+      _currentDescription != _initialDescription ||
+      _selectedChapterId != _initialChapterId ||
+      !listEquals(_mountedPhotos, _initialPhotoPaths) ||
+      _didUnlockCompletedElement;
+
   String? get _unlockChapterId {
     if (!_didUnlockCompletedElement) {
       return null;
@@ -170,19 +183,19 @@ class _NarrativeElementEditorPageState
   @override
   void initState() {
     super.initState();
-    final initialTitle = widget.editorElement?.title.trim() ?? '';
-    final initialDescription = widget.editorElement?.description?.trim() ?? '';
-    final initialPhotoPaths = List<String>.from(
+    _initialTitle = widget.editorElement?.title.trim() ?? '';
+    _initialDescription = widget.editorElement?.description?.trim() ?? '';
+    _initialPhotoPaths = List<String>.from(
       widget.editorElement?.photoPaths ?? const <String>[],
     );
-    final initialChapterId = widget.allowChapterSelection
+    _initialChapterId = widget.allowChapterSelection
         ? widget.editorElement?.owningChapterId ??
               (widget.chapters.isEmpty ? null : widget.chapters.first.chapterId)
         : widget.editorElement?.owningChapterId;
-    _selectedChapterId = initialChapterId;
-    _mountedPhotos.addAll(initialPhotoPaths);
-    _nameController = TextEditingController(text: initialTitle);
-    _descController = TextEditingController(text: initialDescription);
+    _selectedChapterId = _initialChapterId;
+    _mountedPhotos.addAll(_initialPhotoPaths);
+    _nameController = TextEditingController(text: _initialTitle);
+    _descController = TextEditingController(text: _initialDescription);
     _nameController.addListener(_onChanged);
     _descController.addListener(_onChanged);
   }
@@ -200,6 +213,21 @@ class _NarrativeElementEditorPageState
     if (mounted) {
       setState(() {});
     }
+  }
+
+  Future<bool> _confirmDiscardUnsavedChanges() async {
+    if (_didFinishEditing || _isSaving || !_hasUnsavedChanges) {
+      return true;
+    }
+    return showDiscardUnsavedChangesDialog(context: context);
+  }
+
+  Future<void> _handleBackNavigation() async {
+    final shouldPop = await _confirmDiscardUnsavedChanges();
+    if (!mounted || !shouldPop) {
+      return;
+    }
+    Navigator.of(context).pop();
   }
 
   Future<void> _mountPhoto() async {
@@ -239,7 +267,7 @@ class _NarrativeElementEditorPageState
 
   Future<void> _save() async {
     if (_isLockedCompletedElement) {
-      _showPassiveHint('叙事元素已完成无法编辑，请点击右上角继续编辑');
+      _showPassiveHint('叙事元素已完成，请先点击右上角继续编辑');
       return;
     }
     if (!_canSave) {
@@ -260,6 +288,7 @@ class _NarrativeElementEditorPageState
     if (!mounted) {
       return;
     }
+    _didFinishEditing = true;
     Navigator.of(context).pop();
   }
 
@@ -290,6 +319,7 @@ class _NarrativeElementEditorPageState
     if (!mounted) {
       return;
     }
+    _didFinishEditing = true;
     Navigator.of(context).pop();
   }
 
@@ -303,7 +333,7 @@ class _NarrativeElementEditorPageState
       setState(() {
         _didUnlockCompletedElement = true;
       });
-      _showPassiveHint('叙事元素现可继续编辑');
+      _showPassiveHint('叙事元素及所属章节现可继续编辑');
       return;
     }
 
@@ -328,9 +358,9 @@ class _NarrativeElementEditorPageState
   Future<bool> _showUnlockConfirmationDialog() async {
     final confirmed = await showEditorConfirmationDialog(
       context: context,
-      title: '确认更改',
-      content: '元素所属章节已完成，需更改为可编辑',
-      actionText: '修改',
+      title: '确认继续编辑',
+      content: '继续编辑该元素后，所属章节也会恢复为可编辑状态。',
+      actionText: '继续编辑',
     );
 
     return confirmed;
@@ -344,7 +374,7 @@ class _NarrativeElementEditorPageState
     final confirmed = await showEditorConfirmationDialog(
       context: context,
       title: '确 认 删 除',
-      content: '删除后，该元素及其关联关系引用会一并移除，当前页面将返回列表。',
+      content: '删除后，仅当前元素及引用它的关联关系会移除；章节与关系类型会保留，当前页面将返回列表。',
       actionText: '删 除',
     );
     if (!confirmed || !mounted) {
@@ -358,6 +388,7 @@ class _NarrativeElementEditorPageState
     if (!mounted) {
       return;
     }
+    _didFinishEditing = true;
     Navigator.of(context).pop();
   }
 
@@ -427,47 +458,62 @@ class _NarrativeElementEditorPageState
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: SafeArea(
-        child: Stack(
-          children: [
-            Column(
-              children: [
-                _buildTopBar(),
-                Expanded(
-                  child: ListView(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 32.0,
-                      vertical: 24.0,
-                    ),
-                    children: [
-                      if (widget.allowChapterSelection) ...[
-                        _buildSectionLabel('所 属 章 节'),
+    return PopScope<void>(
+      canPop: _didFinishEditing || _isSaving || !_hasUnsavedChanges,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) {
+          return;
+        }
+        final navigator = Navigator.of(context);
+        final shouldPop = await _confirmDiscardUnsavedChanges();
+        if (!mounted || !shouldPop) {
+          return;
+        }
+        _didFinishEditing = true;
+        navigator.pop();
+      },
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        body: SafeArea(
+          child: Stack(
+            children: [
+              Column(
+                children: [
+                  _buildTopBar(),
+                  Expanded(
+                    child: ListView(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 32.0,
+                        vertical: 24.0,
+                      ),
+                      children: [
+                        if (widget.allowChapterSelection) ...[
+                          _buildSectionLabel('所 属 章 节'),
+                          const SizedBox(height: 16),
+                          _buildChapterSelector(),
+                          const SizedBox(height: 48),
+                        ],
+                        _buildNameInput(),
                         const SizedBox(height: 16),
-                        _buildChapterSelector(),
-                        const SizedBox(height: 48),
+                        _buildDescInput(),
+                        const SizedBox(height: 56),
+                        _buildSectionLabel('关 联 照 片'),
+                        const SizedBox(height: 16),
+                        _buildPhotoMounter(),
+                        const SizedBox(height: 120),
                       ],
-                      _buildNameInput(),
-                      const SizedBox(height: 16),
-                      _buildDescInput(),
-                      const SizedBox(height: 56),
-                      _buildSectionLabel('关 联 照 片'),
-                      const SizedBox(height: 16),
-                      _buildPhotoMounter(),
-                      const SizedBox(height: 120),
-                    ],
+                    ),
                   ),
-                ),
-              ],
-            ),
-            Positioned(
-              bottom: 32,
-              left: 0,
-              right: 0,
-              child: Center(child: _buildBottomActions()),
-            ),
-          ],
+                ],
+              ),
+              Positioned(
+                bottom: 32,
+                left: 0,
+                right: 0,
+                child: Center(child: _buildBottomActions()),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -507,7 +553,7 @@ class _NarrativeElementEditorPageState
               size: 18,
               color: Colors.black87,
             ),
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: _handleBackNavigation,
           ),
           Text(
             widget.pageTitle,

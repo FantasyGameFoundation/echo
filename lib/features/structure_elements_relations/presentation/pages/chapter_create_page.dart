@@ -123,9 +123,13 @@ class _ChapterEditorPageState extends State<_ChapterEditorPage> {
   late final TextEditingController _descController;
   late final List<_ChapterSequenceItem> _chapterItems;
   late final List<NarrativeElement> _persistedElements;
+  late final String _initialTitle;
+  late final String _initialDescription;
+  late final int _initialEditableIndex;
   final List<NarrativeElementDraft> _draftElements = <NarrativeElementDraft>[];
   bool _isSaving = false;
   bool _didUnlockCompletedChapter = false;
+  bool _didFinishEditing = false;
 
   int get _currentEditableIndex =>
       _chapterItems.indexWhere((item) => item.isEditable);
@@ -152,15 +156,25 @@ class _ChapterEditorPageState extends State<_ChapterEditorPage> {
 
   bool get _canSave => _currentTitle.isNotEmpty && !_isSaving;
 
+  bool get _hasUnsavedChanges =>
+      _currentTitle != _initialTitle ||
+      _currentDescription != _initialDescription ||
+      _currentEditableIndex != _initialEditableIndex ||
+      _draftElements.isNotEmpty ||
+      _didUnlockCompletedChapter;
+
   @override
   void initState() {
     super.initState();
-    final initialTitle = widget.editorChapter?.title.trim() ?? '';
-    final initialDescription = widget.editorChapter?.description?.trim() ?? '';
+    _initialTitle = widget.editorChapter?.title.trim() ?? '';
+    _initialDescription = widget.editorChapter?.description?.trim() ?? '';
     _persistedElements = List<NarrativeElement>.from(widget.existingElements);
-    _titleController = TextEditingController(text: initialTitle);
-    _descController = TextEditingController(text: initialDescription);
+    _titleController = TextEditingController(text: _initialTitle);
+    _descController = TextEditingController(text: _initialDescription);
     _chapterItems = _buildSequenceItems();
+    _initialEditableIndex = widget.isEditMode
+        ? widget.editorChapter!.sortOrder
+        : widget.existingChapters.length;
     _titleController.addListener(_onChanged);
     _descController.addListener(_onChanged);
   }
@@ -211,6 +225,21 @@ class _ChapterEditorPageState extends State<_ChapterEditorPage> {
     if (mounted) {
       setState(() {});
     }
+  }
+
+  Future<bool> _confirmDiscardUnsavedChanges() async {
+    if (_didFinishEditing || _isSaving || !_hasUnsavedChanges) {
+      return true;
+    }
+    return showDiscardUnsavedChangesDialog(context: context);
+  }
+
+  Future<void> _handleBackNavigation() async {
+    final shouldPop = await _confirmDiscardUnsavedChanges();
+    if (!mounted || !shouldPop) {
+      return;
+    }
+    Navigator.of(context).pop();
   }
 
   Future<void> _openAddElementPage() async {
@@ -298,7 +327,7 @@ class _ChapterEditorPageState extends State<_ChapterEditorPage> {
 
   Future<void> _save() async {
     if (_isLockedCompletedChapter) {
-      _showPassiveHint('章节已完成无法保存，如需编辑请点击右上角继续编辑');
+      _showPassiveHint('章节已完成，请先点击右上角继续编辑');
       return;
     }
     if (!_canSave) {
@@ -324,6 +353,7 @@ class _ChapterEditorPageState extends State<_ChapterEditorPage> {
       return;
     }
 
+    _didFinishEditing = true;
     Navigator.of(context).pop();
   }
 
@@ -372,6 +402,7 @@ class _ChapterEditorPageState extends State<_ChapterEditorPage> {
       return;
     }
 
+    _didFinishEditing = true;
     Navigator.of(context).pop();
   }
 
@@ -383,7 +414,7 @@ class _ChapterEditorPageState extends State<_ChapterEditorPage> {
     final confirmed = await showEditorConfirmationDialog(
       context: context,
       title: '确 认 删 除',
-      content: '删除后，本章节会从结构中移除，章节内元素将保留并转入未分配章节。',
+      content: '删除后，仅当前章节会从结构中移除；章节内元素会保留并转入未分配；其他章节与关系内容不受影响。',
       actionText: '删 除',
     );
     if (!confirmed || !mounted) {
@@ -397,6 +428,7 @@ class _ChapterEditorPageState extends State<_ChapterEditorPage> {
     if (!mounted) {
       return;
     }
+    _didFinishEditing = true;
     Navigator.of(context).pop();
   }
 
@@ -493,43 +525,58 @@ class _ChapterEditorPageState extends State<_ChapterEditorPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFFCFCFC),
-      body: SafeArea(
-        child: Stack(
-          children: [
-            Column(
-              children: [
-                _buildTopBar(),
-                Expanded(
-                  child: ListView(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 32.0,
-                      vertical: 24.0,
+    return PopScope<void>(
+      canPop: _didFinishEditing || _isSaving || !_hasUnsavedChanges,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) {
+          return;
+        }
+        final navigator = Navigator.of(context);
+        final shouldPop = await _confirmDiscardUnsavedChanges();
+        if (!mounted || !shouldPop) {
+          return;
+        }
+        _didFinishEditing = true;
+        navigator.pop();
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFFCFCFC),
+        body: SafeArea(
+          child: Stack(
+            children: [
+              Column(
+                children: [
+                  _buildTopBar(),
+                  Expanded(
+                    child: ListView(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 32.0,
+                        vertical: 24.0,
+                      ),
+                      children: [
+                        _buildTitleInput(),
+                        const SizedBox(height: 16),
+                        _buildDescInput(),
+                        const SizedBox(height: 48),
+                        _buildSequenceDragger(),
+                        const SizedBox(height: 48),
+                        _buildSectionHeader('包 含 元 素'),
+                        const SizedBox(height: 16),
+                        _buildElementsSection(),
+                        const SizedBox(height: 120),
+                      ],
                     ),
-                    children: [
-                      _buildTitleInput(),
-                      const SizedBox(height: 16),
-                      _buildDescInput(),
-                      const SizedBox(height: 48),
-                      _buildSequenceDragger(),
-                      const SizedBox(height: 48),
-                      _buildSectionHeader('包 含 元 素'),
-                      const SizedBox(height: 16),
-                      _buildElementsSection(),
-                      const SizedBox(height: 120),
-                    ],
                   ),
-                ),
-              ],
-            ),
-            Positioned(
-              bottom: 32,
-              left: 0,
-              right: 0,
-              child: Center(child: _buildBottomActions()),
-            ),
-          ],
+                ],
+              ),
+              Positioned(
+                bottom: 32,
+                left: 0,
+                right: 0,
+                child: Center(child: _buildBottomActions()),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -570,7 +617,7 @@ class _ChapterEditorPageState extends State<_ChapterEditorPage> {
               color: Colors.black87,
               size: 18,
             ),
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: _handleBackNavigation,
           ),
           Text(
             widget.pageTitle,

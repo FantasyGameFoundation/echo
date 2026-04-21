@@ -3,7 +3,10 @@ import 'package:echo/features/structure_elements_relations/domain/entities/proje
 import 'package:echo/features/structure_elements_relations/domain/entities/structure_chapter.dart';
 import 'package:echo/features/structure_elements_relations/domain/models/project_relation_draft_member.dart';
 import 'package:echo/features/structure_elements_relations/presentation/pages/project_relation_group_selection_page.dart';
+import 'package:echo/features/structure_elements_relations/presentation/widgets/editor_bottom_action_bar.dart';
+import 'package:echo/features/structure_elements_relations/presentation/widgets/editor_confirmation_dialog.dart';
 import 'package:echo/features/structure_elements_relations/presentation/widgets/narrative_thumbnail_provider.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 typedef CreateProjectRelationGroup =
@@ -14,6 +17,9 @@ typedef CreateProjectRelationGroup =
     });
 
 typedef UpdateProjectRelationGroup = CreateProjectRelationGroup;
+typedef DeleteProjectRelationGroup = Future<void> Function();
+
+enum ProjectRelationGroupEditorResult { saved, deleted }
 
 class ProjectRelationGroupCreatePage extends StatefulWidget {
   const ProjectRelationGroupCreatePage({
@@ -23,6 +29,7 @@ class ProjectRelationGroupCreatePage extends StatefulWidget {
     required this.chapters,
     required this.onCreateRelationGroup,
     this.onUpdateRelationGroup,
+    this.onDeleteRelationGroup,
     this.initialTitle,
     this.initialDescription,
     this.initialMembers,
@@ -33,6 +40,7 @@ class ProjectRelationGroupCreatePage extends StatefulWidget {
   final List<StructureChapter> chapters;
   final CreateProjectRelationGroup onCreateRelationGroup;
   final UpdateProjectRelationGroup? onUpdateRelationGroup;
+  final DeleteProjectRelationGroup? onDeleteRelationGroup;
   final String? initialTitle;
   final String? initialDescription;
   final List<ProjectRelationDraftMember>? initialMembers;
@@ -51,7 +59,11 @@ class _ProjectRelationGroupCreatePageState
   late final TextEditingController _titleController;
   late final TextEditingController _descriptionController;
   late List<_AssemblyNode> _draftNodes;
+  late final String _initialTitle;
+  late final String _initialDescription;
+  late final List<String> _initialMemberKeys;
   bool _isSaving = false;
+  bool _didFinishEditing = false;
 
   bool get _hasEnoughMembers =>
       _draftNodes
@@ -63,6 +75,11 @@ class _ProjectRelationGroupCreatePageState
       !_isSaving &&
       _hasEnoughMembers &&
       _titleController.text.trim().isNotEmpty;
+
+  bool get _hasUnsavedChanges =>
+      _titleController.text.trim() != _initialTitle ||
+      _descriptionController.text.trim() != _initialDescription ||
+      !listEquals(_currentMemberKeys, _initialMemberKeys);
 
   String get _displayTitle {
     final currentTitle = _titleController.text.trim();
@@ -76,6 +93,13 @@ class _ProjectRelationGroupCreatePageState
   @override
   void initState() {
     super.initState();
+    _initialTitle = widget.initialTitle?.trim() ?? '';
+    _initialDescription = widget.initialDescription?.trim() ?? '';
+    _initialMemberKeys = [
+      for (final member
+          in widget.initialMembers ?? const <ProjectRelationDraftMember>[])
+        _memberKey(member),
+    ];
     _titleController = TextEditingController(text: widget.initialTitle ?? '')
       ..addListener(_handleChanged);
     _descriptionController = TextEditingController(
@@ -100,6 +124,26 @@ class _ProjectRelationGroupCreatePageState
     if (mounted) {
       setState(() {});
     }
+  }
+
+  List<String> get _currentMemberKeys => [
+    for (final node in _draftNodes)
+      if (node.draftMember != null) _memberKey(node.draftMember!),
+  ];
+
+  Future<bool> _confirmDiscardUnsavedChanges() async {
+    if (_didFinishEditing || _isSaving || !_hasUnsavedChanges) {
+      return true;
+    }
+    return showDiscardUnsavedChangesDialog(context: context);
+  }
+
+  Future<void> _handleBackNavigation() async {
+    final shouldPop = await _confirmDiscardUnsavedChanges();
+    if (!mounted || !shouldPop) {
+      return;
+    }
+    Navigator.of(context).pop();
   }
 
   String _memberKey(ProjectRelationDraftMember member) {
@@ -245,32 +289,97 @@ class _ProjectRelationGroupCreatePageState
     if (!mounted) {
       return;
     }
-    Navigator.of(context).pop(true);
+    _didFinishEditing = true;
+    Navigator.of(context).pop(ProjectRelationGroupEditorResult.saved);
+  }
+
+  Future<void> _delete() async {
+    if (_isSaving || widget.onDeleteRelationGroup == null) {
+      return;
+    }
+
+    final confirmed = await showEditorConfirmationDialog(
+      context: context,
+      title: '确 认 删 除',
+      content: '删除后，仅当前关系组及其成员会移除；关系类型、元素与照片会保留，当前页面将返回详情。',
+      actionText: '删 除',
+    );
+    if (!confirmed || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _isSaving = true;
+    });
+    await widget.onDeleteRelationGroup!();
+    if (!mounted) {
+      return;
+    }
+    _didFinishEditing = true;
+    Navigator.of(context).pop(ProjectRelationGroupEditorResult.deleted);
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFFCFCFC),
-      body: SafeArea(
-        child: Column(
-          children: [
-            _buildTopBar(),
-            Expanded(
-              child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildMetadataInputs(),
-                    const SizedBox(height: 48),
-                    _buildAssemblyLine(),
-                    const SizedBox(height: 64),
-                  ],
-                ),
+    return PopScope<void>(
+      canPop: _didFinishEditing || _isSaving || !_hasUnsavedChanges,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) {
+          return;
+        }
+        final navigator = Navigator.of(context);
+        final shouldPop = await _confirmDiscardUnsavedChanges();
+        if (!mounted || !shouldPop) {
+          return;
+        }
+        _didFinishEditing = true;
+        navigator.pop();
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFFCFCFC),
+        body: SafeArea(
+          child: Stack(
+            children: [
+              Column(
+                children: <Widget>[
+                  _buildTopBar(),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          _buildMetadataInputs(),
+                          const SizedBox(height: 48),
+                          _buildAssemblyLine(),
+                          SizedBox(height: widget.isEditMode ? 160 : 64),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ),
-          ],
+              if (widget.isEditMode)
+                Positioned(
+                  bottom: 32,
+                  left: 0,
+                  right: 0,
+                  child: Center(
+                    child: EditorBottomActionBar(
+                      leftLabel: _isSaving ? '保 存 中' : '保 存',
+                      leftKey: const ValueKey('completeRelationGroupButton'),
+                      leftTone: EditorBottomActionTone.primary,
+                      leftEnabled: _canSave,
+                      onLeftTap: _save,
+                      rightLabel: '删 除',
+                      rightKey: const ValueKey('relationGroupDeleteButton'),
+                      rightEnabled: !_isSaving,
+                      onRightTap: _delete,
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -290,7 +399,7 @@ class _ProjectRelationGroupCreatePageState
                 color: Colors.black87,
                 size: 18,
               ),
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: _handleBackNavigation,
             ),
           ),
           Padding(
@@ -309,26 +418,35 @@ class _ProjectRelationGroupCreatePageState
               ),
             ),
           ),
-          Align(
-            alignment: Alignment.centerRight,
-            child: GestureDetector(
-              onTap: _save,
-              child: Container(
-                key: const ValueKey('completeRelationGroupButton'),
-                color: Colors.transparent,
-                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-                child: Text(
-                  _isSaving ? '保存中' : '完成',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: _canSave ? Colors.black87 : Colors.black38,
-                    letterSpacing: 1.0,
+          if (!widget.isEditMode)
+            Align(
+              alignment: Alignment.centerRight,
+              child: GestureDetector(
+                onTap: _save,
+                child: Container(
+                  key: const ValueKey('completeRelationGroupButton'),
+                  color: Colors.transparent,
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 8,
+                    horizontal: 4,
+                  ),
+                  child: Text(
+                    _isSaving ? '保存中' : '完成',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: _canSave ? Colors.black87 : Colors.black38,
+                      letterSpacing: 1.0,
+                    ),
                   ),
                 ),
               ),
+            )
+          else
+            const Align(
+              alignment: Alignment.centerRight,
+              child: SizedBox(width: 48),
             ),
-          ),
         ],
       ),
     );

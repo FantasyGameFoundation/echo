@@ -187,27 +187,32 @@ class _ProjectRelationGroupPageState extends State<ProjectRelationGroupPage> {
   }
 
   Future<void> _openCreateRelationGroupPage() async {
-    final created = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        builder: (_) => ProjectRelationGroupCreatePage(
-          relationType: _relationType,
-          narrativeElements: widget.narrativeElements,
-          chapters: widget.chapters,
-          onCreateRelationGroup:
-              ({required title, required description, required members}) async {
-                await widget.projectRelationRepository.createRelationGroup(
-                  projectId: widget.projectId,
-                  relationTypeId: _relationType.relationTypeId,
-                  title: title,
-                  description: description,
-                  members: members,
-                );
-              },
-        ),
-      ),
-    );
+    final result = await Navigator.of(context)
+        .push<ProjectRelationGroupEditorResult>(
+          MaterialPageRoute(
+            builder: (_) => ProjectRelationGroupCreatePage(
+              relationType: _relationType,
+              narrativeElements: widget.narrativeElements,
+              chapters: widget.chapters,
+              onCreateRelationGroup:
+                  ({
+                    required title,
+                    required description,
+                    required members,
+                  }) async {
+                    await widget.projectRelationRepository.createRelationGroup(
+                      projectId: widget.projectId,
+                      relationTypeId: _relationType.relationTypeId,
+                      title: title,
+                      description: description,
+                      members: members,
+                    );
+                  },
+            ),
+          ),
+        );
 
-    if (created != true || !mounted) {
+    if (result != ProjectRelationGroupEditorResult.saved || !mounted) {
       return;
     }
 
@@ -238,46 +243,58 @@ class _ProjectRelationGroupPageState extends State<ProjectRelationGroupPage> {
                 left.memberSortOrder.compareTo(right.memberSortOrder),
           );
 
-    final didUpdate = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        builder: (_) => ProjectRelationGroupCreatePage(
-          relationType: _relationType,
-          narrativeElements: widget.narrativeElements,
-          chapters: widget.chapters,
-          initialTitle: relationGroup.title,
-          initialDescription: relationGroup.description,
-          initialMembers: [
-            for (final member in initialMembers)
-              switch (member.kind) {
-                'photo' => ProjectRelationDraftMember.photo(
-                  photoPath: member.linkedPhotoPath!,
-                  sourceElementId: member.linkedSourceElementId!,
-                ),
-                _ => ProjectRelationDraftMember.element(
-                  elementId: member.linkedElementId!,
-                ),
-              },
-          ],
-          onCreateRelationGroup:
-              ({
-                required title,
-                required description,
-                required members,
-              }) async {},
-          onUpdateRelationGroup:
-              ({required title, required description, required members}) async {
-                await widget.projectRelationRepository.updateRelationGroup(
-                  relationGroupId: relationGroup.relationGroupId,
-                  title: title,
-                  description: description,
-                  members: members,
+    final result = await Navigator.of(context)
+        .push<ProjectRelationGroupEditorResult>(
+          MaterialPageRoute(
+            builder: (_) => ProjectRelationGroupCreatePage(
+              relationType: _relationType,
+              narrativeElements: widget.narrativeElements,
+              chapters: widget.chapters,
+              initialTitle: relationGroup.title,
+              initialDescription: relationGroup.description,
+              initialMembers: [
+                for (final member in initialMembers)
+                  switch (member.kind) {
+                    'photo' => ProjectRelationDraftMember.photo(
+                      photoPath: member.linkedPhotoPath!,
+                      sourceElementId: member.linkedSourceElementId!,
+                    ),
+                    _ => ProjectRelationDraftMember.element(
+                      elementId: member.linkedElementId!,
+                    ),
+                  },
+              ],
+              onCreateRelationGroup:
+                  ({
+                    required title,
+                    required description,
+                    required members,
+                  }) async {},
+              onUpdateRelationGroup:
+                  ({
+                    required title,
+                    required description,
+                    required members,
+                  }) async {
+                    await widget.projectRelationRepository.updateRelationGroup(
+                      relationGroupId: relationGroup.relationGroupId,
+                      title: title,
+                      description: description,
+                      members: members,
+                    );
+                  },
+              onDeleteRelationGroup: () async {
+                await widget.projectRelationRepository.deleteRelationGroup(
+                  relationGroup.relationGroupId,
                 );
               },
-        ),
-      ),
-    );
+            ),
+          ),
+        );
 
-    if (didUpdate != true || !mounted) {
+    if ((result != ProjectRelationGroupEditorResult.saved &&
+            result != ProjectRelationGroupEditorResult.deleted) ||
+        !mounted) {
       return;
     }
 

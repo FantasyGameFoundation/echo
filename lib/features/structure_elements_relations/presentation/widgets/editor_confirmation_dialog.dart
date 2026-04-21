@@ -93,3 +93,12 @@ Future<bool> showEditorConfirmationDialog({
 
   return confirmed ?? false;
 }
+
+Future<bool> showDiscardUnsavedChangesDialog({required BuildContext context}) {
+  return showEditorConfirmationDialog(
+    context: context,
+    title: '放 弃 更 改',
+    content: '当前页面仍有未保存改动，返回后这些更改将丢失。',
+    actionText: '放 弃',
+  );
+}

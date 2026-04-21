@@ -47,7 +47,7 @@ void main() {
           ),
           narrativeRepository: _MutableNarrativeElementRepository(),
           relationRepository: _MutableProjectRelationRepository(),
-          photoPicker: () async => photoFixture.sourceFile.path,
+          photoPicker: () async => <String>[photoFixture.sourceFile.path],
           photoImporter: photoFixture.importIntoAppMedia,
         ),
       );
@@ -198,7 +198,7 @@ void main() {
           chapterRepository: chapterRepository,
           narrativeRepository: narrativeRepository,
           relationRepository: _MutableProjectRelationRepository(),
-          photoPicker: () async => photoFixture.sourceFile.path,
+          photoPicker: () async => <String>[photoFixture.sourceFile.path],
           photoImporter: photoFixture.importIntoAppMedia,
         ),
       );
@@ -604,7 +604,7 @@ EchoApp _buildTestApp({
   required _MutableStructureChapterRepository chapterRepository,
   required _MutableNarrativeElementRepository narrativeRepository,
   required _MutableProjectRelationRepository relationRepository,
-  Future<String?> Function()? photoPicker,
+  Future<List<String>> Function()? photoPicker,
   Future<String> Function(String sourcePath)? photoImporter,
 }) {
   return EchoApp(
@@ -821,6 +821,13 @@ class _MutableStructureChapterRepository implements StructureChapterRepository {
 
     return targetChapter;
   }
+
+  @override
+  Future<bool> deleteChapter(String chapterId) async {
+    final beforeCount = _chapters.length;
+    _chapters.removeWhere((chapter) => chapter.chapterId == chapterId);
+    return _chapters.length != beforeCount;
+  }
 }
 
 class _MutableNarrativeElementRepository implements NarrativeElementRepository {
@@ -896,6 +903,13 @@ class _MutableNarrativeElementRepository implements NarrativeElementRepository {
     targetElement.photoPaths = List<String>.from(photoPaths);
     targetElement.updatedAt = DateTime(2026, 3, 2, 12);
     return targetElement;
+  }
+
+  @override
+  Future<bool> deleteElement(String elementId) async {
+    final beforeCount = _elements.length;
+    _elements.removeWhere((element) => element.elementId == elementId);
+    return _elements.length != beforeCount;
   }
 }
 
@@ -987,6 +1001,8 @@ class _MutableProjectRelationRepository implements ProjectRelationRepository {
   Future<ProjectRelationGroup> createRelationGroup({
     required String projectId,
     required String relationTypeId,
+    String? title,
+    String? description,
     required List<ProjectRelationDraftMember> members,
   }) async {
     if (members.length < 2) {
@@ -1007,6 +1023,8 @@ class _MutableProjectRelationRepository implements ProjectRelationRepository {
       id: 'group-${(_groupsByProject[projectId]?.length ?? 0) + 1}',
       projectId: projectId,
       relationTypeId: relationTypeId,
+      relationGroupTitle: title,
+      relationGroupDescription: description,
       createdTimestamp: now,
       updatedTimestamp: now,
     );
@@ -1031,6 +1049,96 @@ class _MutableProjectRelationRepository implements ProjectRelationRepository {
     _membersByProject.putIfAbsent(projectId, () => <ProjectRelationMember>[]);
     _membersByProject[projectId]!.addAll(relationMembers);
     return relationGroup;
+  }
+
+  @override
+  Future<ProjectRelationGroup> updateRelationGroup({
+    required String relationGroupId,
+    String? title,
+    String? description,
+    required List<ProjectRelationDraftMember> members,
+  }) async {
+    for (final entry in _groupsByProject.entries) {
+      for (final group in entry.value) {
+        if (group.relationGroupId != relationGroupId) {
+          continue;
+        }
+        final now = DateTime(2026, 4, 5);
+        group.title = title?.trim().isNotEmpty == true ? title!.trim() : null;
+        group.description = description?.trim().isNotEmpty == true
+            ? description!.trim()
+            : null;
+        group.updatedAt = now;
+
+        final rebuiltMembers = <ProjectRelationMember>[
+          for (var index = 0; index < members.length; index++)
+            ProjectRelationMember.create(
+              id: 'member-${entry.key}-$relationGroupId-${index + 1}',
+              projectId: entry.key,
+              groupId: relationGroupId,
+              targetKind: members[index].kind.name,
+              elementId: members[index].elementId,
+              photoPath: members[index].photoPath,
+              sourceElementId: members[index].sourceElementId,
+              sortOrder: index,
+              createdTimestamp: now,
+            ),
+        ];
+        _membersByProject[entry.key] ??= <ProjectRelationMember>[];
+        _membersByProject[entry.key]!.removeWhere(
+          (member) => member.owningGroupId == relationGroupId,
+        );
+        _membersByProject[entry.key]!.addAll(rebuiltMembers);
+        return group;
+      }
+    }
+
+    throw StateError('Relation group not found: $relationGroupId');
+  }
+
+  @override
+  Future<bool> deleteRelationType(String relationTypeId) async {
+    for (final entry in _typesByProject.entries) {
+      final beforeCount = entry.value.length;
+      entry.value.removeWhere(
+        (relationType) => relationType.relationTypeId == relationTypeId,
+      );
+      if (entry.value.length == beforeCount) {
+        continue;
+      }
+
+      final groups = _groupsByProject[entry.key] ?? <ProjectRelationGroup>[];
+      final removedGroupIds = groups
+          .where((group) => group.linkedRelationTypeId == relationTypeId)
+          .map((group) => group.relationGroupId)
+          .toSet();
+      groups.removeWhere(
+        (group) => removedGroupIds.contains(group.relationGroupId),
+      );
+      _membersByProject[entry.key]?.removeWhere(
+        (member) => removedGroupIds.contains(member.owningGroupId),
+      );
+      return true;
+    }
+    return false;
+  }
+
+  @override
+  Future<bool> deleteRelationGroup(String relationGroupId) async {
+    for (final entry in _groupsByProject.entries) {
+      final beforeCount = entry.value.length;
+      entry.value.removeWhere(
+        (group) => group.relationGroupId == relationGroupId,
+      );
+      if (entry.value.length == beforeCount) {
+        continue;
+      }
+      _membersByProject[entry.key]?.removeWhere(
+        (member) => member.owningGroupId == relationGroupId,
+      );
+      return true;
+    }
+    return false;
   }
 
   @override
