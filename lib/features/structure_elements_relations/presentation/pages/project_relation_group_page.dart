@@ -376,18 +376,34 @@ class _ProjectRelationGroupPageState extends State<ProjectRelationGroupPage> {
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 72),
-            child: Text(
-              _relationType.name,
-              key: const ValueKey('relationGroupPageTitle'),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w500,
-                letterSpacing: 2.0,
-                color: Colors.black87,
-              ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '关系类型',
+                  key: const ValueKey('relationGroupPageScopeLabel'),
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 2.4,
+                    color: Colors.black.withValues(alpha: 0.35),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _relationType.name,
+                  key: const ValueKey('relationGroupPageTitle'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: 2.0,
+                    color: Colors.black87,
+                  ),
+                ),
+              ],
             ),
           ),
           Align(
@@ -399,7 +415,7 @@ class _ProjectRelationGroupPageState extends State<ProjectRelationGroupPage> {
                 color: Colors.transparent,
                 padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
                 child: const Text(
-                  '编辑关系',
+                  '编辑关系类型',
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w500,

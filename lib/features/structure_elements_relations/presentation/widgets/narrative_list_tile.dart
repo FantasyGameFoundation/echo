@@ -23,6 +23,13 @@ class NarrativeListTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final descriptionStyle = TextStyle(
+      fontSize: 12,
+      color: Colors.grey.shade500,
+      fontStyle: FontStyle.italic,
+      height: 1.4,
+    );
+
     final tileBody = Container(
       margin: const EdgeInsets.only(bottom: 12, left: 24, right: 24),
       padding: const EdgeInsets.all(16),
@@ -46,17 +53,7 @@ class NarrativeListTile extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 6),
-                Text(
-                  description,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade500,
-                    fontStyle: FontStyle.italic,
-                    height: 1.4,
-                  ),
-                ),
+                _buildDescription(descriptionStyle),
               ],
             ),
           ),
@@ -76,6 +73,21 @@ class NarrativeListTile extends StatelessWidget {
     }
 
     return InkWell(onTap: onTap, child: tileBody);
+  }
+
+  Widget _buildDescription(TextStyle style) {
+    final trimmedDescription = description.trim();
+    if (trimmedDescription.isNotEmpty) {
+      return Text(
+        trimmedDescription,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: style,
+      );
+    }
+
+    final lineHeight = (style.fontSize ?? 12) * (style.height ?? 1);
+    return SizedBox(height: lineHeight * 2);
   }
 
   Widget _buildAssociatedThumbnails() {

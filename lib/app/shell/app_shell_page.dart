@@ -344,6 +344,9 @@ class _AppShellPageState extends State<AppShellPage> {
                           status: status,
                           photoPaths: photoPaths,
                         );
+                        if (unlockChapterId != null) {
+                          await _unlockStructureChapterById(unlockChapterId);
+                        }
                         await _refreshProjects();
                       },
                   onPickPhoto: widget.narrativeElementPhotoPicker,
@@ -575,9 +578,7 @@ class _AppShellPageState extends State<AppShellPage> {
       grouped[chapterKey]!.add(<String, dynamic>{
         'id': element.elementId,
         'title': element.title,
-        'desc': element.description?.trim().isNotEmpty == true
-            ? element.description!
-            : '暂无叙事元素说明',
+        'desc': element.description?.trim() ?? '',
         'status': element.status == 'ready'
             ? ElementStatus.ready
             : ElementStatus.finding,
@@ -754,31 +755,33 @@ class _AppShellPageState extends State<AppShellPage> {
       photoPaths: photoPaths,
     );
     if (unlockChapterId != null) {
-      StructureChapter? chapterToUnlock;
-      for (final chapter in _structureChapters) {
-        if (chapter.chapterId == unlockChapterId) {
-          chapterToUnlock = chapter;
-          break;
-        }
-      }
-      if (chapterToUnlock == null) {
-        throw StateError('Structure chapter not found: $unlockChapterId');
-      }
-      final updatedChapter = await widget.structureChapterRepository
-          .updateChapter(
-            chapterId: chapterToUnlock.chapterId,
-            title: chapterToUnlock.title,
-            description: chapterToUnlock.description,
-            sortOrder: chapterToUnlock.sortOrder,
-            statusLabel: '进行',
-          );
-      if (updatedChapter == null) {
-        throw StateError(
-          'Failed to unlock structure chapter: $unlockChapterId',
-        );
-      }
+      await _unlockStructureChapterById(unlockChapterId);
     }
     await _refreshProjects();
+  }
+
+  Future<void> _unlockStructureChapterById(String unlockChapterId) async {
+    StructureChapter? chapterToUnlock;
+    for (final chapter in _structureChapters) {
+      if (chapter.chapterId == unlockChapterId) {
+        chapterToUnlock = chapter;
+        break;
+      }
+    }
+    if (chapterToUnlock == null) {
+      throw StateError('Structure chapter not found: $unlockChapterId');
+    }
+    final updatedChapter = await widget.structureChapterRepository
+        .updateChapter(
+          chapterId: chapterToUnlock.chapterId,
+          title: chapterToUnlock.title,
+          description: chapterToUnlock.description,
+          sortOrder: chapterToUnlock.sortOrder,
+          statusLabel: '进行',
+        );
+    if (updatedChapter == null) {
+      throw StateError('Failed to unlock structure chapter: $unlockChapterId');
+    }
   }
 
   Future<void> _deleteElement(NarrativeElement element) async {

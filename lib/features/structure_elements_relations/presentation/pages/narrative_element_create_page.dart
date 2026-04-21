@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'dart:ui';
 
 import 'package:echo/data/media/media_importer.dart';
@@ -7,6 +6,7 @@ import 'package:echo/features/structure_elements_relations/domain/entities/narra
 import 'package:echo/features/structure_elements_relations/domain/entities/structure_chapter.dart';
 import 'package:echo/features/structure_elements_relations/presentation/widgets/editor_bottom_action_bar.dart';
 import 'package:echo/features/structure_elements_relations/presentation/widgets/editor_confirmation_dialog.dart';
+import 'package:echo/features/structure_elements_relations/presentation/widgets/narrative_thumbnail_provider.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -128,6 +128,7 @@ class _NarrativeElementEditorPage extends StatefulWidget {
 
 class _NarrativeElementEditorPageState
     extends State<_NarrativeElementEditorPage> {
+  static const String _unassignedChapterLabel = '未分配章节';
   late final TextEditingController _nameController;
   late final TextEditingController _descController;
   late final String _initialTitle;
@@ -189,8 +190,11 @@ class _NarrativeElementEditorPageState
       widget.editorElement?.photoPaths ?? const <String>[],
     );
     _initialChapterId = widget.allowChapterSelection
-        ? widget.editorElement?.owningChapterId ??
-              (widget.chapters.isEmpty ? null : widget.chapters.first.chapterId)
+        ? (widget.isEditMode
+              ? widget.editorElement?.owningChapterId
+              : (widget.chapters.isEmpty
+                    ? null
+                    : widget.chapters.first.chapterId))
         : widget.editorElement?.owningChapterId;
     _selectedChapterId = _initialChapterId;
     _mountedPhotos.addAll(_initialPhotoPaths);
@@ -274,6 +278,22 @@ class _NarrativeElementEditorPageState
       return;
     }
 
+    var unlockChapterId = _unlockChapterId;
+    final selectedChapter = _chapterById(_selectedChapterId);
+    if (!widget.isEditMode && selectedChapter?.statusLabel == '完成') {
+      final confirmed = await _showCreateInCompletedChapterConfirmationDialog();
+      if (!mounted || !confirmed) {
+        return;
+      }
+      unlockChapterId = selectedChapter!.chapterId;
+    } else if (_shouldConfirmSaveToCompletedChapter(selectedChapter)) {
+      final confirmed = await _showSaveInCompletedChapterConfirmationDialog();
+      if (!mounted || !confirmed) {
+        return;
+      }
+      unlockChapterId = selectedChapter!.chapterId;
+    }
+
     setState(() {
       _isSaving = true;
     });
@@ -282,7 +302,7 @@ class _NarrativeElementEditorPageState
       description: _currentDescription,
       chapterId: _selectedChapterId,
       status: _currentStatus,
-      unlockChapterId: _unlockChapterId,
+      unlockChapterId: unlockChapterId,
       photoPaths: List<String>.from(_mountedPhotos),
     );
     if (!mounted) {
@@ -364,6 +384,39 @@ class _NarrativeElementEditorPageState
     );
 
     return confirmed;
+  }
+
+  Future<bool> _showCreateInCompletedChapterConfirmationDialog() async {
+    final confirmed = await showEditorConfirmationDialog(
+      context: context,
+      title: '确认继续添加',
+      content: '继续添加该元素后，所属章节也会恢复为可编辑状态。',
+      actionText: '继续添加',
+    );
+
+    return confirmed;
+  }
+
+  Future<bool> _showSaveInCompletedChapterConfirmationDialog() async {
+    final confirmed = await showEditorConfirmationDialog(
+      context: context,
+      title: '确认继续保存',
+      content: '继续保存该元素后，所属章节也会恢复为可编辑状态。',
+      actionText: '继续保存',
+    );
+
+    return confirmed;
+  }
+
+  bool _shouldConfirmSaveToCompletedChapter(StructureChapter? selectedChapter) {
+    if (!widget.isEditMode ||
+        _isCompletedElement ||
+        selectedChapter?.statusLabel != '完成' ||
+        _selectedChapterId == _initialChapterId) {
+      return false;
+    }
+
+    return true;
   }
 
   Future<void> _deleteElement() async {
@@ -602,42 +655,64 @@ class _NarrativeElementEditorPageState
       scrollDirection: Axis.horizontal,
       physics: const BouncingScrollPhysics(),
       child: Row(
-        children: widget.chapters.map((chapter) {
-          final isSelected = _selectedChapterId == chapter.chapterId;
-          final chapterLabel =
-              'C H A P T E R   ${(chapter.sortOrder + 1).toString().padLeft(2, '0')}';
-          return GestureDetector(
+        children: [
+          _buildChapterOption(
+            key: const ValueKey('narrativeElementUnassignedChapterChip'),
+            label: _unassignedChapterLabel,
+            isSelected: _selectedChapterId == null,
             onTap: () {
               setState(() {
-                _selectedChapterId = chapter.chapterId;
+                _selectedChapterId = null;
               });
             },
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              margin: const EdgeInsets.only(right: 12.0),
-              padding: const EdgeInsets.symmetric(
-                horizontal: 20.0,
-                vertical: 12.0,
-              ),
-              decoration: BoxDecoration(
-                color: isSelected ? Colors.black : Colors.transparent,
-                border: Border.all(
-                  color: isSelected ? Colors.black : Colors.black12,
-                  width: 1,
-                ),
-              ),
-              child: Text(
-                chapterLabel,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: isSelected ? Colors.white : Colors.black87,
-                  letterSpacing: 1.0,
-                  fontWeight: isSelected ? FontWeight.w500 : FontWeight.normal,
-                ),
-              ),
-            ),
-          );
-        }).toList(),
+          ),
+          ...widget.chapters.map((chapter) {
+            final chapterLabel =
+                'C H A P T E R   ${(chapter.sortOrder + 1).toString().padLeft(2, '0')}';
+            return _buildChapterOption(
+              label: chapterLabel,
+              isSelected: _selectedChapterId == chapter.chapterId,
+              onTap: () {
+                setState(() {
+                  _selectedChapterId = chapter.chapterId;
+                });
+              },
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChapterOption({
+    Key? key,
+    required String label,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        key: key,
+        duration: const Duration(milliseconds: 200),
+        margin: const EdgeInsets.only(right: 12.0),
+        padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.black : Colors.transparent,
+          border: Border.all(
+            color: isSelected ? Colors.black : Colors.black12,
+            width: 1,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            color: isSelected ? Colors.white : Colors.black87,
+            letterSpacing: 1.0,
+            fontWeight: isSelected ? FontWeight.w500 : FontWeight.normal,
+          ),
+        ),
       ),
     );
   }
@@ -697,41 +772,61 @@ class _NarrativeElementEditorPageState
   Widget _buildPhotoMounter() {
     final mountItems = <Widget>[
       for (int i = 0; i < _mountedPhotos.length; i++)
-        Stack(
+        Column(
           children: [
-            Container(
-              width: 80,
-              height: 80,
-              decoration: const BoxDecoration(color: Color(0xFFE0E0E0)),
-              clipBehavior: Clip.hardEdge,
-              child: Image.file(
-                File(_mountedPhotos[i]),
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) {
-                  return const Icon(
-                    Icons.image,
-                    color: Colors.black26,
-                    size: 28,
-                  );
-                },
-              ),
-            ),
-            Positioned(
-              top: 0,
-              right: 0,
-              child: InkWell(
-                onTap: () => _removePhoto(i),
-                child: Container(
-                  width: 24,
-                  height: 24,
-                  color: Colors.black.withValues(alpha: 0.6),
-                  child: const Icon(Icons.close, color: Colors.white, size: 14),
+            Stack(
+              children: [
+                Container(
+                  key: ValueKey('narrativeMountedPhotoTile-$i'),
+                  width: 80,
+                  height: 80,
+                  decoration: const BoxDecoration(color: Color(0xFFE0E0E0)),
+                  clipBehavior: Clip.hardEdge,
+                  child: Image(
+                    image: narrativeThumbnailProvider(_mountedPhotos[i]),
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return const Icon(
+                        Icons.image,
+                        color: Colors.black26,
+                        size: 28,
+                      );
+                    },
+                  ),
                 ),
+                Positioned(
+                  top: 0,
+                  right: 0,
+                  child: InkWell(
+                    key: ValueKey('narrativeMountedPhotoRemove-$i'),
+                    onTap: () => _removePhoto(i),
+                    child: Container(
+                      width: 24,
+                      height: 24,
+                      color: Colors.black.withValues(alpha: 0.6),
+                      child: const Icon(
+                        Icons.close,
+                        color: Colors.white,
+                        size: 14,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '移除',
+              style: TextStyle(
+                fontSize: 10,
+                color: Colors.black.withValues(alpha: 0.38),
+                letterSpacing: 0.8,
               ),
             ),
           ],
         ),
       InkWell(
+        key: const ValueKey('narrativeMountedPhotoAddButton'),
         onTap: _mountPhoto,
         child: Container(
           width: 80,
@@ -739,7 +834,21 @@ class _NarrativeElementEditorPageState
           decoration: BoxDecoration(
             border: Border.all(color: Colors.black26, width: 1),
           ),
-          child: const Icon(Icons.add, color: Colors.black54, size: 24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.add, color: Colors.black54, size: 24),
+              const SizedBox(height: 6),
+              Text(
+                _mountedPhotos.isEmpty ? '添加' : '继续添加',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: Colors.black.withValues(alpha: 0.45),
+                  letterSpacing: 0.8,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     ];

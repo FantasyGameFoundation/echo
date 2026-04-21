@@ -1585,6 +1585,77 @@ void main() {
   );
 
   testWidgets(
+    'unassigned narrative element stays explicit and offers a direct reassignment path',
+    (tester) async {
+      String? savedChapterId;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: NarrativeElementEditPage(
+            chapters: <StructureChapter>[
+              StructureChapter.create(
+                id: 'chapter-a',
+                projectId: 'project-a',
+                chapterTitle: '第一章',
+                chapterSortOrder: 0,
+                createdTimestamp: DateTime(2026),
+                updatedTimestamp: DateTime(2026),
+              ),
+            ],
+            element: NarrativeElement.create(
+              id: 'element-unassigned',
+              projectId: 'project-a',
+              elementTitle: '未归章元素',
+              linkedPhotoPaths: <String>['/tmp/unassigned.jpg'],
+              createdTimestamp: DateTime(2026),
+              updatedTimestamp: DateTime(2026),
+            ),
+            onSave:
+                ({
+                  required String title,
+                  required String description,
+                  required String? chapterId,
+                  required String status,
+                  required String? unlockChapterId,
+                  required List<String> photoPaths,
+                }) async {
+                  savedChapterId = chapterId;
+                },
+            onComplete:
+                ({
+                  required String title,
+                  required String description,
+                  required String? chapterId,
+                  required String status,
+                  required String? unlockChapterId,
+                  required List<String> photoPaths,
+                }) async {},
+            onDelete: () async {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('narrativeElementUnassignedChapterChip')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('narrativeElementUnassignedHint')),
+        findsNothing,
+      );
+
+      await tester.tap(find.text('C H A P T E R   01'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('narrativeSaveButton')));
+      await tester.pumpAndSettle();
+
+      expect(savedChapterId, 'chapter-a');
+    },
+  );
+
+  testWidgets(
     'ongoing narrative element completion saves edits and marks ready',
     (tester) async {
       final projectRepository = _InMemoryProjectRepository(
@@ -1982,6 +2053,95 @@ void main() {
   );
 
   testWidgets(
+    'editing an incomplete narrative element into a completed chapter requires confirmation before save',
+    (tester) async {
+      var saveCalls = 0;
+      String? savedChapterId;
+      String? savedUnlockChapterId;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: NarrativeElementEditPage(
+            chapters: <StructureChapter>[
+              StructureChapter.create(
+                id: 'chapter-a',
+                projectId: 'project-a',
+                chapterTitle: '第一章',
+                chapterStatus: '进行',
+                chapterSortOrder: 0,
+                createdTimestamp: DateTime(2026),
+                updatedTimestamp: DateTime(2026),
+              ),
+              StructureChapter.create(
+                id: 'chapter-b',
+                projectId: 'project-a',
+                chapterTitle: '第二章',
+                chapterStatus: '完成',
+                chapterSortOrder: 1,
+                createdTimestamp: DateTime(2026),
+                updatedTimestamp: DateTime(2026),
+              ),
+            ],
+            element: NarrativeElement.create(
+              id: 'element-finding',
+              projectId: 'project-a',
+              chapterId: 'chapter-a',
+              elementTitle: '未完成元素',
+              elementStatus: 'finding',
+              linkedPhotoPaths: const <String>[],
+              createdTimestamp: DateTime(2026),
+              updatedTimestamp: DateTime(2026),
+            ),
+            onSave:
+                ({
+                  required String title,
+                  required String description,
+                  required String? chapterId,
+                  required String status,
+                  required String? unlockChapterId,
+                  required List<String> photoPaths,
+                }) async {
+                  saveCalls += 1;
+                  savedChapterId = chapterId;
+                  savedUnlockChapterId = unlockChapterId;
+                },
+            onComplete:
+                ({
+                  required String title,
+                  required String description,
+                  required String? chapterId,
+                  required String status,
+                  required String? unlockChapterId,
+                  required List<String> photoPaths,
+                }) async {},
+            onDelete: () async {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('C H A P T E R   02'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('narrativeSaveButton')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('确认继续保存'), findsOneWidget);
+      expect(find.text('继续保存该元素后，所属章节也会恢复为可编辑状态。'), findsOneWidget);
+      expect(saveCalls, 0);
+
+      await tester.tap(
+        find.descendant(of: find.byType(Dialog), matching: find.text('继续保存')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(saveCalls, 1);
+      expect(savedChapterId, 'chapter-b');
+      expect(savedUnlockChapterId, 'chapter-b');
+    },
+  );
+
+  testWidgets(
     'chapter page draft element tag opens edit page without chapter selector',
     (tester) async {
       await tester.pumpWidget(
@@ -2084,6 +2244,41 @@ void main() {
     },
   );
 
+  testWidgets(
+    'narrative list tile keeps blank description space without fallback copy',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Material(
+            child: Column(
+              children: const [
+                NarrativeListTile(
+                  title: '有说明元素',
+                  description: '这里有第一行说明\n这里有第二行说明',
+                  status: ElementStatus.finding,
+                  onTap: _noop,
+                ),
+                NarrativeListTile(
+                  title: '空说明元素',
+                  description: '',
+                  status: ElementStatus.finding,
+                  onTap: _noop,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('暂无叙事元素说明'), findsNothing);
+      expect(
+        tester.getSize(find.byType(InkWell).at(1)).height,
+        closeTo(tester.getSize(find.byType(InkWell).at(0)).height, 0.5),
+      );
+    },
+  );
+
   testWidgets('add element shows passive hint when no chapters exist', (
     tester,
   ) async {
@@ -2118,6 +2313,177 @@ void main() {
     expect(find.text('请先添加章节'), findsOneWidget);
     expect(find.text('叙 事 元 素'), findsNothing);
   });
+
+  testWidgets(
+    'adding a narrative element into a completed chapter unlocks the chapter after confirmation',
+    (tester) async {
+      final projectRepository = _InMemoryProjectRepository(
+        initialProjects: <Project>[
+          Project.create(
+            id: 'project-add-completed-chapter',
+            projectTitle: '完成章节挂载测试',
+            projectThemeStatement: '验证新增元素时章节解锁',
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+        ],
+        currentProjectId: 'project-add-completed-chapter',
+      );
+      final chapterRepository = _InMemoryStructureChapterRepository(
+        initialChapters: <StructureChapter>[
+          StructureChapter.create(
+            id: 'chapter-completed',
+            projectId: 'project-add-completed-chapter',
+            chapterTitle: '已完成章节',
+            chapterStatus: '完成',
+            chapterSortOrder: 0,
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+        ],
+      );
+      final elementRepository = _InMemoryNarrativeElementRepository();
+
+      await tester.pumpWidget(
+        EchoApp(
+          projectRepository: projectRepository,
+          structureChapterRepository: chapterRepository,
+          narrativeElementRepository: elementRepository,
+          projectRelationRepository: _InMemoryProjectRelationRepository(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('叙事元素'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('添加叙事元素'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const ValueKey('narrativeElementNameField')),
+        '新增未完成元素',
+      );
+      await tester.tap(find.text('C H A P T E R   01'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('narrativeSaveButton')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('确认继续添加'), findsOneWidget);
+
+      await tester.tap(
+        find.descendant(of: find.byType(Dialog), matching: find.text('继续添加')),
+      );
+      await tester.pumpAndSettle();
+
+      final chapters = await chapterRepository.listChaptersForProject(
+        'project-add-completed-chapter',
+      );
+      final elements = await elementRepository.listElementsForProject(
+        'project-add-completed-chapter',
+      );
+
+      expect(chapters.single.statusLabel, '进行');
+      expect(elements.single.owningChapterId, 'chapter-completed');
+      expect(elements.single.status, 'finding');
+    },
+  );
+
+  testWidgets(
+    'moving an incomplete narrative element into a completed chapter unlocks that chapter after confirmation',
+    (tester) async {
+      final projectRepository = _InMemoryProjectRepository(
+        initialProjects: <Project>[
+          Project.create(
+            id: 'project-move-completed-chapter',
+            projectTitle: '元素移章测试',
+            projectThemeStatement: '验证编辑元素移入完成章节时章节解锁',
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+        ],
+        currentProjectId: 'project-move-completed-chapter',
+      );
+      final chapterRepository = _InMemoryStructureChapterRepository(
+        initialChapters: <StructureChapter>[
+          StructureChapter.create(
+            id: 'chapter-a',
+            projectId: 'project-move-completed-chapter',
+            chapterTitle: '进行中的章节',
+            chapterStatus: '进行',
+            chapterSortOrder: 0,
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+          StructureChapter.create(
+            id: 'chapter-b',
+            projectId: 'project-move-completed-chapter',
+            chapterTitle: '已完成章节',
+            chapterStatus: '完成',
+            chapterSortOrder: 1,
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+        ],
+      );
+      final elementRepository = _InMemoryNarrativeElementRepository(
+        initialElements: <NarrativeElement>[
+          NarrativeElement.create(
+            id: 'element-finding',
+            projectId: 'project-move-completed-chapter',
+            chapterId: 'chapter-a',
+            elementTitle: '待整理元素',
+            elementStatus: 'finding',
+            linkedPhotoPaths: const <String>[],
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        EchoApp(
+          projectRepository: projectRepository,
+          structureChapterRepository: chapterRepository,
+          narrativeElementRepository: elementRepository,
+          projectRelationRepository: _InMemoryProjectRelationRepository(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('叙事元素'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('待整理元素'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('C H A P T E R   02'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('narrativeSaveButton')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('确认继续保存'), findsOneWidget);
+
+      await tester.tap(
+        find.descendant(of: find.byType(Dialog), matching: find.text('继续保存')),
+      );
+      await tester.pumpAndSettle();
+
+      final chapters = await chapterRepository.listChaptersForProject(
+        'project-move-completed-chapter',
+      );
+      final elements = await elementRepository.listElementsForProject(
+        'project-move-completed-chapter',
+      );
+
+      expect(
+        chapters
+            .singleWhere((chapter) => chapter.chapterId == 'chapter-b')
+            .statusLabel,
+        '进行',
+      );
+      expect(elements.single.owningChapterId, 'chapter-b');
+      expect(elements.single.status, 'finding');
+    },
+  );
 
   testWidgets(
     'narrative element create page uses centered save button and returns entered data',
@@ -2185,6 +2551,66 @@ void main() {
       expect(savedChapterId, 'chapter-a');
       expect(savedStatus, 'finding');
       expect(savedPhotos, isEmpty);
+    },
+  );
+
+  testWidgets(
+    'narrative element create page confirms before saving into a completed chapter',
+    (tester) async {
+      String? savedChapterId;
+      String? savedUnlockChapterId;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: NarrativeElementCreatePage(
+            chapters: <StructureChapter>[
+              StructureChapter.create(
+                id: 'chapter-a',
+                projectId: 'project-a',
+                chapterTitle: '第一章：河岸的回声',
+                chapterStatus: '完成',
+                chapterSortOrder: 0,
+                createdTimestamp: DateTime(2026),
+                updatedTimestamp: DateTime(2026),
+              ),
+            ],
+            onSave:
+                ({
+                  required String title,
+                  required String description,
+                  required String? chapterId,
+                  required String status,
+                  required String? unlockChapterId,
+                  required List<String> photoPaths,
+                }) async {
+                  savedChapterId = chapterId;
+                  savedUnlockChapterId = unlockChapterId;
+                },
+            onPickPhoto: () async => <String>[],
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const ValueKey('narrativeElementNameField')),
+        '挂入完成章节的新元素',
+      );
+      await tester.tap(find.text('C H A P T E R   01'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('narrativeSaveButton')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('确认继续添加'), findsOneWidget);
+      expect(find.text('继续添加该元素后，所属章节也会恢复为可编辑状态。'), findsOneWidget);
+
+      await tester.tap(
+        find.descendant(of: find.byType(Dialog), matching: find.text('继续添加')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(savedChapterId, 'chapter-a');
+      expect(savedUnlockChapterId, 'chapter-a');
     },
   );
 
@@ -2299,6 +2725,92 @@ void main() {
         '/app/media/narrative/copied-photo-a.jpg',
         '/app/media/narrative/copied-photo-b.jpg',
       ]);
+    },
+  );
+
+  testWidgets(
+    'narrative element create page shows mounted photo count and supports quick removal',
+    (tester) async {
+      List<String>? savedPhotos;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: NarrativeElementCreatePage(
+            chapters: <StructureChapter>[
+              StructureChapter.create(
+                id: 'chapter-a',
+                projectId: 'project-a',
+                chapterTitle: '第一章：河岸的回声',
+                chapterSortOrder: 0,
+                createdTimestamp: DateTime(2026),
+                updatedTimestamp: DateTime(2026),
+              ),
+            ],
+            onSave:
+                ({
+                  required String title,
+                  required String description,
+                  required String? chapterId,
+                  required String status,
+                  required String? unlockChapterId,
+                  required List<String> photoPaths,
+                }) async {
+                  savedPhotos = photoPaths;
+                },
+            onPickPhoto: () async => <String>[
+              '/Users/demo/Pictures/source-photo-a.jpg',
+              '/Users/demo/Pictures/source-photo-b.jpg',
+            ],
+            onImportPhoto: (sourcePath) async {
+              if (sourcePath.endsWith('a.jpg')) {
+                return '/app/media/narrative/copied-photo-a.jpg';
+              }
+              return '/app/media/narrative/copied-photo-b.jpg';
+            },
+          ),
+        ),
+      );
+
+      await tester.enterText(
+        find.byKey(const ValueKey('narrativeElementNameField')),
+        '新的叙事元素',
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('narrativeMountedPhotoAddButton')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('narrativeMountedPhotoSummary')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('narrativeMountedPhotoTile-0')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('narrativeMountedPhotoTile-1')),
+        findsOneWidget,
+      );
+
+      await tester.tap(
+        find.byKey(const ValueKey('narrativeMountedPhotoRemove-0')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('narrativeMountedPhotoSummary')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('narrativeMountedPhotoTile-1')),
+        findsNothing,
+      );
+
+      await tester.tap(find.byKey(const ValueKey('narrativeSaveButton')));
+      await tester.pumpAndSettle();
+
+      expect(savedPhotos, <String>['/app/media/narrative/copied-photo-b.jpg']);
     },
   );
 
@@ -2584,9 +3096,17 @@ void main() {
     expect(find.text('对比'), findsOneWidget);
     expect(find.text('重复'), findsOneWidget);
     expect(find.text('呼应'), findsOneWidget);
-    expect(find.text('转折'), findsOneWidget);
     expect(find.text('4'), findsOneWidget);
     expect(find.text('7'), findsOneWidget);
+
+    await tester.scrollUntilVisible(
+      find.text('转折'),
+      240,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('转折'), findsOneWidget);
 
     await tester.scrollUntilVisible(
       find.text('添加关系类型'),
@@ -2745,14 +3265,20 @@ void main() {
         find.byKey(const ValueKey('relationGroupPageTitle')),
         findsOneWidget,
       );
-      expect(find.text('编辑关系'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('relationGroupPageScopeLabel')),
+        findsOneWidget,
+      );
+      expect(find.text('关系类型'), findsWidgets);
+      expect(find.text('编辑关系类型'), findsOneWidget);
+      expect(find.text('关系组'), findsNothing);
       expect(find.text('江边水塔 / 旧厂烟囱'), findsOneWidget);
       expect(
         find.byKey(const ValueKey('addRelationGroupButton')),
         findsOneWidget,
       );
 
-      await tester.tap(find.text('编辑关系'));
+      await tester.tap(find.text('编辑关系类型'));
       await tester.pumpAndSettle();
 
       expect(find.text('编 辑 关 系 类 型'), findsOneWidget);
@@ -2940,6 +3466,15 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('addRelationGroupButton')));
       await tester.pumpAndSettle();
 
+      expect(
+        find.byKey(const ValueKey('relationGroupEditorScopeLabel')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('relationGroupRelationTypeHint')),
+        findsOneWidget,
+      );
+      expect(find.text('所属关系类型 · 呼应'), findsOneWidget);
       expect(
         find.byKey(const ValueKey('relationGroupTitleField')),
         findsOneWidget,
@@ -3146,6 +3681,151 @@ void main() {
       );
       expect(updatedGroup.title, '更新后的关系组标题');
       expect(updatedGroup.description, '更新后的关系组说明');
+    },
+  );
+
+  testWidgets(
+    'relation group edit page supports removing a node locally and adding another through selection',
+    (tester) async {
+      final projectRepository = _InMemoryProjectRepository(
+        initialProjects: <Project>[
+          Project.create(
+            id: 'project-relation-group-local-edit',
+            projectTitle: '关系组局部编辑测试',
+            projectThemeStatement: '验证关系组编辑页局部增删',
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+        ],
+        currentProjectId: 'project-relation-group-local-edit',
+      );
+      final chapterRepository = _InMemoryStructureChapterRepository(
+        initialChapters: <StructureChapter>[
+          StructureChapter.create(
+            id: 'chapter-local-a',
+            projectId: 'project-relation-group-local-edit',
+            chapterTitle: '第一章：江岸',
+            chapterSortOrder: 0,
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+          StructureChapter.create(
+            id: 'chapter-local-b',
+            projectId: 'project-relation-group-local-edit',
+            chapterTitle: '第二章：山坳',
+            chapterSortOrder: 1,
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+        ],
+      );
+      final narrativeElementRepository = _InMemoryNarrativeElementRepository(
+        initialElements: <NarrativeElement>[
+          NarrativeElement.create(
+            id: 'element-local-a',
+            projectId: 'project-relation-group-local-edit',
+            chapterId: 'chapter-local-a',
+            elementTitle: '岸边石阶',
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+          NarrativeElement.create(
+            id: 'element-local-b',
+            projectId: 'project-relation-group-local-edit',
+            chapterId: 'chapter-local-b',
+            elementTitle: '被风吹弯的草',
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+          NarrativeElement.create(
+            id: 'element-local-c',
+            projectId: 'project-relation-group-local-edit',
+            chapterId: 'chapter-local-b',
+            elementTitle: '山坳石纹',
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+        ],
+      );
+      final relationRepository = _InMemoryProjectRelationRepository();
+      final relationType =
+          (await relationRepository.listRelationTypesForProject(
+            'project-relation-group-local-edit',
+          )).firstWhere((type) => type.name == '呼应');
+      final createdGroup = await relationRepository.createRelationGroup(
+        projectId: 'project-relation-group-local-edit',
+        relationTypeId: relationType.relationTypeId,
+        title: '局部编辑关系组',
+        description: '先删再补。',
+        members: const <ProjectRelationDraftMember>[
+          ProjectRelationDraftMember.element(elementId: 'element-local-a'),
+          ProjectRelationDraftMember.element(elementId: 'element-local-b'),
+        ],
+      );
+
+      await tester.pumpWidget(
+        EchoApp(
+          projectRepository: projectRepository,
+          structureChapterRepository: chapterRepository,
+          narrativeElementRepository: narrativeElementRepository,
+          projectRelationRepository: relationRepository,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('关联关系'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('呼应'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('局部编辑关系组'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(
+          const ValueKey('relationGroupRemoveNode-element:element-local-b'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('被风吹弯的草'), findsNothing);
+
+      await tester.tap(
+        find.byKey(const ValueKey('relationGroupAddNodePlaceholder')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('山坳石纹'));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('completeRelationGroupSelectionButton')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('山坳石纹'), findsOneWidget);
+
+      await tester.tap(
+        find.byKey(const ValueKey('completeRelationGroupButton')),
+      );
+      await tester.pumpAndSettle();
+
+      final relationMembers = await relationRepository
+          .listRelationMembersForProject('project-relation-group-local-edit');
+      final updatedMembers =
+          relationMembers
+              .where(
+                (member) =>
+                    member.owningGroupId == createdGroup.relationGroupId,
+              )
+              .toList()
+            ..sort(
+              (left, right) =>
+                  left.memberSortOrder.compareTo(right.memberSortOrder),
+            );
+
+      expect(updatedMembers, hasLength(2));
+      expect(updatedMembers.map((member) => member.linkedElementId), <String?>[
+        'element-local-a',
+        'element-local-c',
+      ]);
     },
   );
 
@@ -3927,7 +4607,7 @@ void main() {
       await tester.tap(find.text('对比'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('编辑关系'));
+      await tester.tap(find.text('编辑关系类型'));
       await tester.pumpAndSettle();
 
       expect(
@@ -4009,7 +4689,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('对比'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('编辑关系'));
+      await tester.tap(find.text('编辑关系类型'));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('relationTypeDeleteButton')));
       await tester.pumpAndSettle();
