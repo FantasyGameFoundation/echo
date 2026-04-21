@@ -42,7 +42,7 @@ class EchoApp extends StatelessWidget {
   final StructureChapterRepository? structureChapterRepository;
   final NarrativeElementRepository? narrativeElementRepository;
   final ProjectRelationRepository? projectRelationRepository;
-  final PickProjectCoverImage? narrativeElementPhotoPicker;
+  final PickGalleryImages? narrativeElementPhotoPicker;
   final ImportNarrativePhoto? narrativeElementPhotoImporter;
 
   @override

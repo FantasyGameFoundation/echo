@@ -20,13 +20,13 @@ class ChapterNarrativeElementCreatePage extends StatefulWidget {
   const ChapterNarrativeElementCreatePage({
     super.key,
     this.initialDraft,
-    PickProjectCoverImage? onPickPhoto,
+    PickGalleryImages? onPickPhoto,
     ImportDraftNarrativePhoto? onImportPhoto,
-  }) : onPickPhoto = onPickPhoto ?? pickProjectCoverImageFromGallery,
+  }) : onPickPhoto = onPickPhoto ?? pickGalleryImagesFromGallery,
        onImportPhoto = onImportPhoto ?? importDraftNarrativePhotoToApp;
 
   final NarrativeElementDraft? initialDraft;
-  final PickProjectCoverImage onPickPhoto;
+  final PickGalleryImages onPickPhoto;
   final ImportDraftNarrativePhoto onImportPhoto;
 
   bool get isEditMode => initialDraft != null;
@@ -105,23 +105,30 @@ class _ChapterNarrativeElementCreatePageState
   }
 
   Future<void> _mountPhoto() async {
-    final photoPath = await widget.onPickPhoto();
-    if (!mounted || photoPath == null) {
+    final photoPaths = await widget.onPickPhoto();
+    if (!mounted || photoPaths.isEmpty) {
       return;
     }
 
-    try {
-      final storedPath = await widget.onImportPhoto(photoPath);
-      if (!mounted) {
-        return;
+    final storedPaths = <String>[];
+    var hasImportFailure = false;
+    for (final photoPath in photoPaths) {
+      try {
+        final storedPath = await widget.onImportPhoto(photoPath);
+        storedPaths.add(storedPath);
+      } catch (_) {
+        hasImportFailure = true;
       }
+    }
+    if (!mounted) {
+      return;
+    }
+    if (storedPaths.isNotEmpty) {
       setState(() {
-        _mountedPhotos.add(storedPath);
+        _mountedPhotos.addAll(storedPaths);
       });
-    } catch (_) {
-      if (!mounted) {
-        return;
-      }
+    }
+    if (hasImportFailure) {
       _showPassiveHint('照片导入失败，请重试');
     }
   }

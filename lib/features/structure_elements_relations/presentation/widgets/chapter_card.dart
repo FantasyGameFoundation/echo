@@ -45,6 +45,8 @@ class ChapterCard extends StatelessWidget {
           const SizedBox(height: 16),
           Text(
             title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.w400,

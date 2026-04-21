@@ -38,12 +38,9 @@ class ProjectRelationCreatePage extends StatefulWidget {
       _ProjectRelationCreatePageState();
 }
 
-enum _RelationTargetType { element, photo, both }
-
 class _ProjectRelationCreatePageState extends State<ProjectRelationCreatePage> {
   late final TextEditingController _nameController;
   late final TextEditingController _descController;
-  _RelationTargetType _selectedType = _RelationTargetType.both;
   bool _isSaving = false;
 
   bool get _canSave => _nameController.text.trim().isNotEmpty && !_isSaving;
@@ -161,10 +158,6 @@ class _ProjectRelationCreatePageState extends State<ProjectRelationCreatePage> {
                           decoration: _buildInputDecoration('例如：视觉呼应、时空对比...'),
                         ),
                         const SizedBox(height: 48),
-                        _buildSectionLabel('关 联 类 型'),
-                        const SizedBox(height: 16),
-                        _buildTypeSelector(),
-                        const SizedBox(height: 48),
                         _buildSectionLabel('关 系 描 述'),
                         const SizedBox(height: 12),
                         TextField(
@@ -235,7 +228,7 @@ class _ProjectRelationCreatePageState extends State<ProjectRelationCreatePage> {
             onPressed: () => Navigator.of(context).pop(),
           ),
           Text(
-            widget.isEditMode ? '编 辑 关 联 关 系' : '添 加 关 联 关 系',
+            widget.isEditMode ? '编 辑 关 系 类 型' : '添 加 关 系 类 型',
             style: const TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w600,
@@ -275,82 +268,6 @@ class _ProjectRelationCreatePageState extends State<ProjectRelationCreatePage> {
       ),
       focusedBorder: const UnderlineInputBorder(
         borderSide: BorderSide(color: Colors.black87, width: 1.5),
-      ),
-    );
-  }
-
-  Widget _buildTypeSelector() {
-    final typeSelector = LayoutBuilder(
-      builder: (context, constraints) {
-        final itemWidth = (constraints.maxWidth - 16) / 3;
-
-        return Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            _buildTypeItem('照片', _RelationTargetType.photo, itemWidth),
-            _buildTypeItem('元素', _RelationTargetType.element, itemWidth),
-            _buildTypeItem('自由组合', _RelationTargetType.both, itemWidth),
-          ],
-        );
-      },
-    );
-
-    if (!widget.isEditMode) {
-      return typeSelector;
-    }
-
-    return Opacity(
-      opacity: 0.45,
-      child: IgnorePointer(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            typeSelector,
-            const SizedBox(height: 8),
-            Text(
-              '编辑时不可修改关联类型',
-              style: TextStyle(
-                fontSize: 11,
-                color: Colors.grey.shade500,
-                letterSpacing: 0.6,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTypeItem(String label, _RelationTargetType type, double width) {
-    final isSelected = _selectedType == type;
-
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          _selectedType = type;
-        });
-      },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        width: width,
-        height: 48,
-        decoration: BoxDecoration(
-          color: isSelected ? Colors.black : Colors.transparent,
-          border: Border.all(
-            color: isSelected ? Colors.black : Colors.black12,
-            width: 1.0,
-          ),
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-            color: isSelected ? Colors.white : Colors.black38,
-            letterSpacing: 1.0,
-          ),
-        ),
       ),
     );
   }

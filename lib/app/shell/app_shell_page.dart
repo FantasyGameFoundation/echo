@@ -46,7 +46,7 @@ class AppShellPage extends StatefulWidget {
   final StructureChapterRepository structureChapterRepository;
   final NarrativeElementRepository narrativeElementRepository;
   final ProjectRelationRepository projectRelationRepository;
-  final PickProjectCoverImage? narrativeElementPhotoPicker;
+  final PickGalleryImages? narrativeElementPhotoPicker;
   final ImportNarrativePhoto? narrativeElementPhotoImporter;
 
   @override

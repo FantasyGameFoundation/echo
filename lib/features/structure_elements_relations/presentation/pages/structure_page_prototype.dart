@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:echo/features/structure_elements_relations/domain/element_status.dart';
 import 'package:echo/features/structure_elements_relations/presentation/models/structure_chapter_card_data.dart';
 import 'package:echo/features/structure_elements_relations/presentation/models/structure_relation_card_data.dart';
@@ -434,6 +436,7 @@ class _StructurePagePrototypeState extends State<StructurePagePrototype> {
             if (overflowCount > 0)
               _buildChapterOverflowBox(
                 '+$overflowCount',
+                source: previewImageSources[visibleImages.length],
                 size: tileSize,
                 addLeftSpacing: visibleImages.isNotEmpty,
               ),
@@ -469,6 +472,7 @@ class _StructurePagePrototypeState extends State<StructurePagePrototype> {
 
   Widget _buildChapterOverflowBox(
     String text, {
+    required String source,
     required double size,
     required bool addLeftSpacing,
   }) {
@@ -477,11 +481,48 @@ class _StructurePagePrototypeState extends State<StructurePagePrototype> {
       width: size,
       height: size,
       margin: EdgeInsets.only(left: addLeftSpacing ? 2 : 0),
-      color: Colors.grey.shade300,
-      alignment: Alignment.center,
-      child: Text(
-        text,
-        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+      clipBehavior: Clip.hardEdge,
+      decoration: BoxDecoration(color: Colors.grey.shade300),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Image(
+            image: ResizeImage.resizeIfNeeded(
+              160,
+              null,
+              narrativeThumbnailProvider(source),
+            ),
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) {
+              return Container(color: Colors.grey.shade300);
+            },
+          ),
+          ClipRect(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 3.5, sigmaY: 3.5),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.18),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.16),
+                    width: 0.8,
+                  ),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  text,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w300,
+                    fontSize: 13,
+                    color: Colors.black87,
+                    letterSpacing: 0.2,
+                    fontFeatures: <FontFeature>[FontFeature.tabularFigures()],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -529,7 +570,7 @@ class _StructurePagePrototypeState extends State<StructurePagePrototype> {
             Icon(Icons.add, color: Colors.grey.shade400, size: 18),
             const SizedBox(width: 8),
             Text(
-              '添加关联关系',
+              '添加关系类型',
               style: TextStyle(
                 color: Colors.grey.shade400,
                 fontSize: 13,

@@ -32,14 +32,14 @@ class NarrativeElementCreatePage extends StatelessWidget {
     super.key,
     required this.chapters,
     required this.onSave,
-    PickProjectCoverImage? onPickPhoto,
+    PickGalleryImages? onPickPhoto,
     ImportNarrativePhoto? onImportPhoto,
-  }) : onPickPhoto = onPickPhoto ?? pickProjectCoverImageFromGallery,
+  }) : onPickPhoto = onPickPhoto ?? pickGalleryImagesFromGallery,
        onImportPhoto = onImportPhoto ?? importNarrativePhotoToApp;
 
   final List<StructureChapter> chapters;
   final SaveNarrativeElement onSave;
-  final PickProjectCoverImage onPickPhoto;
+  final PickGalleryImages onPickPhoto;
   final ImportNarrativePhoto onImportPhoto;
 
   @override
@@ -65,9 +65,9 @@ class NarrativeElementEditPage extends StatelessWidget {
     required this.onComplete,
     required this.onDelete,
     this.allowChapterSelection = true,
-    PickProjectCoverImage? onPickPhoto,
+    PickGalleryImages? onPickPhoto,
     ImportNarrativePhoto? onImportPhoto,
-  }) : onPickPhoto = onPickPhoto ?? pickProjectCoverImageFromGallery,
+  }) : onPickPhoto = onPickPhoto ?? pickGalleryImagesFromGallery,
        onImportPhoto = onImportPhoto ?? importNarrativePhotoToApp;
 
   final List<StructureChapter> chapters;
@@ -76,7 +76,7 @@ class NarrativeElementEditPage extends StatelessWidget {
   final SaveNarrativeElement onComplete;
   final Future<void> Function() onDelete;
   final bool allowChapterSelection;
-  final PickProjectCoverImage onPickPhoto;
+  final PickGalleryImages onPickPhoto;
   final ImportNarrativePhoto onImportPhoto;
 
   @override
@@ -115,7 +115,7 @@ class _NarrativeElementEditorPage extends StatefulWidget {
   final SaveNarrativeElement onSave;
   final SaveNarrativeElement? onComplete;
   final Future<void> Function()? onDelete;
-  final PickProjectCoverImage onPickPhoto;
+  final PickGalleryImages onPickPhoto;
   final ImportNarrativePhoto onImportPhoto;
 
   bool get isEditMode => editorElement != null;
@@ -203,23 +203,30 @@ class _NarrativeElementEditorPageState
   }
 
   Future<void> _mountPhoto() async {
-    final photoPath = await widget.onPickPhoto();
-    if (!mounted || photoPath == null) {
+    final photoPaths = await widget.onPickPhoto();
+    if (!mounted || photoPaths.isEmpty) {
       return;
     }
 
-    try {
-      final storedPath = await widget.onImportPhoto(photoPath);
-      if (!mounted) {
-        return;
+    final storedPaths = <String>[];
+    var hasImportFailure = false;
+    for (final photoPath in photoPaths) {
+      try {
+        final storedPath = await widget.onImportPhoto(photoPath);
+        storedPaths.add(storedPath);
+      } catch (_) {
+        hasImportFailure = true;
       }
+    }
+    if (!mounted) {
+      return;
+    }
+    if (storedPaths.isNotEmpty) {
       setState(() {
-        _mountedPhotos.add(storedPath);
+        _mountedPhotos.addAll(storedPaths);
       });
-    } catch (_) {
-      if (!mounted) {
-        return;
-      }
+    }
+    if (hasImportFailure) {
       _showPassiveHint('照片导入失败，请重试');
     }
   }

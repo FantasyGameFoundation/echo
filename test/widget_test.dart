@@ -27,6 +27,7 @@ import 'package:echo/features/structure_elements_relations/presentation/models/n
 import 'package:echo/features/structure_elements_relations/presentation/models/structure_chapter_card_data.dart';
 import 'package:echo/features/structure_elements_relations/presentation/models/structure_relation_card_data.dart';
 import 'package:echo/features/structure_elements_relations/presentation/pages/chapter_create_page.dart';
+import 'package:echo/features/structure_elements_relations/presentation/pages/chapter_narrative_element_create_page.dart';
 import 'package:echo/features/structure_elements_relations/presentation/pages/narrative_element_create_page.dart';
 import 'package:echo/features/structure_elements_relations/presentation/pages/structure_page_prototype.dart';
 import 'package:echo/features/structure_elements_relations/presentation/widgets/narrative_list_tile.dart';
@@ -2081,7 +2082,7 @@ void main() {
                   savedStatus = status;
                   savedPhotos = photoPaths;
                 },
-            onPickPhoto: () async => null,
+            onPickPhoto: () async => <String>[],
           ),
         ),
       );
@@ -2142,7 +2143,9 @@ void main() {
                 }) async {
                   savedPhotos = photoPaths;
                 },
-            onPickPhoto: () async => '/Users/demo/Pictures/source-photo.jpg',
+            onPickPhoto: () async => <String>[
+              '/Users/demo/Pictures/source-photo.jpg',
+            ],
             onImportPhoto: (sourcePath) async =>
                 '/app/media/narrative/copied-photo.jpg',
           ),
@@ -2163,6 +2166,65 @@ void main() {
         savedPhotos,
         isNot(contains('/Users/demo/Pictures/source-photo.jpg')),
       );
+    },
+  );
+
+  testWidgets(
+    'narrative element create page mounts multiple imported photos from one selection',
+    (tester) async {
+      List<String>? savedPhotos;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: NarrativeElementCreatePage(
+            chapters: <StructureChapter>[
+              StructureChapter.create(
+                id: 'chapter-a',
+                projectId: 'project-a',
+                chapterTitle: '第一章：河岸的回声',
+                chapterSortOrder: 0,
+                createdTimestamp: DateTime(2026),
+                updatedTimestamp: DateTime(2026),
+              ),
+            ],
+            onSave:
+                ({
+                  required String title,
+                  required String description,
+                  required String? chapterId,
+                  required String status,
+                  required String? unlockChapterId,
+                  required List<String> photoPaths,
+                }) async {
+                  savedPhotos = photoPaths;
+                },
+            onPickPhoto: () async => <String>[
+              '/Users/demo/Pictures/source-photo-a.jpg',
+              '/Users/demo/Pictures/source-photo-b.jpg',
+            ],
+            onImportPhoto: (sourcePath) async {
+              if (sourcePath.endsWith('a.jpg')) {
+                return '/app/media/narrative/copied-photo-a.jpg';
+              }
+              return '/app/media/narrative/copied-photo-b.jpg';
+            },
+          ),
+        ),
+      );
+
+      await tester.enterText(
+        find.byKey(const ValueKey('narrativeElementNameField')),
+        '新的叙事元素',
+      );
+      await tester.tap(find.byIcon(Icons.add));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('narrativeSaveButton')));
+      await tester.pumpAndSettle();
+
+      expect(savedPhotos, <String>[
+        '/app/media/narrative/copied-photo-a.jpg',
+        '/app/media/narrative/copied-photo-b.jpg',
+      ]);
     },
   );
 
@@ -2191,7 +2253,7 @@ void main() {
                   required String? unlockChapterId,
                   required List<String> photoPaths,
                 }) async {},
-            onPickPhoto: () async => '/tmp/fake-photo.jpg',
+            onPickPhoto: () async => <String>['/tmp/fake-photo.jpg'],
             onImportPhoto: (sourcePath) async {
               throw Exception('import failed');
             },
@@ -2223,13 +2285,76 @@ void main() {
                   required String? unlockChapterId,
                   required List<String> photoPaths,
                 }) async {},
-            onPickPhoto: () async => null,
+            onPickPhoto: () async => <String>[],
           ),
         ),
       );
 
       expect(find.text('请先添加章节'), findsOneWidget);
       expect(find.text('暂 无 可 选 章 节'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'chapter draft element create page mounts multiple imported photos from one selection',
+    (tester) async {
+      NarrativeElementDraft? savedDraft;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) {
+              return Scaffold(
+                body: Center(
+                  child: TextButton(
+                    onPressed: () async {
+                      savedDraft = await Navigator.of(context)
+                          .push<NarrativeElementDraft>(
+                            MaterialPageRoute(
+                              builder: (_) => ChapterNarrativeElementCreatePage(
+                                onPickPhoto: () async => <String>[
+                                  '/tmp/chapter-draft-a.jpg',
+                                  '/tmp/chapter-draft-b.jpg',
+                                ],
+                                onImportPhoto: (sourcePath) async {
+                                  if (sourcePath.endsWith('a.jpg')) {
+                                    return '/app/media/narrative/chapter-a.jpg';
+                                  }
+                                  return '/app/media/narrative/chapter-b.jpg';
+                                },
+                              ),
+                            ),
+                          );
+                    },
+                    child: const Text('open'),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('chapterDraftElementNameField')),
+        '章节元素',
+      );
+      await tester.tap(find.byIcon(Icons.add));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('chapterDraftElementSaveButton')),
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('chapterDraftElementSaveButton')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(savedDraft?.photoPaths, <String>[
+        '/app/media/narrative/chapter-a.jpg',
+        '/app/media/narrative/chapter-b.jpg',
+      ]);
     },
   );
 
@@ -2390,13 +2515,13 @@ void main() {
     expect(find.text('7'), findsOneWidget);
 
     await tester.scrollUntilVisible(
-      find.text('添加关联关系'),
+      find.text('添加关系类型'),
       300,
       scrollable: find.byType(Scrollable).first,
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('添加关联关系'), findsOneWidget);
+    expect(find.text('添加关系类型'), findsOneWidget);
   });
 
   testWidgets('standalone relation page can add a new relation type card', (
@@ -2430,16 +2555,16 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.scrollUntilVisible(
-      find.text('添加关联关系'),
+      find.text('添加关系类型'),
       300,
       scrollable: find.byType(Scrollable).first,
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('添加关联关系'));
+    await tester.tap(find.text('添加关系类型'));
     await tester.pumpAndSettle();
 
-    expect(find.text('添 加 关 联 关 系'), findsOneWidget);
+    expect(find.text('添 加 关 系 类 型'), findsOneWidget);
     expect(find.text('赤水河沿岸寻访'), findsNothing);
     expect(find.text('章节骨架'), findsNothing);
     expect(find.text('叙事元素'), findsNothing);
@@ -2459,7 +2584,7 @@ void main() {
   });
 
   testWidgets(
-    'relation card opens relation group page and edit button opens relation editor',
+    'relation card opens relation group page and edit button opens relation type editor',
     (tester) async {
       final projectRepository = _InMemoryProjectRepository(
         initialProjects: <Project>[
@@ -2556,8 +2681,7 @@ void main() {
       await tester.tap(find.text('编辑关系'));
       await tester.pumpAndSettle();
 
-      expect(find.text('编 辑 关 联 关 系'), findsOneWidget);
-      expect(find.text('编辑时不可修改关联类型'), findsOneWidget);
+      expect(find.text('编 辑 关 系 类 型'), findsOneWidget);
 
       await tester.enterText(
         find.byKey(const ValueKey('relationTypeNameField')),
@@ -3222,7 +3346,7 @@ void main() {
 
       expect(visibleRelationTypes, isEmpty);
       expect(find.text('对比'), findsNothing);
-      expect(find.text('添加关联关系'), findsOneWidget);
+      expect(find.text('添加关系类型'), findsOneWidget);
     },
   );
 

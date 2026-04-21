@@ -293,14 +293,20 @@ class _ProjectRelationGroupCreatePageState
               onPressed: () => Navigator.of(context).pop(),
             ),
           ),
-          Text(
-            _displayTitle,
-            key: const ValueKey('relationGroupEditorTitle'),
-            style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w500,
-              letterSpacing: 2.0,
-              color: Colors.black87,
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 72),
+            child: Text(
+              _displayTitle,
+              key: const ValueKey('relationGroupEditorTitle'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+                letterSpacing: 2.0,
+                color: Colors.black87,
+              ),
             ),
           ),
           Align(

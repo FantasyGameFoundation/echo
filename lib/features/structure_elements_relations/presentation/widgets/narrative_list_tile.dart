@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:echo/features/structure_elements_relations/domain/element_status.dart';
 import 'package:echo/features/structure_elements_relations/presentation/widgets/photo_fallback_tile.dart';
 import 'package:echo/features/structure_elements_relations/presentation/widgets/narrative_thumbnail_provider.dart';
@@ -35,6 +37,8 @@ class NarrativeListTile extends StatelessWidget {
               children: [
                 Text(
                   title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     fontSize: 16,
                     color: Colors.black87,
@@ -89,20 +93,11 @@ class NarrativeListTile extends StatelessWidget {
         children: [
           _buildThumbnail(previewImage, size: thumbSize),
           if (hasMore)
-            Container(
+            _buildOverflowThumbnail(
+              source: images[1],
+              text: '+${images.length - 1}',
               width: thumbSize,
-              height: thumbSize,
               margin: const EdgeInsets.only(left: thinSpacing),
-              color: Colors.grey.shade200,
-              alignment: Alignment.center,
-              child: Text(
-                '+${images.length - 1}',
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.black87,
-                ),
-              ),
             ),
         ],
       ),
@@ -127,6 +122,70 @@ class NarrativeListTile extends StatelessWidget {
           color: Colors.grey.shade200,
           child: const PhotoFallbackTile(size: 44),
         ),
+      ),
+    );
+  }
+
+  Widget _buildOverflowThumbnail({
+    required String source,
+    required String text,
+    required double width,
+    required EdgeInsets margin,
+  }) {
+    return Container(
+      width: width,
+      height: width,
+      margin: margin,
+      clipBehavior: Clip.hardEdge,
+      decoration: BoxDecoration(color: Colors.grey.shade200),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Image(
+            image: ResizeImage.resizeIfNeeded(
+              120,
+              null,
+              narrativeThumbnailProvider(source),
+            ),
+            fit: BoxFit.cover,
+            filterQuality: FilterQuality.low,
+            loadingBuilder: (context, child, progress) {
+              if (progress == null) {
+                return child;
+              }
+              return const PhotoFallbackTile(size: 44);
+            },
+            errorBuilder: (context, error, stackTrace) => Container(
+              color: Colors.grey.shade200,
+              child: const PhotoFallbackTile(size: 44),
+            ),
+          ),
+          ClipRect(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 3.5, sigmaY: 3.5),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.18),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.16),
+                    width: 0.8,
+                  ),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  text,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w300,
+                    color: Colors.black87,
+                    letterSpacing: 0.2,
+                    fontFeatures: <FontFeature>[FontFeature.tabularFigures()],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

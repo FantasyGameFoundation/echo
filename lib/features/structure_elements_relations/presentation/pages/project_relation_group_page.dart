@@ -357,14 +357,20 @@ class _ProjectRelationGroupPageState extends State<ProjectRelationGroupPage> {
               onPressed: () => Navigator.of(context).pop(),
             ),
           ),
-          Text(
-            _relationType.name,
-            key: const ValueKey('relationGroupPageTitle'),
-            style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w500,
-              letterSpacing: 2.0,
-              color: Colors.black87,
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 72),
+            child: Text(
+              _relationType.name,
+              key: const ValueKey('relationGroupPageTitle'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+                letterSpacing: 2.0,
+                color: Colors.black87,
+              ),
             ),
           ),
           Align(
@@ -434,6 +440,8 @@ class _ProjectRelationGroupPageState extends State<ProjectRelationGroupPage> {
                 children: [
                   Text(
                     group.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
@@ -848,6 +856,8 @@ class _RelationGroupFullScreenViewerState
                                 key: const ValueKey(
                                   'relationFullscreenNodeTitle',
                                 ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w500,
