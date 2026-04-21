@@ -321,6 +321,7 @@ class _ChapterNarrativeElementCreatePageState
 
   Widget _buildTopBar() {
     final rightActionLabel = _isLockedCompletedElement ? '继续编辑' : '元素完成';
+    final editorTitle = widget.isEditMode ? '编 辑 叙 事 元 素' : '添 加 叙 事 元 素';
     final rightAction = widget.isEditMode
         ? TextButton(
             key: const ValueKey('chapterDraftCompleteButton'),
@@ -355,8 +356,9 @@ class _ChapterNarrativeElementCreatePageState
             ),
             onPressed: () => Navigator.pop(context),
           ),
-          const Text(
-            '叙 事 元 素',
+          Text(
+            editorTitle,
+            key: const ValueKey('chapterDraftElementEditorTitle'),
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w500,

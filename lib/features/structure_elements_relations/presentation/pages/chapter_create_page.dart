@@ -311,18 +311,14 @@ class _ChapterEditorPageState extends State<_ChapterEditorPage> {
   }
 
   Future<void> _removeDraftElement(NarrativeElementDraft element) async {
-    final confirmed = await showEditorConfirmationDialog(
-      context: context,
-      title: '确 认 移 除',
-      content: '将元素 "${element.title}" 从本章节中移除？',
-      actionText: '移 除',
-    );
-
-    if (confirmed && mounted) {
-      setState(() {
-        _draftElements.remove(element);
-      });
+    if (!mounted) {
+      return;
     }
+
+    setState(() {
+      _draftElements.remove(element);
+    });
+    _showPassiveHint('已从本章节移除「${element.title}」');
   }
 
   Future<void> _save() async {

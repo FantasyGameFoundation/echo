@@ -156,6 +156,15 @@ class _ProjectRelationGroupPageState extends State<ProjectRelationGroupPage> {
     return (sortOrder + 1).toString().padLeft(2, '0');
   }
 
+  int get _availableRelationSelectionCount {
+    var count = 0;
+    for (final element in widget.narrativeElements) {
+      count += 1;
+      count += element.photoPaths.length;
+    }
+    return count;
+  }
+
   Future<void> _openEditRelationTypePage() async {
     await Navigator.of(context).push(
       MaterialPageRoute(
@@ -187,6 +196,11 @@ class _ProjectRelationGroupPageState extends State<ProjectRelationGroupPage> {
   }
 
   Future<void> _openCreateRelationGroupPage() async {
+    if (_availableRelationSelectionCount < 2) {
+      _showPassiveHint('请先准备至少 2 个可关联对象（元素或照片）');
+      return;
+    }
+
     final result = await Navigator.of(context)
         .push<ProjectRelationGroupEditorResult>(
           MaterialPageRoute(
@@ -228,6 +242,18 @@ class _ProjectRelationGroupPageState extends State<ProjectRelationGroupPage> {
       _relationGroups = relationGroups;
       _relationMembers = relationMembers;
     });
+  }
+
+  void _showPassiveHint(String message) {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message, textAlign: TextAlign.center),
+        duration: const Duration(milliseconds: 1400),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   Future<void> _openEditRelationGroupPage(_RelationGroupCardData group) async {
@@ -539,22 +565,6 @@ class _ProjectRelationGroupPageState extends State<ProjectRelationGroupPage> {
           )
         else
           tile,
-        if (node.kind == _RelationNodeKind.photo) ...[
-          const SizedBox(height: 6),
-          SizedBox(
-            width: 60,
-            child: Text(
-              node.chapterSeq == '--' ? '未分配' : 'CH ${node.chapterSeq}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 9,
-                color: Colors.black.withValues(alpha: 0.34),
-                letterSpacing: 0.8,
-              ),
-            ),
-          ),
-        ],
       ],
     );
   }

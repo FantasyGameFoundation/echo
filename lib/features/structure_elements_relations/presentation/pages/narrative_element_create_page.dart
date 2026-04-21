@@ -4,6 +4,7 @@ import 'package:echo/data/media/media_importer.dart';
 import 'package:echo/features/project/presentation/utils/project_cover_picker.dart';
 import 'package:echo/features/structure_elements_relations/domain/entities/narrative_element.dart';
 import 'package:echo/features/structure_elements_relations/domain/entities/structure_chapter.dart';
+import 'package:echo/features/structure_elements_relations/presentation/widgets/compact_remove_button.dart';
 import 'package:echo/features/structure_elements_relations/presentation/widgets/editor_bottom_action_bar.dart';
 import 'package:echo/features/structure_elements_relations/presentation/widgets/editor_confirmation_dialog.dart';
 import 'package:echo/features/structure_elements_relations/presentation/widgets/narrative_thumbnail_provider.dart';
@@ -47,7 +48,6 @@ class NarrativeElementCreatePage extends StatelessWidget {
   Widget build(BuildContext context) {
     return _NarrativeElementEditorPage(
       chapters: chapters,
-      pageTitle: '叙 事 元 素',
       editorElement: null,
       allowChapterSelection: true,
       onSave: onSave,
@@ -84,7 +84,6 @@ class NarrativeElementEditPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return _NarrativeElementEditorPage(
       chapters: chapters,
-      pageTitle: '叙 事 元 素',
       editorElement: element,
       allowChapterSelection: allowChapterSelection,
       onSave: onSave,
@@ -99,7 +98,6 @@ class NarrativeElementEditPage extends StatelessWidget {
 class _NarrativeElementEditorPage extends StatefulWidget {
   const _NarrativeElementEditorPage({
     required this.chapters,
-    required this.pageTitle,
     required this.editorElement,
     required this.allowChapterSelection,
     required this.onSave,
@@ -110,7 +108,6 @@ class _NarrativeElementEditorPage extends StatefulWidget {
   });
 
   final List<StructureChapter> chapters;
-  final String pageTitle;
   final NarrativeElement? editorElement;
   final bool allowChapterSelection;
   final SaveNarrativeElement onSave;
@@ -574,6 +571,7 @@ class _NarrativeElementEditorPageState
 
   Widget _buildTopBar() {
     final rightActionLabel = _isLockedCompletedElement ? '继续编辑' : '元素完成';
+    final editorTitle = widget.isEditMode ? '编 辑 叙 事 元 素' : '添 加 叙 事 元 素';
     final rightAction = widget.isEditMode
         ? TextButton(
             key: const ValueKey('narrativeCompleteButton'),
@@ -609,7 +607,8 @@ class _NarrativeElementEditorPageState
             onPressed: _handleBackNavigation,
           ),
           Text(
-            widget.pageTitle,
+            editorTitle,
+            key: const ValueKey('narrativeEditorTitle'),
             style: const TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w500,
@@ -775,6 +774,7 @@ class _NarrativeElementEditorPageState
         Column(
           children: [
             Stack(
+              clipBehavior: Clip.none,
               children: [
                 Container(
                   key: ValueKey('narrativeMountedPhotoTile-$i'),
@@ -795,33 +795,14 @@ class _NarrativeElementEditorPageState
                   ),
                 ),
                 Positioned(
-                  top: 0,
-                  right: 0,
-                  child: InkWell(
+                  top: -8,
+                  right: -8,
+                  child: CompactRemoveButton(
                     key: ValueKey('narrativeMountedPhotoRemove-$i'),
                     onTap: () => _removePhoto(i),
-                    child: Container(
-                      width: 24,
-                      height: 24,
-                      color: Colors.black.withValues(alpha: 0.6),
-                      child: const Icon(
-                        Icons.close,
-                        color: Colors.white,
-                        size: 14,
-                      ),
-                    ),
                   ),
                 ),
               ],
-            ),
-            const SizedBox(height: 6),
-            Text(
-              '移除',
-              style: TextStyle(
-                fontSize: 10,
-                color: Colors.black.withValues(alpha: 0.38),
-                letterSpacing: 0.8,
-              ),
             ),
           ],
         ),

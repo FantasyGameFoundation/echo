@@ -31,6 +31,7 @@ import 'package:echo/features/structure_elements_relations/presentation/pages/ch
 import 'package:echo/features/structure_elements_relations/presentation/pages/narrative_element_create_page.dart';
 import 'package:echo/features/structure_elements_relations/presentation/pages/project_relation_create_page.dart';
 import 'package:echo/features/structure_elements_relations/presentation/pages/project_relation_group_create_page.dart';
+import 'package:echo/features/structure_elements_relations/presentation/pages/project_relation_group_selection_page.dart';
 import 'package:echo/features/structure_elements_relations/presentation/pages/structure_page_prototype.dart';
 import 'package:echo/features/structure_elements_relations/presentation/widgets/narrative_list_tile.dart';
 import 'package:echo/features/timeline/presentation/pages/timeline_page_prototype.dart';
@@ -1240,7 +1241,7 @@ void main() {
       await tester.tap(find.text('添加叙事元素'));
       await tester.pumpAndSettle();
 
-      expect(find.text('叙 事 元 素'), findsOneWidget);
+      expect(find.text('添 加 叙 事 元 素'), findsOneWidget);
     },
   );
 
@@ -2201,6 +2202,68 @@ void main() {
   );
 
   testWidgets(
+    'chapter page removes a draft element immediately on long press without extra confirmation',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ChapterCreatePage(
+            existingChapters: <StructureChapter>[
+              StructureChapter.create(
+                id: 'chapter-remove-draft',
+                projectId: 'project-remove-draft',
+                chapterTitle: '第一章',
+                chapterSortOrder: 0,
+                createdTimestamp: DateTime(2026),
+                updatedTimestamp: DateTime(2026),
+              ),
+            ],
+            onSave:
+                ({
+                  required String title,
+                  required String description,
+                  required int sortOrder,
+                  required String statusLabel,
+                  required List<NarrativeElementDraft> elements,
+                }) async {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const ValueKey('chapterCreateTitleField')),
+        '新的章节',
+      );
+      await tester.tap(find.text('添加叙事元素'));
+      await tester.pumpAndSettle();
+      expect(find.text('添 加 叙 事 元 素'), findsOneWidget);
+
+      await tester.enterText(
+        find.byKey(const ValueKey('chapterDraftElementNameField')),
+        '待移除草稿元素',
+      );
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('chapterDraftElementSaveButton')),
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('chapterDraftElementSaveButton')),
+        warnIfMissed: false,
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('待移除草稿元素 · 待补照片'), findsOneWidget);
+
+      await tester.longPress(find.text('待移除草稿元素 · 待补照片'));
+      await tester.pump();
+
+      expect(find.text('确 认 移 除'), findsNothing);
+      expect(find.text('已从本章节移除「待移除草稿元素」'), findsOneWidget);
+      expect(find.text('待移除草稿元素 · 待补照片'), findsNothing);
+    },
+  );
+
+  testWidgets(
     'narrative list tile uses a local-file image provider for imported photo paths',
     (tester) async {
       await tester.pumpWidget(
@@ -2313,6 +2376,70 @@ void main() {
     expect(find.text('请先添加章节'), findsOneWidget);
     expect(find.text('叙 事 元 素'), findsNothing);
   });
+
+  testWidgets(
+    'adding a narrative element returns to the source list and shows the new item',
+    (tester) async {
+      final projectRepository = _InMemoryProjectRepository(
+        initialProjects: <Project>[
+          Project.create(
+            id: 'project-element-return',
+            projectTitle: '元素返回落点测试',
+            projectThemeStatement: '验证新增元素后返回来源列表',
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+        ],
+        currentProjectId: 'project-element-return',
+      );
+      final chapterRepository = _InMemoryStructureChapterRepository(
+        initialChapters: <StructureChapter>[
+          StructureChapter.create(
+            id: 'chapter-element-return',
+            projectId: 'project-element-return',
+            chapterTitle: '第一章：河岸',
+            chapterSortOrder: 0,
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+        ],
+      );
+      final elementRepository = _InMemoryNarrativeElementRepository();
+
+      await tester.pumpWidget(
+        EchoApp(
+          projectRepository: projectRepository,
+          structureChapterRepository: chapterRepository,
+          narrativeElementRepository: elementRepository,
+          projectRelationRepository: _InMemoryProjectRelationRepository(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('叙事元素'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('添加叙事元素'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('narrativeEditorTitle')),
+        findsOneWidget,
+      );
+      expect(find.text('添 加 叙 事 元 素'), findsOneWidget);
+
+      await tester.enterText(
+        find.byKey(const ValueKey('narrativeElementNameField')),
+        '新加入的河岸元素',
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('narrativeSaveButton')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('章节骨架'), findsOneWidget);
+      expect(find.text('叙事元素'), findsOneWidget);
+      expect(find.text('新加入的河岸元素'), findsOneWidget);
+    },
+  );
 
   testWidgets(
     'adding a narrative element into a completed chapter unlocks the chapter after confirmation',
@@ -2534,6 +2661,11 @@ void main() {
         ),
       );
       expect(backIcon.size, 18);
+      expect(find.text('添 加 叙 事 元 素'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('narrativeEditorTitle')),
+        findsOneWidget,
+      );
 
       await tester.enterText(
         find.byKey(const ValueKey('narrativeElementNameField')),
@@ -2792,6 +2924,25 @@ void main() {
         find.byKey(const ValueKey('narrativeMountedPhotoTile-1')),
         findsOneWidget,
       );
+      expect(
+        tester
+            .widget<Icon>(
+              find.descendant(
+                of: find.byKey(const ValueKey('narrativeMountedPhotoRemove-0')),
+                matching: find.byIcon(Icons.close),
+              ),
+            )
+            .size,
+        11,
+      );
+      final narrativeTileRect = tester.getRect(
+        find.byKey(const ValueKey('narrativeMountedPhotoTile-0')),
+      );
+      final narrativeRemoveRect = tester.getRect(
+        find.byKey(const ValueKey('narrativeMountedPhotoRemove-0')),
+      );
+      expect(narrativeRemoveRect.top, lessThan(narrativeTileRect.top));
+      expect(narrativeRemoveRect.right, greaterThan(narrativeTileRect.right));
 
       await tester.tap(
         find.byKey(const ValueKey('narrativeMountedPhotoRemove-0')),
@@ -3384,6 +3535,160 @@ void main() {
   );
 
   testWidgets(
+    'relation group add entry stays on detail page and shows a clear blocker when candidates are insufficient',
+    (tester) async {
+      final projectRepository = _InMemoryProjectRepository(
+        initialProjects: <Project>[
+          Project.create(
+            id: 'project-relation-blocked-group',
+            projectTitle: '关系组依赖拦截测试',
+            projectThemeStatement: '验证关系组添加前置依赖提示',
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+        ],
+        currentProjectId: 'project-relation-blocked-group',
+      );
+
+      await tester.pumpWidget(
+        EchoApp(
+          projectRepository: projectRepository,
+          structureChapterRepository: _InMemoryStructureChapterRepository(),
+          narrativeElementRepository: _InMemoryNarrativeElementRepository(),
+          projectRelationRepository: _InMemoryProjectRelationRepository(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('关联关系'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('呼应'));
+      await tester.pumpAndSettle();
+
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('addRelationGroupButton')),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('addRelationGroupButton')));
+      await tester.pump();
+
+      expect(find.text('请先准备至少 2 个可关联对象（元素或照片）'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('relationGroupPageTitle')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('relationGroupEditorTitle')),
+        findsNothing,
+      );
+    },
+  );
+
+  testWidgets(
+    'relation group selection requires at least two chosen members before completion',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ProjectRelationGroupSelectionPage(
+            chapters: <StructureChapter>[
+              StructureChapter.create(
+                id: 'chapter-selection-limit',
+                projectId: 'project-selection-limit',
+                chapterTitle: '第一章',
+                chapterSortOrder: 0,
+                createdTimestamp: DateTime(2026),
+                updatedTimestamp: DateTime(2026),
+              ),
+            ],
+            narrativeElements: <NarrativeElement>[
+              NarrativeElement.create(
+                id: 'element-selection-limit',
+                projectId: 'project-selection-limit',
+                chapterId: 'chapter-selection-limit',
+                elementTitle: '单个元素',
+                createdTimestamp: DateTime(2026),
+                updatedTimestamp: DateTime(2026),
+              ),
+            ],
+            relationTypeName: '呼应',
+            relationGroupTitle: '单成员限制',
+            initialSelectionKeys: const <String>{},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('完 成'), findsOneWidget);
+
+      await tester.tap(find.text('单个元素'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('至少 2 个'), findsOneWidget);
+      await tester.tap(
+        find.byKey(const ValueKey('completeRelationGroupSelectionButton')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('单成员限制'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('relationGroupSelectionTitle')),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets(
+    'relation group selection element title stays single-line and truncates long text',
+    (tester) async {
+      const longTitle =
+          'asdfasdfjkfdsafjdasfjafjjdsjalkfsajkfsalflajsfjsajlfjsalfjsadljfasljfsafja';
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ProjectRelationGroupSelectionPage(
+            chapters: <StructureChapter>[
+              StructureChapter.create(
+                id: 'chapter-selection-long-title',
+                projectId: 'project-selection-long-title',
+                chapterTitle: 'heihei',
+                chapterSortOrder: 1,
+                createdTimestamp: DateTime(2026),
+                updatedTimestamp: DateTime(2026),
+              ),
+            ],
+            narrativeElements: <NarrativeElement>[
+              NarrativeElement.create(
+                id: 'element-selection-long-title',
+                projectId: 'project-selection-long-title',
+                chapterId: 'chapter-selection-long-title',
+                elementTitle: longTitle,
+                createdTimestamp: DateTime(2026),
+                updatedTimestamp: DateTime(2026),
+              ),
+            ],
+            relationTypeName: '呼应',
+            relationGroupTitle: '长标题限制',
+            initialSelectionKeys: const <String>{},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final titleText = tester.widget<Text>(
+        find.byKey(
+          const ValueKey(
+            'relationSelectionElementTitle-element-selection-long-title',
+          ),
+        ),
+      );
+      expect(titleText.maxLines, 1);
+      expect(titleText.overflow, TextOverflow.ellipsis);
+    },
+  );
+
+  testWidgets(
     'add relation group page creates a real relation group from detail page',
     (tester) async {
       final projectRepository = _InMemoryProjectRepository(
@@ -3471,18 +3776,13 @@ void main() {
         findsOneWidget,
       );
       expect(
-        find.byKey(const ValueKey('relationGroupRelationTypeHint')),
-        findsOneWidget,
-      );
-      expect(find.text('所属关系类型 · 呼应'), findsOneWidget);
-      expect(
         find.byKey(const ValueKey('relationGroupTitleField')),
         findsOneWidget,
       );
       final editorTitleBeforeInput = tester.widget<Text>(
         find.byKey(const ValueKey('relationGroupEditorTitle')),
       );
-      expect(editorTitleBeforeInput.data, isEmpty);
+      expect(editorTitleBeforeInput.data, '新关系组');
       expect(
         find.byKey(const ValueKey('relationGroupAddNodePlaceholder')),
         findsOneWidget,
@@ -3493,7 +3793,16 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('选 择 关 联 内 容'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('relationGroupSelectionContextLabel')),
+        findsOneWidget,
+      );
+      expect(find.text('选择关联内容 · 呼应'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('relationGroupSelectionTitle')),
+        findsOneWidget,
+      );
+      expect(find.text('新关系组'), findsOneWidget);
       expect(
         find.byKey(const ValueKey('completeRelationGroupSelectionButton')),
         findsOneWidget,
@@ -3519,6 +3828,14 @@ void main() {
         find.byKey(const ValueKey('relationGroupEditorTitle')),
       );
       expect(editorTitleAfterInput.data, '河岸风化的结构呼应');
+      await tester.tap(
+        find.byKey(const ValueKey('relationGroupAddNodePlaceholder')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('河岸风化的结构呼应'), findsWidgets);
+      expect(find.text('选择关联内容 · 呼应'), findsOneWidget);
+      await tester.tap(find.byIcon(Icons.arrow_back_ios_new).first);
+      await tester.pumpAndSettle();
       await tester.enterText(
         find.byKey(const ValueKey('relationGroupDescriptionField')),
         '真实创建后应在详情页出现这一组关系。',
@@ -3779,6 +4096,22 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('局部编辑关系组'));
       await tester.pumpAndSettle();
+
+      expect(
+        tester
+            .widget<Icon>(
+              find.descendant(
+                of: find.byKey(
+                  const ValueKey(
+                    'relationGroupRemoveNode-element:element-local-b',
+                  ),
+                ),
+                matching: find.byIcon(Icons.close),
+              ),
+            )
+            .size,
+        11,
+      );
 
       await tester.tap(
         find.byKey(
@@ -4514,6 +4847,9 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('呼应'));
       await tester.pumpAndSettle();
+
+      expect(find.text('CH 01'), findsNothing);
+      expect(find.text('CH 02'), findsNothing);
 
       await tester.tap(
         find.byKey(const ValueKey('relationGroupThumbnail-group-1-0')),

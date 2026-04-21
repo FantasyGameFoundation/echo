@@ -11,11 +11,15 @@ class ProjectRelationGroupSelectionPage extends StatefulWidget {
     super.key,
     required this.chapters,
     required this.narrativeElements,
+    required this.relationTypeName,
+    required this.relationGroupTitle,
     required this.initialSelectionKeys,
   });
 
   final List<StructureChapter> chapters;
   final List<NarrativeElement> narrativeElements;
+  final String relationTypeName;
+  final String relationGroupTitle;
   final Set<String> initialSelectionKeys;
 
   @override
@@ -142,6 +146,8 @@ class _ProjectRelationGroupSelectionPageState
     return count;
   }
 
+  bool get _canCompleteSelection => _selectedTotalCount >= 2;
+
   String _memberKey(ProjectRelationDraftMember member) {
     switch (member.kind) {
       case ProjectRelationTargetKind.element:
@@ -207,6 +213,10 @@ class _ProjectRelationGroupSelectionPageState
   }
 
   Widget _buildTopBar() {
+    final displayGroupTitle = widget.relationGroupTitle.trim().isNotEmpty
+        ? widget.relationGroupTitle.trim()
+        : '新关系组';
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
       child: Stack(
@@ -223,28 +233,57 @@ class _ProjectRelationGroupSelectionPageState
               onPressed: () => Navigator.of(context).pop(),
             ),
           ),
-          const Text(
-            '选 择 关 联 内 容',
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w500,
-              letterSpacing: 2.0,
-              color: Colors.black87,
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 72),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '选择关联内容 · ${widget.relationTypeName}',
+                  key: const ValueKey('relationGroupSelectionContextLabel'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 1.6,
+                    color: Colors.black.withValues(alpha: 0.38),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  displayGroupTitle,
+                  key: const ValueKey('relationGroupSelectionTitle'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: 1.6,
+                    color: Colors.black87,
+                  ),
+                ),
+              ],
             ),
           ),
           Align(
             alignment: Alignment.centerRight,
             child: GestureDetector(
-              onTap: _selectedTotalCount > 0 ? _completeSelection : null,
+              onTap: _canCompleteSelection ? _completeSelection : null,
               child: Container(
                 key: const ValueKey('completeRelationGroupSelectionButton'),
                 padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
                 child: Text(
-                  _selectedTotalCount > 0 ? '完成 ($_selectedTotalCount)' : '完 成',
+                  _canCompleteSelection
+                      ? '完成 ($_selectedTotalCount)'
+                      : _selectedTotalCount == 1
+                      ? '至少 2 个'
+                      : '完 成',
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
-                    color: _selectedTotalCount > 0
+                    color: _canCompleteSelection
                         ? Colors.black87
                         : Colors.black26,
                     letterSpacing: 1.0,
@@ -316,7 +355,12 @@ class _ProjectRelationGroupSelectionPageState
                 const SizedBox(width: 16),
                 Expanded(
                   child: Text(
+                    key: ValueKey(
+                      'relationSelectionElementTitle-${element.id}',
+                    ),
                     element.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: element.isSelected

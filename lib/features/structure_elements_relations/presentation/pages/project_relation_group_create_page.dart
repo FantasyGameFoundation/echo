@@ -3,6 +3,7 @@ import 'package:echo/features/structure_elements_relations/domain/entities/proje
 import 'package:echo/features/structure_elements_relations/domain/entities/structure_chapter.dart';
 import 'package:echo/features/structure_elements_relations/domain/models/project_relation_draft_member.dart';
 import 'package:echo/features/structure_elements_relations/presentation/pages/project_relation_group_selection_page.dart';
+import 'package:echo/features/structure_elements_relations/presentation/widgets/compact_remove_button.dart';
 import 'package:echo/features/structure_elements_relations/presentation/widgets/editor_bottom_action_bar.dart';
 import 'package:echo/features/structure_elements_relations/presentation/widgets/editor_confirmation_dialog.dart';
 import 'package:echo/features/structure_elements_relations/presentation/widgets/narrative_thumbnail_provider.dart';
@@ -87,7 +88,10 @@ class _ProjectRelationGroupCreatePageState
       return currentTitle;
     }
     final initialTitle = widget.initialTitle?.trim() ?? '';
-    return initialTitle;
+    if (initialTitle.isNotEmpty) {
+      return initialTitle;
+    }
+    return widget.isEditMode ? '未命名关系组' : '新关系组';
   }
 
   @override
@@ -214,6 +218,8 @@ class _ProjectRelationGroupCreatePageState
             builder: (_) => ProjectRelationGroupSelectionPage(
               chapters: widget.chapters,
               narrativeElements: widget.narrativeElements,
+              relationTypeName: widget.relationType.name,
+              relationGroupTitle: _displayTitle,
               initialSelectionKeys: _draftNodes
                   .where((node) => node.draftMember != null)
                   .map((node) => _memberKey(node.draftMember!))
@@ -420,7 +426,7 @@ class _ProjectRelationGroupCreatePageState
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  '关系组',
+                  widget.isEditMode ? '编辑关系组' : '添加关系组',
                   key: const ValueKey('relationGroupEditorScopeLabel'),
                   style: TextStyle(
                     fontSize: 10,
@@ -486,17 +492,6 @@ class _ProjectRelationGroupCreatePageState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            '所属关系类型 · ${widget.relationType.name}',
-            key: const ValueKey('relationGroupRelationTypeHint'),
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 1.2,
-              color: Colors.black.withValues(alpha: 0.42),
-            ),
-          ),
-          const SizedBox(height: 18),
           TextField(
             key: const ValueKey('relationGroupTitleField'),
             controller: _titleController,
@@ -664,15 +659,6 @@ class _ProjectRelationGroupCreatePageState
               _buildNodeRemoveButton(node, index),
             ],
           ),
-          const SizedBox(height: 8),
-          Text(
-            '移除',
-            style: TextStyle(
-              fontSize: 9,
-              color: Colors.black.withValues(alpha: 0.35),
-              letterSpacing: 1.0,
-            ),
-          ),
           const SizedBox(height: 12),
         ],
       );
@@ -718,13 +704,7 @@ class _ProjectRelationGroupCreatePageState
             _buildNodeRemoveButton(node, index),
           ],
         ),
-        const SizedBox(height: 8),
-        Text(
-          node.title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontSize: 9, color: Colors.black45),
-        ),
+        const SizedBox(height: 12),
       ],
     );
   }
@@ -738,25 +718,9 @@ class _ProjectRelationGroupCreatePageState
     return Positioned(
       top: -8,
       right: -8,
-      child: GestureDetector(
+      child: CompactRemoveButton(
         key: ValueKey('relationGroupRemoveNode-${_memberKey(member)}'),
         onTap: () => _removeNodeAt(index),
-        child: Container(
-          width: 28,
-          height: 28,
-          decoration: BoxDecoration(
-            color: Colors.black87,
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.12),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: const Icon(Icons.close, color: Colors.white, size: 16),
-        ),
       ),
     );
   }
