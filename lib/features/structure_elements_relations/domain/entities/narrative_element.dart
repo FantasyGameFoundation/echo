@@ -14,6 +14,7 @@ class NarrativeElement {
     required String elementTitle,
     String? elementDescription,
     String elementStatus = 'finding',
+    int elementSortOrder = 0,
     List<String>? linkedPhotoPaths,
     DateTime? createdTimestamp,
     DateTime? updatedTimestamp,
@@ -23,6 +24,7 @@ class NarrativeElement {
        title = elementTitle,
        description = elementDescription,
        status = elementStatus,
+       sortOrder = elementSortOrder,
        photoPaths = linkedPhotoPaths ?? <String>[],
        createdAt = createdTimestamp ?? DateTime.now(),
        updatedAt = updatedTimestamp ?? DateTime.now();
@@ -41,6 +43,7 @@ class NarrativeElement {
   late String title;
   String? description;
   late String status;
+  late int sortOrder;
   List<String> photoPaths = <String>[];
   late DateTime createdAt;
   late DateTime updatedAt;

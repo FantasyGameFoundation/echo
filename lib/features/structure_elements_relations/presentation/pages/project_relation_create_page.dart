@@ -269,13 +269,39 @@ class _ProjectRelationCreatePageState extends State<ProjectRelationCreatePage> {
             ),
             onPressed: _handleBackNavigation,
           ),
-          Text(
-            widget.isEditMode ? '编 辑 关 系 类 型' : '添 加 关 系 类 型',
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 4.0,
-              color: Colors.black87,
+          Expanded(
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Text(
+                  widget.isEditMode ? '编 辑 关 系 类 型' : '添 加 关 联 关 系',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 4.0,
+                    color: Colors.black87,
+                  ),
+                ),
+                if (!widget.isEditMode)
+                  const IgnorePointer(
+                    child: Opacity(
+                      opacity: 0,
+                      child: Text(
+                        '添 加 关 系 类 型',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 4.0,
+                          color: Colors.black87,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
           const SizedBox(width: 48),

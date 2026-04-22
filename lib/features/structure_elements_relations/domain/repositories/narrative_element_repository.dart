@@ -9,6 +9,7 @@ abstract class NarrativeElementRepository {
     required String title,
     String? description,
     String status = 'finding',
+    int? sortOrder,
     List<String>? photoPaths,
   });
 
@@ -18,6 +19,7 @@ abstract class NarrativeElementRepository {
     String? description,
     String? chapterId,
     required String status,
+    int? sortOrder,
     required List<String> photoPaths,
   });
 

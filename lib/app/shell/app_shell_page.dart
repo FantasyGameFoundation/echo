@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:echo/features/project/domain/entities/project.dart';
 import 'package:echo/features/project/domain/repositories/project_repository.dart';
 import 'package:echo/features/beacon/presentation/pages/beacon_page_prototype.dart';
+import 'package:echo/features/curation/presentation/pages/global_arrange_page.dart';
 import 'package:echo/features/curation/presentation/pages/organize_page_prototype.dart';
 import 'package:echo/features/project/presentation/pages/project_edit_page.dart';
 import 'package:echo/features/project/presentation/pages/no_project_prompt_page.dart';
@@ -18,6 +19,7 @@ import 'package:echo/features/structure_elements_relations/domain/entities/struc
 import 'package:echo/features/structure_elements_relations/domain/repositories/narrative_element_repository.dart';
 import 'package:echo/features/structure_elements_relations/domain/repositories/project_relation_repository.dart';
 import 'package:echo/features/structure_elements_relations/domain/repositories/structure_chapter_repository.dart';
+import 'package:echo/features/structure_elements_relations/domain/models/project_relation_draft_member.dart';
 import 'package:echo/features/structure_elements_relations/presentation/models/narrative_element_draft.dart';
 import 'package:echo/features/structure_elements_relations/presentation/models/structure_chapter_card_data.dart';
 import 'package:echo/features/structure_elements_relations/presentation/models/structure_relation_card_data.dart';
@@ -442,10 +444,15 @@ class _AppShellPageState extends State<AppShellPage> {
           onBottomTabChanged: _changeTab,
         );
       case PrototypeTab.curation:
-        return OrganizePagePrototype(
+        return GlobalArrangePage(
           projectTitle: _currentProject?.title ?? '',
+          boardData: _buildGlobalArrangeBoardData(),
           onOpenSidebar: () => setState(() => _sidebarOpen = true),
           onBottomTabChanged: _changeTab,
+          onOpenPendingOrganize: _openPendingOrganizePage,
+          onMoveChapter: _moveChapter,
+          onMoveElement: _moveElement,
+          onMovePhoto: _movePhoto,
         );
       case PrototypeTab.overview:
         return BeaconPagePrototype(
@@ -941,6 +948,333 @@ class _AppShellPageState extends State<AppShellPage> {
           setCount: groupCounts[relationType.relationTypeId] ?? 0,
         ),
     ];
+  }
+
+  GlobalArrangeBoardData _buildGlobalArrangeBoardData() {
+    final relationTypeNamesById = <String, String>{
+      for (final relationType in _relationTypes)
+        relationType.relationTypeId: relationType.name,
+    };
+    final relationTagOrderByName = <String, int>{
+      for (final relationType in _relationTypes)
+        relationType.name: relationType.sortOrder,
+    };
+    final elementTagsById = <String, Set<String>>{};
+    final photoTagsByKey = <String, Set<String>>{};
+
+    for (final relationGroup in _relationGroups) {
+      final relationTag =
+          relationTypeNamesById[relationGroup.linkedRelationTypeId];
+      if (relationTag == null) {
+        continue;
+      }
+      for (final member in _relationMembers) {
+        if (member.owningGroupId != relationGroup.relationGroupId) {
+          continue;
+        }
+        if (member.kind == ProjectRelationTargetKind.element.name &&
+            member.linkedElementId != null) {
+          elementTagsById.putIfAbsent(
+            member.linkedElementId!,
+            () => <String>{},
+          );
+          elementTagsById[member.linkedElementId!]!.add(relationTag);
+        }
+        if (member.kind == ProjectRelationTargetKind.photo.name &&
+            member.linkedSourceElementId != null &&
+            member.linkedPhotoPath != null) {
+          final key =
+              '${member.linkedSourceElementId}::${member.linkedPhotoPath}';
+          photoTagsByKey.putIfAbsent(key, () => <String>{});
+          photoTagsByKey[key]!.add(relationTag);
+        }
+      }
+    }
+
+    List<String> sortTags(Iterable<String> tags) {
+      final sortedTags = tags.toList(growable: false);
+      sortedTags.sort((left, right) {
+        final orderCompare = (relationTagOrderByName[left] ?? 1 << 20)
+            .compareTo(relationTagOrderByName[right] ?? 1 << 20);
+        if (orderCompare != 0) {
+          return orderCompare;
+        }
+        return left.compareTo(right);
+      });
+      return sortedTags;
+    }
+
+    List<GlobalArrangeElementData> buildElements(String? chapterId) {
+      final chapterElements =
+          _narrativeElements
+              .where((element) => element.owningChapterId == chapterId)
+              .toList()
+            ..sort((left, right) {
+              final sortCompare = left.sortOrder.compareTo(right.sortOrder);
+              if (sortCompare != 0) {
+                return sortCompare;
+              }
+              return left.createdAt.compareTo(right.createdAt);
+            });
+
+      return [
+        for (final element in chapterElements)
+          GlobalArrangeElementData(
+            elementId: element.elementId,
+            title: element.title,
+            relationTags: sortTags(
+              elementTagsById[element.elementId] ?? const <String>{},
+            ),
+            photos: [
+              for (var index = 0; index < element.photoPaths.length; index++)
+                GlobalArrangePhotoData(
+                  photoId:
+                      '${element.elementId}::$index::${element.photoPaths[index]}',
+                  imageSource: element.photoPaths[index],
+                  relationTags: sortTags(
+                    photoTagsByKey['${element.elementId}::${element.photoPaths[index]}'] ??
+                        const <String>{},
+                  ),
+                ),
+            ],
+          ),
+      ];
+    }
+
+    return GlobalArrangeBoardData(
+      chapters: [
+        for (final chapter in _structureChapters)
+          GlobalArrangeChapterData(
+            chapterId: chapter.chapterId,
+            title: chapter.title,
+            elements: buildElements(chapter.chapterId),
+          ),
+      ],
+      unassignedElements: buildElements(null),
+    );
+  }
+
+  Future<void> _moveChapter({
+    required String chapterId,
+    required int targetIndex,
+  }) async {
+    StructureChapter? chapter;
+    for (final currentChapter in _structureChapters) {
+      if (currentChapter.chapterId == chapterId) {
+        chapter = currentChapter;
+        break;
+      }
+    }
+    if (chapter == null) {
+      return;
+    }
+
+    await widget.structureChapterRepository.updateChapter(
+      chapterId: chapter.chapterId,
+      title: chapter.title,
+      description: chapter.description,
+      sortOrder: targetIndex,
+      statusLabel: chapter.statusLabel,
+    );
+    await _refreshProjects();
+  }
+
+  Future<void> _moveElement({
+    required String elementId,
+    required String? targetChapterId,
+    required int targetIndex,
+  }) async {
+    NarrativeElement? element;
+    for (final currentElement in _narrativeElements) {
+      if (currentElement.elementId == elementId) {
+        element = currentElement;
+        break;
+      }
+    }
+    if (element == null) {
+      return;
+    }
+
+    await widget.narrativeElementRepository.updateElement(
+      elementId: element.elementId,
+      title: element.title,
+      description: element.description,
+      chapterId: targetChapterId,
+      status: element.status,
+      sortOrder: targetIndex,
+      photoPaths: element.photoPaths,
+    );
+    await _refreshProjects();
+  }
+
+  Future<void> _movePhoto({
+    required String sourceElementId,
+    required int sourcePhotoIndex,
+    required String targetElementId,
+    required int targetPhotoIndex,
+  }) async {
+    NarrativeElement? sourceElement;
+    NarrativeElement? targetElement;
+    for (final element in _narrativeElements) {
+      if (element.elementId == sourceElementId) {
+        sourceElement = element;
+      }
+      if (element.elementId == targetElementId) {
+        targetElement = element;
+      }
+    }
+    if (sourceElement == null || targetElement == null) {
+      return;
+    }
+    if (sourcePhotoIndex < 0 ||
+        sourcePhotoIndex >= sourceElement.photoPaths.length) {
+      return;
+    }
+
+    final movedPhotoPath = sourceElement.photoPaths[sourcePhotoIndex];
+    final updatedSourcePhotos = List<String>.from(sourceElement.photoPaths)
+      ..removeAt(sourcePhotoIndex);
+
+    if (sourceElementId == targetElementId) {
+      final normalizedTargetIndex = targetPhotoIndex.clamp(
+        0,
+        updatedSourcePhotos.length,
+      );
+      updatedSourcePhotos.insert(normalizedTargetIndex, movedPhotoPath);
+      await widget.narrativeElementRepository.updateElement(
+        elementId: sourceElement.elementId,
+        title: sourceElement.title,
+        description: sourceElement.description,
+        chapterId: sourceElement.owningChapterId,
+        status: sourceElement.status,
+        photoPaths: updatedSourcePhotos,
+      );
+      await _refreshProjects();
+      return;
+    }
+
+    final updatedTargetPhotos = List<String>.from(targetElement.photoPaths);
+    final normalizedTargetIndex = targetPhotoIndex.clamp(
+      0,
+      updatedTargetPhotos.length,
+    );
+    updatedTargetPhotos.insert(normalizedTargetIndex, movedPhotoPath);
+
+    await widget.narrativeElementRepository.updateElement(
+      elementId: sourceElement.elementId,
+      title: sourceElement.title,
+      description: sourceElement.description,
+      chapterId: sourceElement.owningChapterId,
+      status: sourceElement.status,
+      photoPaths: updatedSourcePhotos,
+    );
+    await widget.narrativeElementRepository.updateElement(
+      elementId: targetElement.elementId,
+      title: targetElement.title,
+      description: targetElement.description,
+      chapterId: targetElement.owningChapterId,
+      status: targetElement.status,
+      photoPaths: updatedTargetPhotos,
+    );
+
+    await _relinkPhotoMembers(
+      oldSourceElementId: sourceElementId,
+      newSourceElementId: targetElementId,
+      photoPath: movedPhotoPath,
+    );
+    await _refreshProjects();
+  }
+
+  Future<void> _relinkPhotoMembers({
+    required String oldSourceElementId,
+    required String newSourceElementId,
+    required String photoPath,
+  }) async {
+    if (oldSourceElementId == newSourceElementId) {
+      return;
+    }
+
+    final affectedGroupIds = _relationMembers
+        .where(
+          (member) =>
+              member.kind == ProjectRelationTargetKind.photo.name &&
+              member.linkedSourceElementId == oldSourceElementId &&
+              member.linkedPhotoPath == photoPath,
+        )
+        .map((member) => member.owningGroupId)
+        .toSet();
+
+    for (final groupId in affectedGroupIds) {
+      ProjectRelationGroup? relationGroup;
+      for (final group in _relationGroups) {
+        if (group.relationGroupId == groupId) {
+          relationGroup = group;
+          break;
+        }
+      }
+      if (relationGroup == null) {
+        continue;
+      }
+
+      final groupMembers =
+          _relationMembers
+              .where((member) => member.owningGroupId == groupId)
+              .toList()
+            ..sort(
+              (left, right) =>
+                  left.memberSortOrder.compareTo(right.memberSortOrder),
+            );
+
+      final draftMembers = <ProjectRelationDraftMember>[
+        for (final member in groupMembers)
+          if (member.kind == ProjectRelationTargetKind.element.name &&
+              member.linkedElementId != null)
+            ProjectRelationDraftMember.element(
+              elementId: member.linkedElementId!,
+            )
+          else if (member.kind == ProjectRelationTargetKind.photo.name &&
+              member.linkedPhotoPath != null &&
+              member.linkedSourceElementId != null)
+            ProjectRelationDraftMember.photo(
+              photoPath: member.linkedPhotoPath!,
+              sourceElementId:
+                  member.linkedSourceElementId == oldSourceElementId &&
+                      member.linkedPhotoPath == photoPath
+                  ? newSourceElementId
+                  : member.linkedSourceElementId!,
+            ),
+      ];
+
+      await widget.projectRelationRepository.updateRelationGroup(
+        relationGroupId: relationGroup.relationGroupId,
+        title: relationGroup.title,
+        description: relationGroup.description,
+        members: draftMembers,
+      );
+    }
+  }
+
+  Future<void> _openPendingOrganizePage() async {
+    if (!mounted) {
+      return;
+    }
+
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (routeContext) {
+          return OrganizePagePrototype(
+            projectTitle: _currentProject?.title ?? '',
+            onOpenSidebar: () {},
+            onBottomTabChanged: (tab) {
+              Navigator.of(routeContext).pop();
+              if (tab != PrototypeTab.curation) {
+                _changeTab(tab);
+              }
+            },
+          );
+        },
+      ),
+    );
   }
 
   void _showPassiveHint(String message) {

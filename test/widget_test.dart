@@ -11,6 +11,7 @@ import 'package:echo/features/project/presentation/pages/project_edit_page.dart'
 import 'package:echo/features/project/presentation/pages/project_wizard_page.dart';
 import 'package:echo/features/project/presentation/widgets/project_sidebar.dart';
 import 'package:echo/features/beacon/presentation/pages/beacon_page_prototype.dart';
+import 'package:echo/features/curation/presentation/pages/global_arrange_page.dart';
 import 'package:echo/features/curation/presentation/pages/organize_page_prototype.dart';
 import 'package:echo/features/structure_elements_relations/domain/element_status.dart';
 import 'package:echo/features/structure_elements_relations/domain/entities/narrative_element.dart';
@@ -5068,6 +5069,177 @@ void main() {
     expect(find.textContaining('关联关系'), findsOneWidget);
   });
 
+  testWidgets(
+    'curation tab opens global arrange page and pending button routes to organize page',
+    (tester) async {
+      await tester.pumpWidget(
+        EchoApp(
+          projectRepository: _InMemoryProjectRepository(
+            initialProjects: <Project>[
+              Project.create(
+                id: 'project-curation',
+                projectTitle: '江岸计划',
+                projectThemeStatement: '用于整理页接线验证',
+                createdTimestamp: DateTime(2026, 1, 1),
+                updatedTimestamp: DateTime(2026, 1, 1),
+              ),
+            ],
+            currentProjectId: 'project-curation',
+          ),
+          structureChapterRepository: _InMemoryStructureChapterRepository(
+            initialChapters: <StructureChapter>[
+              StructureChapter.create(
+                id: 'chapter-curation',
+                projectId: 'project-curation',
+                chapterTitle: '第一章',
+                chapterSortOrder: 0,
+                createdTimestamp: DateTime(2026, 1, 1),
+                updatedTimestamp: DateTime(2026, 1, 1),
+              ),
+            ],
+          ),
+          narrativeElementRepository: _InMemoryNarrativeElementRepository(
+            initialElements: <NarrativeElement>[
+              NarrativeElement.create(
+                id: 'element-curation',
+                projectId: 'project-curation',
+                chapterId: 'chapter-curation',
+                elementTitle: '码头剪影',
+                linkedPhotoPaths: <String>['/tmp/curation-photo.jpg'],
+                createdTimestamp: DateTime(2026, 1, 1),
+                updatedTimestamp: DateTime(2026, 1, 1),
+              ),
+            ],
+          ),
+          projectRelationRepository: _InMemoryProjectRelationRepository(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('整理'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('globalArrangePendingButton')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('globalArrangeGenerateSamplesButton')),
+        findsNothing,
+      );
+      expect(find.textContaining('CH 01 / 第一章'), findsOneWidget);
+      expect(find.text('码头剪影'), findsOneWidget);
+
+      await tester.tap(
+        find.byKey(const ValueKey('globalArrangePendingButton')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(OrganizePagePrototype), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'curation tab keeps a newly created project empty instead of offering mock content',
+    (tester) async {
+      await tester.pumpWidget(
+        EchoApp(
+          projectRepository: _InMemoryProjectRepository(
+            initialProjects: <Project>[
+              Project.create(
+                id: 'project-empty-curation',
+                projectTitle: '空白项目',
+                projectThemeStatement: '验证整理页新状态',
+                createdTimestamp: DateTime(2026, 1, 1),
+                updatedTimestamp: DateTime(2026, 1, 1),
+              ),
+            ],
+            currentProjectId: 'project-empty-curation',
+          ),
+          structureChapterRepository: _InMemoryStructureChapterRepository(),
+          narrativeElementRepository: _InMemoryNarrativeElementRepository(),
+          projectRelationRepository: _InMemoryProjectRelationRepository(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('整理'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('globalArrangePendingButton')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('globalArrangeGenerateSamplesButton')),
+        findsNothing,
+      );
+      expect(find.textContaining('拖拽示例｜'), findsNothing);
+      expect(find.text('生成示例内容'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'global arrange photo safe area does not open fullscreen but image area does',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: GlobalArrangePage(
+            projectTitle: '测试项目',
+            boardData: const GlobalArrangeBoardData(
+              chapters: <GlobalArrangeChapterData>[
+                GlobalArrangeChapterData(
+                  chapterId: 'chapter-1',
+                  title: '第一章',
+                  elements: <GlobalArrangeElementData>[
+                    GlobalArrangeElementData(
+                      elementId: 'element-1',
+                      title: '测试元素',
+                      relationTags: <String>['呼应'],
+                      photos: <GlobalArrangePhotoData>[
+                        GlobalArrangePhotoData(
+                          photoId: 'photo-1',
+                          imageSource: '/tmp/test-photo.jpg',
+                          relationTags: <String>['呼应'],
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            onOpenSidebar: _noop,
+            onBottomTabChanged: _noopPrototypeTab,
+            onOpenPendingOrganize: _noopAsync,
+            onMoveChapter: _noopMoveChapter,
+            onMoveElement: _noopMoveElement,
+            onMovePhoto: _noopMovePhoto,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byIcon(Icons.close), findsNothing);
+
+      await tester.tapAt(
+        tester.getCenter(
+          find.byKey(const ValueKey('globalArrangePhotoSafeArea-photo-1')),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byIcon(Icons.close), findsNothing);
+
+      await tester.tap(
+        find.byKey(const ValueKey('globalArrangePhotoOpenArea-photo-1')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byIcon(Icons.close), findsOneWidget);
+      expect(find.text('1 / 1'), findsOneWidget);
+    },
+  );
+
   testWidgets('timeline page keeps core markers after extraction', (
     tester,
   ) async {
@@ -5108,6 +5280,26 @@ void _noop() {}
 void _noopTab(int _) {}
 
 void _noopPrototypeTab(PrototypeTab _) {}
+
+Future<void> _noopAsync() async {}
+
+Future<void> _noopMoveChapter({
+  required String chapterId,
+  required int targetIndex,
+}) async {}
+
+Future<void> _noopMoveElement({
+  required String elementId,
+  required String? targetChapterId,
+  required int targetIndex,
+}) async {}
+
+Future<void> _noopMovePhoto({
+  required String sourceElementId,
+  required int sourcePhotoIndex,
+  required String targetElementId,
+  required int targetPhotoIndex,
+}) async {}
 
 Future<String> _resolveIsarLibraryPath() async {
   final packageConfigFile = File('.dart_tool/package_config.json');
@@ -5378,6 +5570,30 @@ class _InMemoryNarrativeElementRepository
 
   final List<NarrativeElement> _elements;
 
+  List<NarrativeElement> _bucket(String projectId, String? chapterId) {
+    final bucket = _elements
+        .where(
+          (element) =>
+              element.owningProjectId == projectId &&
+              element.owningChapterId == chapterId,
+        )
+        .toList();
+    bucket.sort((left, right) {
+      final sortCompare = left.sortOrder.compareTo(right.sortOrder);
+      if (sortCompare != 0) {
+        return sortCompare;
+      }
+      return left.createdAt.compareTo(right.createdAt);
+    });
+    return bucket;
+  }
+
+  void _normalizeBucket(List<NarrativeElement> bucket) {
+    for (var index = 0; index < bucket.length; index++) {
+      bucket[index].sortOrder = index;
+    }
+  }
+
   @override
   Future<NarrativeElement> createElement({
     required String projectId,
@@ -5385,8 +5601,17 @@ class _InMemoryNarrativeElementRepository
     required String title,
     String? description,
     String status = 'finding',
+    int? sortOrder,
     List<String>? photoPaths,
   }) async {
+    final bucket = _bucket(projectId, chapterId);
+    final resolvedSortOrder = (sortOrder ?? bucket.length).clamp(
+      0,
+      bucket.length,
+    );
+    for (var index = resolvedSortOrder; index < bucket.length; index++) {
+      bucket[index].sortOrder += 1;
+    }
     final element = NarrativeElement.create(
       id: 'element-${_elements.length + 1}',
       projectId: projectId,
@@ -5394,6 +5619,7 @@ class _InMemoryNarrativeElementRepository
       elementTitle: title,
       elementDescription: description,
       elementStatus: status,
+      elementSortOrder: resolvedSortOrder,
       linkedPhotoPaths: photoPaths,
       createdTimestamp: DateTime(2026),
       updatedTimestamp: DateTime(2026),
@@ -5406,9 +5632,31 @@ class _InMemoryNarrativeElementRepository
   Future<List<NarrativeElement>> listElementsForProject(
     String projectId,
   ) async {
-    return _elements
+    final elements = _elements
         .where((element) => element.owningProjectId == projectId)
         .toList();
+    elements.sort((left, right) {
+      final leftChapter = left.owningChapterId;
+      final rightChapter = right.owningChapterId;
+      if (leftChapter == null && rightChapter != null) {
+        return 1;
+      }
+      if (leftChapter != null && rightChapter == null) {
+        return -1;
+      }
+      if (leftChapter != null && rightChapter != null) {
+        final chapterCompare = leftChapter.compareTo(rightChapter);
+        if (chapterCompare != 0) {
+          return chapterCompare;
+        }
+      }
+      final sortCompare = left.sortOrder.compareTo(right.sortOrder);
+      if (sortCompare != 0) {
+        return sortCompare;
+      }
+      return left.createdAt.compareTo(right.createdAt);
+    });
+    return elements;
   }
 
   @override
@@ -5418,6 +5666,7 @@ class _InMemoryNarrativeElementRepository
     String? description,
     String? chapterId,
     required String status,
+    int? sortOrder,
     required List<String> photoPaths,
   }) async {
     NarrativeElement? targetElement;
@@ -5431,15 +5680,53 @@ class _InMemoryNarrativeElementRepository
       throw StateError('Narrative element not found: $elementId');
     }
 
+    final projectId = targetElement.owningProjectId;
+    final sourceChapterId = targetElement.owningChapterId;
+    final targetChapterId = chapterId;
+    final movingAcrossBuckets = sourceChapterId != targetChapterId;
+    final retainedElements = _elements
+        .where((element) => element.elementId != elementId)
+        .toList();
+    final sourceBucket =
+        retainedElements
+            .where(
+              (element) =>
+                  element.owningProjectId == projectId &&
+                  element.owningChapterId == sourceChapterId,
+            )
+            .toList()
+          ..sort((left, right) => left.sortOrder.compareTo(right.sortOrder));
+    final targetBucket = movingAcrossBuckets
+        ? (retainedElements
+              .where(
+                (element) =>
+                    element.owningProjectId == projectId &&
+                    element.owningChapterId == targetChapterId,
+              )
+              .toList()
+            ..sort((left, right) => left.sortOrder.compareTo(right.sortOrder)))
+        : sourceBucket;
+    final resolvedSortOrder =
+        (sortOrder ??
+                (movingAcrossBuckets
+                    ? targetBucket.length
+                    : targetElement.sortOrder))
+            .clamp(0, targetBucket.length);
+    if (movingAcrossBuckets) {
+      _normalizeBucket(sourceBucket);
+    }
+
     targetElement.title = title.trim();
     final trimmedDescription = description?.trim();
     targetElement.description = trimmedDescription?.isNotEmpty == true
         ? trimmedDescription
         : null;
-    targetElement.owningChapterId = chapterId;
+    targetElement.owningChapterId = targetChapterId;
     targetElement.status = status;
     targetElement.photoPaths = List<String>.from(photoPaths);
     targetElement.updatedAt = DateTime(2026, 1, 5);
+    targetBucket.insert(resolvedSortOrder, targetElement);
+    _normalizeBucket(targetBucket);
     return targetElement;
   }
 
@@ -5452,7 +5739,12 @@ class _InMemoryNarrativeElementRepository
       return false;
     }
 
-    _elements.removeAt(targetIndex);
+    final deletedElement = _elements.removeAt(targetIndex);
+    final remainingBucket = _bucket(
+      deletedElement.owningProjectId,
+      deletedElement.owningChapterId,
+    );
+    _normalizeBucket(remainingBucket);
     return true;
   }
 }
@@ -5517,19 +5809,18 @@ class _InMemoryProjectRelationRepository implements ProjectRelationRepository {
   }) async {
     await _ensureDefaults(projectId);
     final existingTypes = _typesByProject[projectId] ?? <ProjectRelationType>[];
-    final nextSortOrder = existingTypes.isEmpty
-        ? 0
-        : existingTypes
-                  .map((relationType) => relationType.sortOrder)
-                  .reduce((left, right) => left > right ? left : right) +
-              1;
+    for (final relationType in existingTypes) {
+      if (!_isHiddenRelationType(relationType)) {
+        relationType.sortOrder += 1;
+      }
+    }
     final now = DateTime(2026, 1, 3, existingTypes.length + 1);
     final relationType = ProjectRelationType.create(
-      id: 'type-$projectId-$nextSortOrder',
+      id: 'type-$projectId-${existingTypes.length + 1}',
       projectId: projectId,
       relationName: name,
       relationDescription: description,
-      relationSortOrder: nextSortOrder,
+      relationSortOrder: 0,
       createdTimestamp: now,
       updatedTimestamp: now,
     );
@@ -5751,11 +6042,15 @@ class _InMemoryProjectRelationRepository implements ProjectRelationRepository {
     String projectId,
   ) async {
     await _ensureDefaults(projectId);
-    return List<ProjectRelationType>.from(
+    final relationTypes = List<ProjectRelationType>.from(
       (_typesByProject[projectId] ?? const <ProjectRelationType>[]).where(
         (relationType) => !_isHiddenRelationType(relationType),
       ),
     );
+    relationTypes.sort(
+      (left, right) => left.sortOrder.compareTo(right.sortOrder),
+    );
+    return relationTypes;
   }
 }
 

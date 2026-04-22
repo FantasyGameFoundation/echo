@@ -838,6 +838,30 @@ class _MutableNarrativeElementRepository implements NarrativeElementRepository {
 
   final List<NarrativeElement> _elements;
 
+  List<NarrativeElement> _bucket(String projectId, String? chapterId) {
+    final bucket = _elements
+        .where(
+          (element) =>
+              element.owningProjectId == projectId &&
+              element.owningChapterId == chapterId,
+        )
+        .toList();
+    bucket.sort((left, right) {
+      final sortCompare = left.sortOrder.compareTo(right.sortOrder);
+      if (sortCompare != 0) {
+        return sortCompare;
+      }
+      return left.createdAt.compareTo(right.createdAt);
+    });
+    return bucket;
+  }
+
+  void _normalizeBucket(List<NarrativeElement> bucket) {
+    for (var index = 0; index < bucket.length; index++) {
+      bucket[index].sortOrder = index;
+    }
+  }
+
   @override
   Future<NarrativeElement> createElement({
     required String projectId,
@@ -845,8 +869,17 @@ class _MutableNarrativeElementRepository implements NarrativeElementRepository {
     required String title,
     String? description,
     String status = 'finding',
+    int? sortOrder,
     List<String>? photoPaths,
   }) async {
+    final bucket = _bucket(projectId, chapterId);
+    final resolvedSortOrder = (sortOrder ?? bucket.length).clamp(
+      0,
+      bucket.length,
+    );
+    for (var index = resolvedSortOrder; index < bucket.length; index++) {
+      bucket[index].sortOrder += 1;
+    }
     final element = NarrativeElement.create(
       id: 'element-${_elements.length + 1}',
       projectId: projectId,
@@ -854,6 +887,7 @@ class _MutableNarrativeElementRepository implements NarrativeElementRepository {
       elementTitle: title,
       elementDescription: description,
       elementStatus: status,
+      elementSortOrder: resolvedSortOrder,
       linkedPhotoPaths: photoPaths,
       createdTimestamp: DateTime(2026, 3, 1, 12),
       updatedTimestamp: DateTime(2026, 3, 1, 12),
@@ -869,7 +903,27 @@ class _MutableNarrativeElementRepository implements NarrativeElementRepository {
     final elements = _elements
         .where((element) => element.owningProjectId == projectId)
         .toList();
-    elements.sort((left, right) => left.createdAt.compareTo(right.createdAt));
+    elements.sort((left, right) {
+      final leftChapter = left.owningChapterId;
+      final rightChapter = right.owningChapterId;
+      if (leftChapter == null && rightChapter != null) {
+        return 1;
+      }
+      if (leftChapter != null && rightChapter == null) {
+        return -1;
+      }
+      if (leftChapter != null && rightChapter != null) {
+        final chapterCompare = leftChapter.compareTo(rightChapter);
+        if (chapterCompare != 0) {
+          return chapterCompare;
+        }
+      }
+      final sortCompare = left.sortOrder.compareTo(right.sortOrder);
+      if (sortCompare != 0) {
+        return sortCompare;
+      }
+      return left.createdAt.compareTo(right.createdAt);
+    });
     return elements;
   }
 
@@ -880,6 +934,7 @@ class _MutableNarrativeElementRepository implements NarrativeElementRepository {
     String? description,
     String? chapterId,
     required String status,
+    int? sortOrder,
     required List<String> photoPaths,
   }) async {
     NarrativeElement? targetElement;
@@ -893,22 +948,75 @@ class _MutableNarrativeElementRepository implements NarrativeElementRepository {
       throw StateError('Narrative element not found: $elementId');
     }
 
+    final projectId = targetElement.owningProjectId;
+    final sourceChapterId = targetElement.owningChapterId;
+    final targetChapterId = chapterId;
+    final movingAcrossBuckets = sourceChapterId != targetChapterId;
+    final retainedElements = _elements
+        .where((element) => element.elementId != elementId)
+        .toList();
+    final sourceBucket =
+        retainedElements
+            .where(
+              (element) =>
+                  element.owningProjectId == projectId &&
+                  element.owningChapterId == sourceChapterId,
+            )
+            .toList()
+          ..sort((left, right) => left.sortOrder.compareTo(right.sortOrder));
+    final targetBucket = movingAcrossBuckets
+        ? (retainedElements
+              .where(
+                (element) =>
+                    element.owningProjectId == projectId &&
+                    element.owningChapterId == targetChapterId,
+              )
+              .toList()
+            ..sort((left, right) => left.sortOrder.compareTo(right.sortOrder)))
+        : sourceBucket;
+    final resolvedSortOrder =
+        (sortOrder ??
+                (movingAcrossBuckets
+                    ? targetBucket.length
+                    : targetElement.sortOrder))
+            .clamp(0, targetBucket.length);
+    if (movingAcrossBuckets) {
+      _normalizeBucket(sourceBucket);
+    }
+
     targetElement.title = title.trim();
     final trimmedDescription = description?.trim();
     targetElement.description = trimmedDescription?.isNotEmpty == true
         ? trimmedDescription
         : null;
-    targetElement.owningChapterId = chapterId;
+    targetElement.owningChapterId = targetChapterId;
     targetElement.status = status;
     targetElement.photoPaths = List<String>.from(photoPaths);
     targetElement.updatedAt = DateTime(2026, 3, 2, 12);
+    targetBucket.insert(resolvedSortOrder, targetElement);
+    _normalizeBucket(targetBucket);
     return targetElement;
   }
 
   @override
   Future<bool> deleteElement(String elementId) async {
     final beforeCount = _elements.length;
-    _elements.removeWhere((element) => element.elementId == elementId);
+    NarrativeElement? deletedElement;
+    _elements.removeWhere((element) {
+      final matched = element.elementId == elementId;
+      if (matched) {
+        deletedElement = element;
+      }
+      return matched;
+    });
+    if (deletedElement != null) {
+      _normalizeBucket(
+        _bucket(
+          deletedElement!.owningProjectId,
+          deletedElement!.owningChapterId,
+        ),
+      );
+    }
     return _elements.length != beforeCount;
   }
 }
@@ -957,19 +1065,16 @@ class _MutableProjectRelationRepository implements ProjectRelationRepository {
   }) async {
     await _ensureDefaults(projectId);
     final existingTypes = _typesByProject[projectId] ?? <ProjectRelationType>[];
-    final nextSortOrder = existingTypes.isEmpty
-        ? 0
-        : existingTypes
-                  .map((relationType) => relationType.sortOrder)
-                  .reduce((left, right) => left > right ? left : right) +
-              1;
+    for (final relationType in existingTypes) {
+      relationType.sortOrder += 1;
+    }
     final now = DateTime(2026, 4, 3, existingTypes.length + 1);
     final relationType = ProjectRelationType.create(
-      id: 'type-$projectId-$nextSortOrder',
+      id: 'type-$projectId-${existingTypes.length + 1}',
       projectId: projectId,
       relationName: name,
       relationDescription: description,
-      relationSortOrder: nextSortOrder,
+      relationSortOrder: 0,
       createdTimestamp: now,
       updatedTimestamp: now,
     );
@@ -1166,9 +1271,13 @@ class _MutableProjectRelationRepository implements ProjectRelationRepository {
     String projectId,
   ) async {
     await _ensureDefaults(projectId);
-    return List<ProjectRelationType>.from(
+    final relationTypes = List<ProjectRelationType>.from(
       _typesByProject[projectId] ?? const [],
     );
+    relationTypes.sort(
+      (left, right) => left.sortOrder.compareTo(right.sortOrder),
+    );
+    return relationTypes;
   }
 }
 

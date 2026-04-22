@@ -695,7 +695,7 @@ class _NarrativeElementEditorPageState
         key: key,
         duration: const Duration(milliseconds: 200),
         margin: const EdgeInsets.only(right: 12.0),
-        padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
+        padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 12.0),
         decoration: BoxDecoration(
           color: isSelected ? Colors.black : Colors.transparent,
           border: Border.all(
@@ -706,9 +706,9 @@ class _NarrativeElementEditorPageState
         child: Text(
           label,
           style: TextStyle(
-            fontSize: 12,
+            fontSize: 11,
             color: isSelected ? Colors.white : Colors.black87,
-            letterSpacing: 1.0,
+            letterSpacing: 0.8,
             fontWeight: isSelected ? FontWeight.w500 : FontWeight.normal,
           ),
         ),

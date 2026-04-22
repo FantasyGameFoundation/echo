@@ -97,23 +97,25 @@ class LocalProjectRelationRepository implements ProjectRelationRepository {
         .filter()
         .owningProjectIdEqualTo(projectId)
         .findAll();
-    final nextSortOrder = existingTypes.isEmpty
-        ? 0
-        : existingTypes
-                  .map((relationType) => relationType.sortOrder)
-                  .reduce((left, right) => left > right ? left : right) +
-              1;
+    for (final relationType in existingTypes) {
+      if (!_isHiddenRelationType(relationType)) {
+        relationType.sortOrder += 1;
+      }
+    }
     final now = DateTime.now();
     final relationType = ProjectRelationType.create(
       projectId: projectId,
       relationName: name,
       relationDescription: description,
-      relationSortOrder: nextSortOrder,
+      relationSortOrder: 0,
       createdTimestamp: now,
       updatedTimestamp: now,
     );
 
     await database.writeTxn(() async {
+      if (existingTypes.isNotEmpty) {
+        await database.projectRelationTypes.putAll(existingTypes);
+      }
       await database.projectRelationTypes.put(relationType);
     });
 

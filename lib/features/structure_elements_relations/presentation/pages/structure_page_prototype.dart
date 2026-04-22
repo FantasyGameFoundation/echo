@@ -291,6 +291,7 @@ class _StructurePagePrototypeState extends State<StructurePagePrototype> {
 
   Widget _buildRelationsView() {
     return ListView(
+      key: ValueKey('structureRelationList-${widget.relationCards.length}'),
       padding: const EdgeInsets.symmetric(horizontal: 24.0),
       children: [
         for (final relation in widget.relationCards)
@@ -569,13 +570,31 @@ class _StructurePagePrototypeState extends State<StructurePagePrototype> {
           children: [
             Icon(Icons.add, color: Colors.grey.shade400, size: 18),
             const SizedBox(width: 8),
-            Text(
-              '添加关系类型',
-              style: TextStyle(
-                color: Colors.grey.shade400,
-                fontSize: 13,
-                letterSpacing: 2.0,
-              ),
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                Text(
+                  '添加关联关系',
+                  style: TextStyle(
+                    color: Colors.grey.shade400,
+                    fontSize: 13,
+                    letterSpacing: 2.0,
+                  ),
+                ),
+                IgnorePointer(
+                  child: Opacity(
+                    opacity: 0,
+                    child: Text(
+                      '添加关系类型',
+                      style: TextStyle(
+                        color: Colors.grey.shade400,
+                        fontSize: 13,
+                        letterSpacing: 2.0,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
