@@ -2,6 +2,7 @@ import 'package:echo/features/structure_elements_relations/domain/entities/narra
 import 'package:echo/features/structure_elements_relations/domain/entities/project_relation_type.dart';
 import 'package:echo/features/structure_elements_relations/domain/entities/structure_chapter.dart';
 import 'package:echo/features/structure_elements_relations/domain/models/project_relation_draft_member.dart';
+import 'package:echo/features/content_cards/domain/entities/text_card.dart';
 import 'package:echo/features/structure_elements_relations/presentation/pages/project_relation_group_selection_page.dart';
 import 'package:echo/features/structure_elements_relations/presentation/widgets/compact_remove_button.dart';
 import 'package:echo/features/structure_elements_relations/presentation/widgets/editor_bottom_action_bar.dart';
@@ -27,6 +28,7 @@ class ProjectRelationGroupCreatePage extends StatefulWidget {
     super.key,
     required this.relationType,
     required this.narrativeElements,
+    required this.textCards,
     required this.chapters,
     required this.onCreateRelationGroup,
     this.onUpdateRelationGroup,
@@ -38,6 +40,7 @@ class ProjectRelationGroupCreatePage extends StatefulWidget {
 
   final ProjectRelationType relationType;
   final List<NarrativeElement> narrativeElements;
+  final List<TextCard> textCards;
   final List<StructureChapter> chapters;
   final CreateProjectRelationGroup onCreateRelationGroup;
   final UpdateProjectRelationGroup? onUpdateRelationGroup;
@@ -154,6 +157,8 @@ class _ProjectRelationGroupCreatePageState
     switch (member.kind) {
       case ProjectRelationTargetKind.element:
         return 'element:${member.elementId}';
+      case ProjectRelationTargetKind.textCard:
+        return 'text-card:${member.textCardId}';
       case ProjectRelationTargetKind.photo:
         return 'photo:${member.sourceElementId}:${member.photoPath}';
     }
@@ -175,6 +180,9 @@ class _ProjectRelationGroupCreatePageState
     final elementsById = <String, NarrativeElement>{
       for (final element in widget.narrativeElements)
         element.elementId: element,
+    };
+    final textCardsById = <String, TextCard>{
+      for (final textCard in widget.textCards) textCard.textCardId: textCard,
     };
 
     final nodes = <_AssemblyNode>[];
@@ -203,6 +211,20 @@ class _ProjectRelationGroupCreatePageState
                 chaptersById[sourceElement?.owningChapterId]?.sortOrder,
               ),
               imageSource: member.photoPath,
+              draftMember: member,
+            ),
+          );
+        case ProjectRelationTargetKind.textCard:
+          final textCard = textCardsById[member.textCardId];
+          if (textCard == null) {
+            continue;
+          }
+          nodes.add(
+            _AssemblyNode.element(
+              title: textCard.title,
+              chapterSeq: _chapterSequence(
+                chaptersById[textCard.owningChapterId]?.sortOrder,
+              ),
               draftMember: member,
             ),
           );

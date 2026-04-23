@@ -2,6 +2,7 @@ import 'package:image_picker/image_picker.dart';
 
 typedef PickProjectCoverImage = Future<String?> Function();
 typedef PickGalleryImages = Future<List<String>> Function();
+typedef PickCapturedPhoto = Future<String?> Function();
 
 Future<String?> pickProjectCoverImageFromGallery() async {
   final image = await ImagePicker().pickImage(source: ImageSource.gallery);
@@ -11,4 +12,9 @@ Future<String?> pickProjectCoverImageFromGallery() async {
 Future<List<String>> pickGalleryImagesFromGallery() async {
   final images = await ImagePicker().pickMultiImage();
   return images.map((image) => image.path).toList();
+}
+
+Future<String?> pickCapturedPhotoFromCamera() async {
+  final image = await ImagePicker().pickImage(source: ImageSource.camera);
+  return image?.path;
 }

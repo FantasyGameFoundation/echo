@@ -182,12 +182,12 @@ class _TimelinePagePrototypeState extends State<TimelinePagePrototype> {
                       ],
                     ),
             ),
-            CustomBottomNavBar(
-              activeTab: PrototypeTab.timeline,
-              onChangeTab: widget.onBottomTabChanged,
-            ),
           ],
         ),
+      ),
+      bottomNavigationBar: CustomBottomNavBar(
+        activeTab: PrototypeTab.timeline,
+        onChangeTab: widget.onBottomTabChanged,
       ),
     );
   }

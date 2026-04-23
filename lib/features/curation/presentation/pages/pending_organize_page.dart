@@ -23,8 +23,8 @@ class PendingOrganizePage extends StatefulWidget {
 class _PendingOrganizePageState extends State<PendingOrganizePage> {
   late PendingOrganizePageData _data;
   late final PageController _pageController;
-  final Map<String, _PendingPhotoDraft> _drafts =
-      <String, _PendingPhotoDraft>{};
+  final Map<String, _PendingEntryDraft> _drafts =
+      <String, _PendingEntryDraft>{};
 
   int _currentIndex = 0;
   bool _isSaving = false;
@@ -43,35 +43,35 @@ class _PendingOrganizePageState extends State<PendingOrganizePage> {
     super.dispose();
   }
 
-  PendingOrganizePhotoData? get _currentPhoto {
-    if (_data.photos.isEmpty) {
+  PendingOrganizeEntryData? get _currentEntry {
+    if (_data.entries.isEmpty) {
       return null;
     }
-    final safeIndex = _currentIndex.clamp(0, _data.photos.length - 1);
-    return _data.photos[safeIndex];
+    final safeIndex = _currentIndex.clamp(0, _data.entries.length - 1);
+    return _data.entries[safeIndex];
   }
 
-  _PendingPhotoDraft _draftFor(PendingOrganizePhotoData photo) {
+  _PendingEntryDraft _draftFor(PendingOrganizeEntryData entry) {
     return _drafts.putIfAbsent(
-      photo.photoId,
-      () => _PendingPhotoDraft(
-        selectedChapterId: photo.sourceChapterId,
-        selectedElementId: photo.sourceElementId,
-        selectedRelationGroupIds: <String>{...photo.sourceRelationGroupIds},
+      entry.entryId,
+      () => _PendingEntryDraft(
+        selectedChapterId: entry.sourceChapterId,
+        selectedElementId: entry.sourceElementId,
+        selectedRelationGroupIds: <String>{...entry.sourceRelationGroupIds},
       ),
     );
   }
 
-  bool _isPhotoDirty(PendingOrganizePhotoData photo) {
-    final draft = _draftFor(photo);
-    if (draft.selectedChapterId != photo.sourceChapterId) {
+  bool _isEntryDirty(PendingOrganizeEntryData entry) {
+    final draft = _draftFor(entry);
+    if (draft.selectedChapterId != entry.sourceChapterId) {
       return true;
     }
-    if (draft.selectedElementId != photo.sourceElementId) {
+    if (draft.selectedElementId != entry.sourceElementId) {
       return true;
     }
 
-    final initialGroupIds = photo.sourceRelationGroupIds.toSet();
+    final initialGroupIds = entry.sourceRelationGroupIds.toSet();
     if (draft.selectedRelationGroupIds.length != initialGroupIds.length) {
       return true;
     }
@@ -84,25 +84,30 @@ class _PendingOrganizePageState extends State<PendingOrganizePage> {
   }
 
   bool get _hasUnsavedChanges {
-    for (final photo in _data.photos) {
-      if (_isPhotoDirty(photo)) {
+    for (final entry in _data.entries) {
+      if (_isEntryDirty(entry)) {
         return true;
       }
     }
     return false;
   }
 
-  bool get _canSaveCurrentPhoto {
-    final currentPhoto = _currentPhoto;
-    if (currentPhoto == null || _isSaving) {
+  bool get _canSaveCurrentEntry {
+    final currentEntry = _currentEntry;
+    if (currentEntry == null || _isSaving) {
       return false;
     }
-    final draft = _draftFor(currentPhoto);
-    return draft.selectedElementId != null && _isPhotoDirty(currentPhoto);
+    final draft = _draftFor(currentEntry);
+    switch (currentEntry.type) {
+      case PendingOrganizeEntryType.photo:
+        return draft.selectedElementId != null && _isEntryDirty(currentEntry);
+      case PendingOrganizeEntryType.text:
+        return draft.selectedElementId != null && _isEntryDirty(currentEntry);
+    }
   }
 
   List<PendingOrganizeElementOption> _filteredElements(
-    _PendingPhotoDraft draft,
+    _PendingEntryDraft draft,
   ) {
     final filtered =
         _data.elements
@@ -156,11 +161,11 @@ class _PendingOrganizePageState extends State<PendingOrganizePage> {
   }
 
   void _selectChapter(String? chapterId) {
-    final currentPhoto = _currentPhoto;
-    if (currentPhoto == null) {
+    final currentEntry = _currentEntry;
+    if (currentEntry == null) {
       return;
     }
-    final draft = _draftFor(currentPhoto);
+    final draft = _draftFor(currentEntry);
     final nextElements = _data.elements
         .where((element) => element.chapterId == chapterId)
         .toList();
@@ -178,11 +183,11 @@ class _PendingOrganizePageState extends State<PendingOrganizePage> {
   }
 
   void _selectElement(String elementId) {
-    final currentPhoto = _currentPhoto;
-    if (currentPhoto == null) {
+    final currentEntry = _currentEntry;
+    if (currentEntry == null) {
       return;
     }
-    final draft = _draftFor(currentPhoto);
+    final draft = _draftFor(currentEntry);
     final element = _data.elements.firstWhere(
       (item) => item.elementId == elementId,
     );
@@ -196,11 +201,11 @@ class _PendingOrganizePageState extends State<PendingOrganizePage> {
   Future<void> _openRelationTypeSelection(
     PendingOrganizeRelationTypeOption relationType,
   ) async {
-    final currentPhoto = _currentPhoto;
-    if (currentPhoto == null) {
+    final currentEntry = _currentEntry;
+    if (currentEntry == null) {
       return;
     }
-    final draft = _draftFor(currentPhoto);
+    final draft = _draftFor(currentEntry);
     final initialGroupIds = draft.selectedRelationGroupIds
         .where(
           (groupId) =>
@@ -230,37 +235,44 @@ class _PendingOrganizePageState extends State<PendingOrganizePage> {
     });
   }
 
-  Future<void> _saveCurrentPhoto() async {
-    final currentPhoto = _currentPhoto;
-    if (currentPhoto == null) {
+  Future<void> _saveCurrentEntry() async {
+    final currentEntry = _currentEntry;
+    if (currentEntry == null) {
       return;
     }
-    await _savePhotoById(
-      currentPhoto.photoId,
-      preferredPhotoId: currentPhoto.photoId,
+    await _saveEntryById(
+      currentEntry.entryId,
+      preferredEntryId: currentEntry.entryId,
       manageSavingState: true,
     );
   }
 
-  Future<bool> _savePhotoById(
-    String photoId, {
-    required String preferredPhotoId,
+  Future<bool> _saveEntryById(
+    String entryId, {
+    required String preferredEntryId,
     required bool manageSavingState,
   }) async {
-    PendingOrganizePhotoData? photo;
-    for (final item in _data.photos) {
-      if (item.photoId == photoId) {
-        photo = item;
+    PendingOrganizeEntryData? entry;
+    for (final item in _data.entries) {
+      if (item.entryId == entryId) {
+        entry = item;
         break;
       }
     }
-    if (photo == null) {
+    if (entry == null) {
       return true;
     }
 
-    final draft = _draftFor(photo);
-    final targetElementId = draft.selectedElementId;
-    if (targetElementId == null || !_isPhotoDirty(photo)) {
+    final draft = _draftFor(entry);
+    if (!_isEntryDirty(entry)) {
+      return true;
+    }
+    if (entry.type == PendingOrganizeEntryType.photo &&
+        draft.selectedElementId == null) {
+      return true;
+    }
+    if (entry.type == PendingOrganizeEntryType.text &&
+        draft.selectedElementId == null) {
       return true;
     }
 
@@ -272,13 +284,23 @@ class _PendingOrganizePageState extends State<PendingOrganizePage> {
 
     final previousIndex = _currentIndex;
     final updatedData = await widget.onSavePhoto(
-      PendingOrganizeSaveRequest(
-        photoId: photo.photoId,
-        photoPath: photo.photoPath,
-        sourceElementId: photo.sourceElementId,
-        targetElementId: targetElementId,
-        relationGroupIds: draft.selectedRelationGroupIds.toList(),
-      ),
+      entry.type == PendingOrganizeEntryType.photo
+          ? PendingOrganizeSaveRequest.photo(
+              entryId: entry.entryId,
+              photoPath: entry.photoPath!,
+              sourceElementId: entry.sourceElementId,
+              sourceRecordId: entry.sourceRecordId,
+              targetChapterId: draft.selectedChapterId,
+              targetElementId: draft.selectedElementId!,
+              relationGroupIds: draft.selectedRelationGroupIds.toList(),
+            )
+          : PendingOrganizeSaveRequest.text(
+              entryId: entry.entryId,
+              textCardId: entry.textCardId!,
+              targetChapterId: draft.selectedChapterId!,
+              targetElementId: draft.selectedElementId!,
+              relationGroupIds: draft.selectedRelationGroupIds.toList(),
+            ),
     );
 
     if (!mounted) {
@@ -287,22 +309,22 @@ class _PendingOrganizePageState extends State<PendingOrganizePage> {
 
     setState(() {
       _data = updatedData;
-      _drafts.remove(photoId);
+      _drafts.remove(entryId);
       _drafts.removeWhere(
-        (draftPhotoId, _) =>
-            !_data.photos.any((item) => item.photoId == draftPhotoId),
+        (draftEntryId, _) =>
+            !_data.entries.any((item) => item.entryId == draftEntryId),
       );
       if (manageSavingState) {
         _isSaving = false;
       }
-      _currentIndex = _resolvedPhotoIndex(
-        preferredPhotoId: preferredPhotoId,
+      _currentIndex = _resolvedEntryIndex(
+        preferredEntryId: preferredEntryId,
         previousIndex: previousIndex,
       );
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_pageController.hasClients || _data.photos.isEmpty) {
+      if (!_pageController.hasClients || _data.entries.isEmpty) {
         return;
       }
       _pageController.jumpToPage(_currentIndex);
@@ -310,37 +332,41 @@ class _PendingOrganizePageState extends State<PendingOrganizePage> {
     return true;
   }
 
-  int _resolvedPhotoIndex({
-    required String preferredPhotoId,
+  int _resolvedEntryIndex({
+    required String preferredEntryId,
     required int previousIndex,
   }) {
-    if (_data.photos.isEmpty) {
+    if (_data.entries.isEmpty) {
       return 0;
     }
-    final updatedIndex = _data.photos.indexWhere(
-      (photo) => photo.photoId == preferredPhotoId,
+    final updatedIndex = _data.entries.indexWhere(
+      (entry) => entry.entryId == preferredEntryId,
     );
     if (updatedIndex >= 0) {
       return updatedIndex;
     }
-    return previousIndex.clamp(0, _data.photos.length - 1);
+    return previousIndex.clamp(0, _data.entries.length - 1);
   }
 
   Future<bool> _saveAllDirtyPhotos() async {
-    final dirtyPhotos = <PendingOrganizePhotoData>[
-      for (final photo in _data.photos)
-        if (_isPhotoDirty(photo)) photo,
+    final dirtyEntries = <PendingOrganizeEntryData>[
+      for (final entry in _data.entries)
+        if (_isEntryDirty(entry)) entry,
     ];
-    if (dirtyPhotos.isEmpty) {
+    if (dirtyEntries.isEmpty) {
       return true;
     }
 
-    final currentPhoto = _currentPhoto;
-    final savablePhotos = [
-      for (final photo in dirtyPhotos)
-        if (_draftFor(photo).selectedElementId != null) photo,
+    final currentEntry = _currentEntry;
+    final savableEntries = [
+      for (final entry in dirtyEntries)
+        if ((entry.type == PendingOrganizeEntryType.photo &&
+                _draftFor(entry).selectedElementId != null) ||
+            (entry.type == PendingOrganizeEntryType.text &&
+                _draftFor(entry).selectedChapterId != null))
+          entry,
     ];
-    if (savablePhotos.isEmpty) {
+    if (savableEntries.isEmpty) {
       return true;
     }
 
@@ -348,12 +374,12 @@ class _PendingOrganizePageState extends State<PendingOrganizePage> {
       _isSaving = true;
     });
 
-    final preferredPhotoId =
-        currentPhoto?.photoId ?? savablePhotos.first.photoId;
-    for (final photo in savablePhotos) {
-      final saved = await _savePhotoById(
-        photo.photoId,
-        preferredPhotoId: preferredPhotoId,
+    final preferredEntryId =
+        currentEntry?.entryId ?? savableEntries.first.entryId;
+    for (final entry in savableEntries) {
+      final saved = await _saveEntryById(
+        entry.entryId,
+        preferredEntryId: preferredEntryId,
         manageSavingState: false,
       );
       if (!saved || !mounted) {
@@ -437,7 +463,7 @@ class _PendingOrganizePageState extends State<PendingOrganizePage> {
                 ),
                 const SizedBox(height: 18),
                 Text(
-                  '当前仍有照片修改未保存。你可以全部保存后退出，或直接返回并放弃本次未保存修改。',
+                  '当前仍有待整理内容修改未保存。你可以全部保存后退出，或直接返回并放弃本次未保存修改。',
                   key: const ValueKey('pendingUnsavedDialogContent'),
                   style: const TextStyle(
                     fontSize: 14,
@@ -530,7 +556,7 @@ class _PendingOrganizePageState extends State<PendingOrganizePage> {
             children: [
               _buildTopBar(),
               Expanded(
-                child: _data.photos.isEmpty
+                child: _data.entries.isEmpty
                     ? _buildEmptyState()
                     : ListView(
                         padding: const EdgeInsets.only(bottom: 40),
@@ -577,7 +603,7 @@ class _PendingOrganizePageState extends State<PendingOrganizePage> {
           ),
           TextButton(
             key: const ValueKey('pendingOrganizeSaveButton'),
-            onPressed: _canSaveCurrentPhoto ? _saveCurrentPhoto : null,
+            onPressed: _canSaveCurrentEntry ? _saveCurrentEntry : null,
             style: TextButton.styleFrom(
               padding: EdgeInsets.zero,
               minimumSize: const Size(48, 32),
@@ -588,7 +614,7 @@ class _PendingOrganizePageState extends State<PendingOrganizePage> {
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
-                color: _canSaveCurrentPhoto ? Colors.black87 : Colors.black26,
+                color: _canSaveCurrentEntry ? Colors.black87 : Colors.black26,
                 letterSpacing: 1.0,
               ),
             ),
@@ -603,7 +629,7 @@ class _PendingOrganizePageState extends State<PendingOrganizePage> {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 32),
         child: Text(
-          '暂无待整理照片',
+          '暂无待整理内容',
           textAlign: TextAlign.center,
           style: TextStyle(
             fontSize: 14,
@@ -622,37 +648,54 @@ class _PendingOrganizePageState extends State<PendingOrganizePage> {
           aspectRatio: 3 / 2,
           child: PageView.builder(
             controller: _pageController,
-            itemCount: _data.photos.length,
+            itemCount: _data.entries.length,
             onPageChanged: _handlePageChanged,
             itemBuilder: (context, index) {
-              final photo = _data.photos[index];
-              return Container(
-                margin: const EdgeInsets.symmetric(horizontal: 8.0),
-                color: Colors.black,
-                child: Image(
-                  key: ValueKey('pendingPhoto-${photo.photoId}'),
-                  image: narrativeThumbnailProvider(photo.imageSource),
-                  fit: BoxFit.contain,
-                  errorBuilder: (context, error, stackTrace) {
-                    return Center(
+              final entry = _data.entries[index];
+              return entry.type == PendingOrganizeEntryType.photo
+                  ? Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 8.0),
+                      color: Colors.black,
+                      child: Image(
+                        key: ValueKey('pendingPhoto-${entry.entryId}'),
+                        image: narrativeThumbnailProvider(entry.imageSource!),
+                        fit: BoxFit.contain,
+                        errorBuilder: (context, error, stackTrace) {
+                          return Center(
+                            child: Text(
+                              'PHOTO',
+                              style: TextStyle(
+                                fontSize: 12,
+                                letterSpacing: 3.0,
+                                color: Colors.white.withValues(alpha: 0.4),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    )
+                  : Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 8.0),
+                      color: const Color(0xFF1F1F1F),
+                      padding: const EdgeInsets.all(28),
                       child: Text(
-                        'PHOTO',
+                        entry.body ?? '',
+                        key: ValueKey('pendingTextCard-${entry.entryId}'),
+                        maxLines: 10,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: 12,
-                          letterSpacing: 3.0,
-                          color: Colors.white.withValues(alpha: 0.4),
+                          fontSize: 18,
+                          height: 1.8,
+                          color: Colors.white.withValues(alpha: 0.86),
                         ),
                       ),
                     );
-                  },
-                ),
-              );
             },
           ),
         ),
         const SizedBox(height: 16),
         Text(
-          '${_currentIndex + 1} / ${_data.photos.length}',
+          '${_currentIndex + 1} / ${_data.entries.length}',
           key: const ValueKey('pendingOrganizePhotoCounter'),
           style: TextStyle(
             fontSize: 12,
@@ -665,11 +708,11 @@ class _PendingOrganizePageState extends State<PendingOrganizePage> {
   }
 
   Widget _buildCurrentSections() {
-    final currentPhoto = _currentPhoto;
-    if (currentPhoto == null) {
+    final currentEntry = _currentEntry;
+    if (currentEntry == null) {
       return const SizedBox.shrink();
     }
-    final draft = _draftFor(currentPhoto);
+    final draft = _draftFor(currentEntry);
     final elements = _filteredElements(draft);
 
     return Column(
@@ -702,7 +745,7 @@ class _PendingOrganizePageState extends State<PendingOrganizePage> {
     );
   }
 
-  Widget _buildChapterSelector(_PendingPhotoDraft draft) {
+  Widget _buildChapterSelector(_PendingEntryDraft draft) {
     final chapterOptions = <PendingOrganizeChapterOption>[
       const PendingOrganizeChapterOption(label: '未归属', sortOrder: -1),
       ..._data.chapters,
@@ -800,7 +843,7 @@ class _PendingOrganizePageState extends State<PendingOrganizePage> {
 
   Widget _buildElementList(
     List<PendingOrganizeElementOption> elements,
-    _PendingPhotoDraft draft,
+    _PendingEntryDraft draft,
   ) {
     if (elements.isEmpty) {
       return Container(
@@ -989,7 +1032,7 @@ class _PendingOrganizePageState extends State<PendingOrganizePage> {
     );
   }
 
-  Widget _buildRelationTypeList(_PendingPhotoDraft draft) {
+  Widget _buildRelationTypeList(_PendingEntryDraft draft) {
     return Column(
       children: [
         for (final relationType in _data.relationTypes)
@@ -1000,7 +1043,7 @@ class _PendingOrganizePageState extends State<PendingOrganizePage> {
 
   Widget _buildRelationTypeCard(
     PendingOrganizeRelationTypeOption relationType,
-    _PendingPhotoDraft draft,
+    _PendingEntryDraft draft,
   ) {
     final selectedCount = draft.selectedRelationGroupIds
         .where(
@@ -1063,8 +1106,8 @@ class _PendingOrganizePageState extends State<PendingOrganizePage> {
   }
 }
 
-class _PendingPhotoDraft {
-  _PendingPhotoDraft({
+class _PendingEntryDraft {
+  _PendingEntryDraft({
     required this.selectedChapterId,
     required this.selectedElementId,
     required this.selectedRelationGroupIds,

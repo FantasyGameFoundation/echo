@@ -1,6 +1,8 @@
 import 'dart:ui';
 
 import 'package:echo/data/media/media_importer.dart';
+import 'package:echo/features/content_cards/domain/entities/text_card.dart';
+import 'package:echo/features/content_cards/presentation/widgets/text_card_summary_tile.dart';
 import 'package:echo/features/project/presentation/utils/project_cover_picker.dart';
 import 'package:echo/features/structure_elements_relations/domain/entities/narrative_element.dart';
 import 'package:echo/features/structure_elements_relations/domain/entities/structure_chapter.dart';
@@ -50,6 +52,7 @@ class NarrativeElementCreatePage extends StatelessWidget {
       chapters: chapters,
       editorElement: null,
       allowChapterSelection: true,
+      linkedTextCards: const <TextCard>[],
       onSave: onSave,
       onPickPhoto: onPickPhoto,
       onImportPhoto: onImportPhoto,
@@ -65,6 +68,7 @@ class NarrativeElementEditPage extends StatelessWidget {
     required this.onSave,
     required this.onComplete,
     required this.onDelete,
+    this.linkedTextCards = const <TextCard>[],
     this.allowChapterSelection = true,
     PickGalleryImages? onPickPhoto,
     ImportNarrativePhoto? onImportPhoto,
@@ -76,6 +80,7 @@ class NarrativeElementEditPage extends StatelessWidget {
   final SaveNarrativeElement onSave;
   final SaveNarrativeElement onComplete;
   final Future<void> Function() onDelete;
+  final List<TextCard> linkedTextCards;
   final bool allowChapterSelection;
   final PickGalleryImages onPickPhoto;
   final ImportNarrativePhoto onImportPhoto;
@@ -86,6 +91,7 @@ class NarrativeElementEditPage extends StatelessWidget {
       chapters: chapters,
       editorElement: element,
       allowChapterSelection: allowChapterSelection,
+      linkedTextCards: linkedTextCards,
       onSave: onSave,
       onComplete: onComplete,
       onDelete: onDelete,
@@ -100,6 +106,7 @@ class _NarrativeElementEditorPage extends StatefulWidget {
     required this.chapters,
     required this.editorElement,
     required this.allowChapterSelection,
+    required this.linkedTextCards,
     required this.onSave,
     required this.onPickPhoto,
     required this.onImportPhoto,
@@ -110,6 +117,7 @@ class _NarrativeElementEditorPage extends StatefulWidget {
   final List<StructureChapter> chapters;
   final NarrativeElement? editorElement;
   final bool allowChapterSelection;
+  final List<TextCard> linkedTextCards;
   final SaveNarrativeElement onSave;
   final SaveNarrativeElement? onComplete;
   final Future<void> Function()? onDelete;
@@ -546,6 +554,12 @@ class _NarrativeElementEditorPageState
                         _buildNameInput(),
                         const SizedBox(height: 16),
                         _buildDescInput(),
+                        if (widget.linkedTextCards.isNotEmpty) ...[
+                          const SizedBox(height: 48),
+                          _buildSectionLabel('关 联 文 字'),
+                          const SizedBox(height: 16),
+                          _buildTextCardsSection(),
+                        ],
                         const SizedBox(height: 56),
                         _buildSectionLabel('关 联 照 片'),
                         const SizedBox(height: 16),
@@ -835,5 +849,16 @@ class _NarrativeElementEditorPageState
     ];
 
     return Wrap(spacing: 8.0, runSpacing: 8.0, children: mountItems);
+  }
+
+  Widget _buildTextCardsSection() {
+    return Column(
+      children: [
+        for (final card in widget.linkedTextCards) ...[
+          TextCardSummaryTile(card: card, keyPrefix: 'narrativeTextCard'),
+          const SizedBox(height: 12),
+        ],
+      ],
+    );
   }
 }

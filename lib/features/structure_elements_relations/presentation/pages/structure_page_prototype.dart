@@ -133,12 +133,12 @@ class _StructurePagePrototypeState extends State<StructurePagePrototype> {
             ),
             const SizedBox(height: 24),
             Expanded(child: _buildCurrentSection()),
-            CustomBottomNavBar(
-              activeTab: PrototypeTab.structure,
-              onChangeTab: widget.onBottomTabChanged,
-            ),
           ],
         ),
+      ),
+      bottomNavigationBar: CustomBottomNavBar(
+        activeTab: PrototypeTab.structure,
+        onChangeTab: widget.onBottomTabChanged,
       ),
     );
   }

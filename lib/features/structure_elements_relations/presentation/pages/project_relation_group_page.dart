@@ -5,6 +5,7 @@ import 'package:echo/features/structure_elements_relations/domain/entities/proje
 import 'package:echo/features/structure_elements_relations/domain/entities/structure_chapter.dart';
 import 'package:echo/features/structure_elements_relations/domain/models/project_relation_draft_member.dart';
 import 'package:echo/features/structure_elements_relations/domain/repositories/project_relation_repository.dart';
+import 'package:echo/features/content_cards/domain/entities/text_card.dart';
 import 'package:echo/features/structure_elements_relations/presentation/pages/project_relation_create_page.dart';
 import 'package:echo/features/structure_elements_relations/presentation/pages/project_relation_group_create_page.dart';
 import 'package:echo/features/structure_elements_relations/presentation/widgets/narrative_thumbnail_provider.dart';
@@ -19,6 +20,7 @@ class ProjectRelationGroupPage extends StatefulWidget {
     required this.relationGroups,
     required this.relationMembers,
     required this.narrativeElements,
+    required this.textCards,
     required this.chapters,
     required this.onUpdateRelationType,
     required this.onDeleteRelationType,
@@ -30,6 +32,7 @@ class ProjectRelationGroupPage extends StatefulWidget {
   final List<ProjectRelationGroup> relationGroups;
   final List<ProjectRelationMember> relationMembers;
   final List<NarrativeElement> narrativeElements;
+  final List<TextCard> textCards;
   final List<StructureChapter> chapters;
   final UpdateProjectRelationType onUpdateRelationType;
   final Future<void> Function() onDeleteRelationType;
@@ -70,6 +73,9 @@ class _ProjectRelationGroupPageState extends State<ProjectRelationGroupPage> {
       for (final element in widget.narrativeElements)
         element.elementId: element,
     };
+    final textCardsById = <String, TextCard>{
+      for (final card in widget.textCards) card.textCardId: card,
+    };
 
     return _relationGroups
         .where(
@@ -91,6 +97,7 @@ class _ProjectRelationGroupPageState extends State<ProjectRelationGroupPage> {
                 (member) => _buildNodeData(
                   member: member,
                   elementsById: elementsById,
+                  textCardsById: textCardsById,
                   chaptersById: chaptersById,
                 ),
               )
@@ -111,6 +118,7 @@ class _ProjectRelationGroupPageState extends State<ProjectRelationGroupPage> {
   _RelationNodeData _buildNodeData({
     required ProjectRelationMember member,
     required Map<String, NarrativeElement> elementsById,
+    required Map<String, TextCard> textCardsById,
     required Map<String, StructureChapter> chaptersById,
   }) {
     if (member.kind == 'photo') {
@@ -122,6 +130,18 @@ class _ProjectRelationGroupPageState extends State<ProjectRelationGroupPage> {
           chaptersById[sourceElement?.owningChapterId]?.sortOrder,
         ),
         imageSource: member.linkedPhotoPath,
+      );
+    }
+
+    if (member.kind == 'textCard') {
+      final textCard = textCardsById[member.linkedTextCardId];
+      return _RelationNodeData(
+        kind: _RelationNodeKind.element,
+        title: textCard?.title ?? '未命名文字卡片',
+        chapterSeq: _chapterSequence(
+          chaptersById[textCard?.owningChapterId]?.sortOrder,
+        ),
+        imageSource: null,
       );
     }
 
@@ -207,6 +227,7 @@ class _ProjectRelationGroupPageState extends State<ProjectRelationGroupPage> {
             builder: (_) => ProjectRelationGroupCreatePage(
               relationType: _relationType,
               narrativeElements: widget.narrativeElements,
+              textCards: widget.textCards,
               chapters: widget.chapters,
               onCreateRelationGroup:
                   ({
@@ -256,6 +277,72 @@ class _ProjectRelationGroupPageState extends State<ProjectRelationGroupPage> {
     );
   }
 
+  ProjectRelationDraftMember? _toDraftMember(ProjectRelationMember member) {
+    assert(() {
+      if (member.kind == 'photo' &&
+          (member.linkedPhotoPath == null ||
+              member.linkedSourceElementId == null)) {
+        debugPrint(
+          'Invalid photo relation member ${member.relationMemberId}: '
+          'linkedPhotoPath and linkedSourceElementId are required.',
+        );
+      }
+      if (member.kind == 'textCard' && member.linkedTextCardId == null) {
+        debugPrint(
+          'Invalid text-card relation member ${member.relationMemberId}: '
+          'linkedTextCardId is required.',
+        );
+      }
+      if (member.kind != 'photo' &&
+          member.kind != 'textCard' &&
+          member.linkedElementId == null) {
+        debugPrint(
+          'Invalid element relation member ${member.relationMemberId}: '
+          'linkedElementId is required.',
+        );
+      }
+      return true;
+    }());
+
+    switch (member.kind) {
+      case 'photo':
+        final photoPath = member.linkedPhotoPath;
+        final sourceElementId = member.linkedSourceElementId;
+        if (photoPath == null || sourceElementId == null) {
+          return null;
+        }
+        return ProjectRelationDraftMember.photo(
+          photoPath: photoPath,
+          sourceElementId: sourceElementId,
+        );
+      case 'textCard':
+        final textCardId = member.linkedTextCardId;
+        if (textCardId == null) {
+          return null;
+        }
+        return ProjectRelationDraftMember.textCard(textCardId: textCardId);
+      default:
+        final elementId = member.linkedElementId;
+        if (elementId == null) {
+          return null;
+        }
+        return ProjectRelationDraftMember.element(elementId: elementId);
+    }
+  }
+
+  List<ProjectRelationDraftMember> _toDraftMembers(
+    Iterable<ProjectRelationMember> members,
+  ) {
+    final draftMembers = <ProjectRelationDraftMember>[];
+    for (final member in members) {
+      final draftMember = _toDraftMember(member);
+      if (draftMember != null) {
+        draftMembers.add(draftMember);
+      }
+    }
+    return draftMembers;
+  }
+
   Future<void> _openEditRelationGroupPage(_RelationGroupCardData group) async {
     final relationGroup = _relationGroups.firstWhere(
       (item) => item.relationGroupId == group.id,
@@ -275,21 +362,11 @@ class _ProjectRelationGroupPageState extends State<ProjectRelationGroupPage> {
             builder: (_) => ProjectRelationGroupCreatePage(
               relationType: _relationType,
               narrativeElements: widget.narrativeElements,
+              textCards: widget.textCards,
               chapters: widget.chapters,
               initialTitle: relationGroup.title,
               initialDescription: relationGroup.description,
-              initialMembers: [
-                for (final member in initialMembers)
-                  switch (member.kind) {
-                    'photo' => ProjectRelationDraftMember.photo(
-                      photoPath: member.linkedPhotoPath!,
-                      sourceElementId: member.linkedSourceElementId!,
-                    ),
-                    _ => ProjectRelationDraftMember.element(
-                      elementId: member.linkedElementId!,
-                    ),
-                  },
-              ],
+              initialMembers: _toDraftMembers(initialMembers),
               onCreateRelationGroup:
                   ({
                     required title,

@@ -167,20 +167,17 @@ class _BeaconPagePrototypeState extends State<BeaconPagePrototype> {
               ],
             ),
             Positioned(
-              bottom: 96,
+              bottom: 16,
               left: 0,
               right: 0,
               child: Center(child: _buildFloatingActionBtn()),
             ),
-            Align(
-              alignment: Alignment.bottomCenter,
-              child: CustomBottomNavBar(
-                activeTab: PrototypeTab.overview,
-                onChangeTab: widget.onBottomTabChanged,
-              ),
-            ),
           ],
         ),
+      ),
+      bottomNavigationBar: CustomBottomNavBar(
+        activeTab: PrototypeTab.overview,
+        onChangeTab: widget.onBottomTabChanged,
       ),
     );
   }

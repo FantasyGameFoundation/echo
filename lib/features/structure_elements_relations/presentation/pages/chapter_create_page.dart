@@ -1,5 +1,7 @@
 import 'dart:ui';
 
+import 'package:echo/features/content_cards/domain/entities/text_card.dart';
+import 'package:echo/features/content_cards/presentation/widgets/text_card_summary_tile.dart';
 import 'package:echo/features/structure_elements_relations/domain/entities/narrative_element.dart';
 import 'package:echo/features/structure_elements_relations/domain/entities/structure_chapter.dart';
 import 'package:echo/features/structure_elements_relations/presentation/models/narrative_element_draft.dart';
@@ -49,6 +51,7 @@ class ChapterCreatePage extends StatelessWidget {
       pageTitle: '添 加 章 节',
       editorChapter: null,
       existingElements: const <NarrativeElement>[],
+      existingTextCards: const <TextCard>[],
       onSave: onSave,
     );
   }
@@ -60,6 +63,7 @@ class ChapterEditPage extends StatelessWidget {
     required this.existingChapters,
     required this.chapter,
     required this.existingElements,
+    this.existingTextCards = const <TextCard>[],
     required this.onSave,
     required this.onComplete,
     required this.onDelete,
@@ -69,6 +73,7 @@ class ChapterEditPage extends StatelessWidget {
   final List<StructureChapter> existingChapters;
   final StructureChapter chapter;
   final List<NarrativeElement> existingElements;
+  final List<TextCard> existingTextCards;
   final UpdateChapter onSave;
   final UpdateChapter onComplete;
   final Future<void> Function() onDelete;
@@ -82,6 +87,7 @@ class ChapterEditPage extends StatelessWidget {
       pageTitle: '编 辑 章 节',
       editorChapter: chapter,
       existingElements: existingElements,
+      existingTextCards: existingTextCards,
       onSave: onSave,
       onComplete: onComplete,
       onDelete: onDelete,
@@ -96,6 +102,7 @@ class _ChapterEditorPage extends StatefulWidget {
     required this.pageTitle,
     required this.editorChapter,
     required this.existingElements,
+    required this.existingTextCards,
     required this.onSave,
     this.onComplete,
     this.onDelete,
@@ -106,6 +113,7 @@ class _ChapterEditorPage extends StatefulWidget {
   final String pageTitle;
   final StructureChapter? editorChapter;
   final List<NarrativeElement> existingElements;
+  final List<TextCard> existingTextCards;
   final UpdateChapter onSave;
   final UpdateChapter? onComplete;
   final Future<void> Function()? onDelete;
@@ -559,6 +567,12 @@ class _ChapterEditorPageState extends State<_ChapterEditorPage> {
                         _buildSectionHeader('包 含 元 素'),
                         const SizedBox(height: 16),
                         _buildElementsSection(),
+                        if (widget.existingTextCards.isNotEmpty) ...[
+                          const SizedBox(height: 48),
+                          _buildSectionHeader('文 字 卡 片'),
+                          const SizedBox(height: 16),
+                          _buildTextCardsSection(),
+                        ],
                         const SizedBox(height: 120),
                       ],
                     ),
@@ -873,6 +887,17 @@ class _ChapterEditorPageState extends State<_ChapterEditorPage> {
     ];
 
     return Wrap(spacing: 12, runSpacing: 12, children: items);
+  }
+
+  Widget _buildTextCardsSection() {
+    return Column(
+      children: [
+        for (final card in widget.existingTextCards) ...[
+          TextCardSummaryTile(card: card, keyPrefix: 'chapterTextCard'),
+          const SizedBox(height: 12),
+        ],
+      ],
+    );
   }
 
   Widget _buildElementTag({

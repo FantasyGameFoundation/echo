@@ -7,10 +7,8 @@ const MethodChannel _storageDirectoryChannel = MethodChannel(
 );
 
 Future<String> getAppStorageDirectoryPath() async {
-  if (!(Platform.isAndroid || Platform.isIOS)) {
-    throw UnsupportedError(
-      'App storage directory is only configured for Android and iOS.',
-    );
+  if (Platform.isMacOS || Platform.isLinux || Platform.isWindows) {
+    return Directory.systemTemp.path;
   }
 
   final path = await _storageDirectoryChannel.invokeMethod<String>(
