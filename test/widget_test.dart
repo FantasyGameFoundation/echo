@@ -12,7 +12,7 @@ import 'package:echo/features/project/presentation/pages/project_wizard_page.dar
 import 'package:echo/features/project/presentation/widgets/project_sidebar.dart';
 import 'package:echo/features/beacon/presentation/pages/beacon_page_prototype.dart';
 import 'package:echo/features/curation/presentation/pages/global_arrange_page.dart';
-import 'package:echo/features/curation/presentation/pages/organize_page_prototype.dart';
+import 'package:echo/features/curation/presentation/pages/pending_organize_page.dart';
 import 'package:echo/features/structure_elements_relations/domain/element_status.dart';
 import 'package:echo/features/structure_elements_relations/domain/entities/narrative_element.dart';
 import 'package:echo/features/structure_elements_relations/domain/entities/project_relation_group.dart';
@@ -4875,7 +4875,14 @@ void main() {
       );
       expect(find.text('沿岸石壁'), findsOneWidget);
       expect(find.text('CH.01'), findsOneWidget);
-      expect(find.text('1 / 2'), findsOneWidget);
+      expect(
+        tester
+            .widget<Text>(
+              find.byKey(const ValueKey('relationFullscreenCounter')),
+            )
+            .data,
+        '1 / 2',
+      );
 
       await tester.fling(
         find.byKey(const ValueKey('relationFullscreenPageView')),
@@ -4886,7 +4893,14 @@ void main() {
 
       expect(find.text('风化裂缝'), findsOneWidget);
       expect(find.text('CH.02'), findsOneWidget);
-      expect(find.text('2 / 2'), findsOneWidget);
+      expect(
+        tester
+            .widget<Text>(
+              find.byKey(const ValueKey('relationFullscreenCounter')),
+            )
+            .data,
+        '2 / 2',
+      );
 
       await tester.tap(
         find.byKey(const ValueKey('relationFullscreenCloseButton')),
@@ -5044,53 +5058,46 @@ void main() {
     },
   );
 
-  testWidgets('organize page keeps core curation markers after extraction', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: OrganizePagePrototype(
-          onOpenSidebar: _noop,
-          onBottomTabChanged: _noopPrototypeTab,
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    await tester.scrollUntilVisible(
-      find.textContaining('关联关系'),
-      300,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.textContaining('关联章节'), findsOneWidget);
-    expect(find.textContaining('关联元素'), findsOneWidget);
-    expect(find.textContaining('关联关系'), findsOneWidget);
-  });
-
   testWidgets(
-    'curation tab opens global arrange page and pending button routes to organize page',
+    'curation tab opens real pending organize page with independent nav and pending-only photos',
     (tester) async {
+      const projectId = 'project-curation';
+      final relationRepository = _InMemoryProjectRelationRepository();
+      final relationTypes = await relationRepository
+          .listRelationTypesForProject(projectId);
+      final echoType = relationTypes.firstWhere((type) => type.name == '呼应');
+      await relationRepository.createRelationGroup(
+        projectId: projectId,
+        relationTypeId: echoType.relationTypeId,
+        title: '呼应组',
+        members: const <ProjectRelationDraftMember>[
+          ProjectRelationDraftMember.photo(
+            photoPath: '/tmp/pending-a.jpg',
+            sourceElementId: 'element-pending-a',
+          ),
+          ProjectRelationDraftMember.element(elementId: 'element-chapter-1'),
+        ],
+      );
+
       await tester.pumpWidget(
         EchoApp(
           projectRepository: _InMemoryProjectRepository(
             initialProjects: <Project>[
               Project.create(
-                id: 'project-curation',
+                id: projectId,
                 projectTitle: '江岸计划',
                 projectThemeStatement: '用于整理页接线验证',
                 createdTimestamp: DateTime(2026, 1, 1),
                 updatedTimestamp: DateTime(2026, 1, 1),
               ),
             ],
-            currentProjectId: 'project-curation',
+            currentProjectId: projectId,
           ),
           structureChapterRepository: _InMemoryStructureChapterRepository(
             initialChapters: <StructureChapter>[
               StructureChapter.create(
-                id: 'chapter-curation',
-                projectId: 'project-curation',
+                id: 'chapter-1',
+                projectId: projectId,
                 chapterTitle: '第一章',
                 chapterSortOrder: 0,
                 createdTimestamp: DateTime(2026, 1, 1),
@@ -5101,17 +5108,33 @@ void main() {
           narrativeElementRepository: _InMemoryNarrativeElementRepository(
             initialElements: <NarrativeElement>[
               NarrativeElement.create(
-                id: 'element-curation',
-                projectId: 'project-curation',
-                chapterId: 'chapter-curation',
-                elementTitle: '码头剪影',
-                linkedPhotoPaths: <String>['/tmp/curation-photo.jpg'],
+                id: 'element-pending-a',
+                projectId: projectId,
+                elementTitle: '待整理 A',
+                linkedPhotoPaths: <String>['/tmp/pending-a.jpg'],
                 createdTimestamp: DateTime(2026, 1, 1),
                 updatedTimestamp: DateTime(2026, 1, 1),
               ),
+              NarrativeElement.create(
+                id: 'element-pending-b',
+                projectId: projectId,
+                elementTitle: '待整理 B',
+                linkedPhotoPaths: <String>['/tmp/pending-b.jpg'],
+                createdTimestamp: DateTime(2026, 1, 2),
+                updatedTimestamp: DateTime(2026, 1, 2),
+              ),
+              NarrativeElement.create(
+                id: 'element-chapter-1',
+                projectId: projectId,
+                chapterId: 'chapter-1',
+                elementTitle: '章节元素',
+                linkedPhotoPaths: <String>['/tmp/chapter-photo.jpg'],
+                createdTimestamp: DateTime(2026, 1, 3),
+                updatedTimestamp: DateTime(2026, 1, 3),
+              ),
             ],
           ),
-          projectRelationRepository: _InMemoryProjectRelationRepository(),
+          projectRelationRepository: relationRepository,
         ),
       );
       await tester.pumpAndSettle();
@@ -5128,14 +5151,769 @@ void main() {
         findsNothing,
       );
       expect(find.textContaining('CH 01 / 第一章'), findsOneWidget);
-      expect(find.text('码头剪影'), findsOneWidget);
+      expect(find.text('章节元素'), findsOneWidget);
 
       await tester.tap(
         find.byKey(const ValueKey('globalArrangePendingButton')),
       );
       await tester.pumpAndSettle();
 
-      expect(find.byType(OrganizePagePrototype), findsOneWidget);
+      expect(find.byType(PendingOrganizePage), findsOneWidget);
+      expect(find.byType(CustomBottomNavBar), findsNothing);
+      expect(find.text('待整理'), findsOneWidget);
+      expect(
+        tester
+            .widget<TextButton>(
+              find.byKey(const ValueKey('pendingOrganizeSaveButton')),
+            )
+            .onPressed,
+        isNull,
+      );
+      expect(find.byIcon(Icons.search), findsNothing);
+      expect(
+        find.byKey(const ValueKey('pendingOrganizePhotoCounter')),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<Text>(
+              find.byKey(
+                const ValueKey('pendingOrganizePhotoCounter'),
+                skipOffstage: false,
+              ),
+            )
+            .data,
+        '1 / 2',
+      );
+    },
+  );
+
+  testWidgets(
+    'pending organize page changes chapter element relation state with current photo',
+    (tester) async {
+      const projectId = 'project-pending-switch';
+      final relationRepository = _InMemoryProjectRelationRepository();
+      final relationTypes = await relationRepository
+          .listRelationTypesForProject(projectId);
+      final echoType = relationTypes.firstWhere((type) => type.name == '呼应');
+      await relationRepository.createRelationGroup(
+        projectId: projectId,
+        relationTypeId: echoType.relationTypeId,
+        title: '呼应组',
+        members: const <ProjectRelationDraftMember>[
+          ProjectRelationDraftMember.photo(
+            photoPath: '/tmp/pending-a.jpg',
+            sourceElementId: 'element-pending-a',
+          ),
+          ProjectRelationDraftMember.element(elementId: 'element-chapter-1'),
+        ],
+      );
+
+      await tester.pumpWidget(
+        EchoApp(
+          projectRepository: _InMemoryProjectRepository(
+            initialProjects: <Project>[
+              Project.create(
+                id: projectId,
+                projectTitle: '待整理联动',
+                projectThemeStatement: '验证按照片切换',
+                createdTimestamp: DateTime(2026, 1, 1),
+                updatedTimestamp: DateTime(2026, 1, 1),
+              ),
+            ],
+            currentProjectId: projectId,
+          ),
+          structureChapterRepository: _InMemoryStructureChapterRepository(
+            initialChapters: <StructureChapter>[
+              StructureChapter.create(
+                id: 'chapter-1',
+                projectId: projectId,
+                chapterTitle: '第一章',
+                chapterSortOrder: 0,
+              ),
+            ],
+          ),
+          narrativeElementRepository: _InMemoryNarrativeElementRepository(
+            initialElements: <NarrativeElement>[
+              NarrativeElement.create(
+                id: 'element-pending-a',
+                projectId: projectId,
+                elementTitle: '待整理 A',
+                linkedPhotoPaths: <String>['/tmp/pending-a.jpg'],
+              ),
+              NarrativeElement.create(
+                id: 'element-pending-b',
+                projectId: projectId,
+                elementTitle: '待整理 B',
+                linkedPhotoPaths: <String>['/tmp/pending-b.jpg'],
+              ),
+              NarrativeElement.create(
+                id: 'element-chapter-1',
+                projectId: projectId,
+                chapterId: 'chapter-1',
+                elementTitle: '章节元素',
+                linkedPhotoPaths: <String>['/tmp/chapter-photo.jpg'],
+              ),
+            ],
+          ),
+          projectRelationRepository: relationRepository,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('整理'));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('globalArrangePendingButton')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        _containerColor(
+          tester,
+          find.byKey(
+            const ValueKey('pendingElementCardBody-element-pending-a'),
+            skipOffstage: false,
+          ),
+        ),
+        const Color(0xFF222222),
+      );
+      expect(
+        find.byKey(
+          ValueKey('pendingRelationTypeCount-${echoType.relationTypeId}'),
+          skipOffstage: false,
+        ),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<Text>(
+              find.byKey(
+                ValueKey('pendingRelationTypeCount-${echoType.relationTypeId}'),
+                skipOffstage: false,
+              ),
+            )
+            .data,
+        '已选 1 组',
+      );
+
+      await tester.dragFrom(const Offset(400, 180), const Offset(-400, 0));
+      await tester.pumpAndSettle();
+
+      expect(
+        tester
+            .widget<Text>(
+              find.byKey(
+                const ValueKey('pendingOrganizePhotoCounter'),
+                skipOffstage: false,
+              ),
+            )
+            .data,
+        '2 / 2',
+      );
+      expect(
+        _containerColor(
+          tester,
+          find.byKey(
+            const ValueKey('pendingElementCardBody-element-pending-b'),
+            skipOffstage: false,
+          ),
+        ),
+        const Color(0xFF222222),
+      );
+      expect(
+        _containerColor(
+          tester,
+          find.byKey(
+            const ValueKey('pendingElementCardBody-element-pending-a'),
+            skipOffstage: false,
+          ),
+        ),
+        Colors.white,
+      );
+      expect(
+        tester
+            .widget<TextButton>(
+              find.byKey(const ValueKey('pendingOrganizeSaveButton')),
+            )
+            .onPressed,
+        isNull,
+      );
+      await tester.drag(find.byType(Scrollable).first, const Offset(0, -220));
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const ValueKey('pendingChapterCard-chapter-1')),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<TextButton>(
+              find.byKey(const ValueKey('pendingOrganizeSaveButton')),
+            )
+            .onPressed,
+        isNull,
+      );
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('pendingElementCard-element-chapter-1')),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const ValueKey('pendingElementCard-element-chapter-1')),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<TextButton>(
+              find.byKey(const ValueKey('pendingOrganizeSaveButton')),
+            )
+            .onPressed,
+        isNotNull,
+      );
+    },
+  );
+
+  testWidgets(
+    'pending organize relation selection saves photo into chapter element and removes it from pending list',
+    (tester) async {
+      const projectId = 'project-pending-save';
+      final relationRepository = _InMemoryProjectRelationRepository();
+      final relationTypes = await relationRepository
+          .listRelationTypesForProject(projectId);
+      final echoType = relationTypes.firstWhere((type) => type.name == '呼应');
+      final selectedGroup = await relationRepository.createRelationGroup(
+        projectId: projectId,
+        relationTypeId: echoType.relationTypeId,
+        title: '原始呼应组',
+        members: const <ProjectRelationDraftMember>[
+          ProjectRelationDraftMember.photo(
+            photoPath: '/tmp/pending-a.jpg',
+            sourceElementId: 'element-pending-a',
+          ),
+          ProjectRelationDraftMember.element(elementId: 'element-chapter-1'),
+        ],
+      );
+      final extraGroup = await relationRepository.createRelationGroup(
+        projectId: projectId,
+        relationTypeId: echoType.relationTypeId,
+        title: '补充呼应组',
+        members: const <ProjectRelationDraftMember>[
+          ProjectRelationDraftMember.element(elementId: 'element-pending-b'),
+          ProjectRelationDraftMember.element(elementId: 'element-chapter-1'),
+        ],
+      );
+
+      final elementRepository = _InMemoryNarrativeElementRepository(
+        initialElements: <NarrativeElement>[
+          NarrativeElement.create(
+            id: 'element-pending-a',
+            projectId: projectId,
+            elementTitle: '待整理 A',
+            linkedPhotoPaths: <String>['/tmp/pending-a.jpg'],
+          ),
+          NarrativeElement.create(
+            id: 'element-pending-b',
+            projectId: projectId,
+            elementTitle: '待整理 B',
+            linkedPhotoPaths: <String>['/tmp/pending-b.jpg'],
+          ),
+          NarrativeElement.create(
+            id: 'element-chapter-1',
+            projectId: projectId,
+            chapterId: 'chapter-1',
+            elementTitle: '章节元素',
+            linkedPhotoPaths: <String>['/tmp/chapter-photo.jpg'],
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        EchoApp(
+          projectRepository: _InMemoryProjectRepository(
+            initialProjects: <Project>[
+              Project.create(
+                id: projectId,
+                projectTitle: '待整理保存',
+                projectThemeStatement: '验证真实保存',
+                createdTimestamp: DateTime(2026, 1, 1),
+                updatedTimestamp: DateTime(2026, 1, 1),
+              ),
+            ],
+            currentProjectId: projectId,
+          ),
+          structureChapterRepository: _InMemoryStructureChapterRepository(
+            initialChapters: <StructureChapter>[
+              StructureChapter.create(
+                id: 'chapter-1',
+                projectId: projectId,
+                chapterTitle: '第一章',
+                chapterSortOrder: 0,
+              ),
+            ],
+          ),
+          narrativeElementRepository: elementRepository,
+          projectRelationRepository: relationRepository,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('整理'));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('globalArrangePendingButton')),
+      );
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.byKey(
+          ValueKey('pendingRelationTypeCard-${echoType.relationTypeId}'),
+        ),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(
+          ValueKey('pendingRelationTypeCard-${echoType.relationTypeId}'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text(echoType.name), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('pendingRelationSelectionCompleteButton')),
+        findsOneWidget,
+      );
+
+      await tester.tap(
+        find.byKey(
+          ValueKey('pendingRelationGroupCard-${extraGroup.relationGroupId}'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('pendingRelationSelectionCompleteButton')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('已选 2 组'), findsOneWidget);
+      expect(
+        tester
+            .widget<TextButton>(
+              find.byKey(const ValueKey('pendingOrganizeSaveButton')),
+            )
+            .onPressed,
+        isNotNull,
+      );
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('pendingOrganizePhotoCounter')),
+        -300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const ValueKey('pendingChapterCard-chapter-1')),
+      );
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('pendingElementCard-element-chapter-1')),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('pendingElementCard-element-chapter-1')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('pendingOrganizeSaveButton')));
+      await tester.pumpAndSettle();
+
+      expect(
+        tester
+            .widget<Text>(
+              find.byKey(
+                const ValueKey('pendingOrganizePhotoCounter'),
+                skipOffstage: false,
+              ),
+            )
+            .data,
+        '1 / 1',
+      );
+      expect(
+        _containerColor(
+          tester,
+          find.byKey(
+            const ValueKey('pendingElementCardBody-element-pending-b'),
+            skipOffstage: false,
+          ),
+        ),
+        const Color(0xFF222222),
+      );
+
+      final updatedElements = await elementRepository.listElementsForProject(
+        projectId,
+      );
+      final pendingSource = updatedElements.firstWhere(
+        (element) => element.elementId == 'element-pending-a',
+      );
+      final chapterElement = updatedElements.firstWhere(
+        (element) => element.elementId == 'element-chapter-1',
+      );
+      expect(pendingSource.photoPaths, isEmpty);
+      expect(chapterElement.photoPaths, contains('/tmp/pending-a.jpg'));
+
+      final updatedMembers = await relationRepository
+          .listRelationMembersForProject(projectId);
+      expect(
+        updatedMembers.where(
+          (member) =>
+              member.owningGroupId == selectedGroup.relationGroupId &&
+              member.linkedPhotoPath == '/tmp/pending-a.jpg' &&
+              member.linkedSourceElementId == 'element-chapter-1',
+        ),
+        isNotEmpty,
+      );
+      expect(
+        updatedMembers.where(
+          (member) =>
+              member.owningGroupId == extraGroup.relationGroupId &&
+              member.linkedPhotoPath == '/tmp/pending-a.jpg' &&
+              member.linkedSourceElementId == 'element-chapter-1',
+        ),
+        isNotEmpty,
+      );
+    },
+  );
+
+  testWidgets(
+    'pending organize back dialog close keeps page and discard exits without saving',
+    (tester) async {
+      const projectId = 'project-pending-discard';
+      final elementRepository = _InMemoryNarrativeElementRepository(
+        initialElements: <NarrativeElement>[
+          NarrativeElement.create(
+            id: 'element-pending-a',
+            projectId: projectId,
+            elementTitle: '待整理 A',
+            linkedPhotoPaths: <String>['/tmp/pending-a.jpg'],
+          ),
+          NarrativeElement.create(
+            id: 'element-chapter-1',
+            projectId: projectId,
+            chapterId: 'chapter-1',
+            elementTitle: '章节元素',
+            linkedPhotoPaths: <String>['/tmp/chapter-photo.jpg'],
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        EchoApp(
+          projectRepository: _InMemoryProjectRepository(
+            initialProjects: <Project>[
+              Project.create(
+                id: projectId,
+                projectTitle: '待整理返回确认',
+                projectThemeStatement: '验证关闭与放弃',
+                createdTimestamp: DateTime(2026, 1, 1),
+                updatedTimestamp: DateTime(2026, 1, 1),
+              ),
+            ],
+            currentProjectId: projectId,
+          ),
+          structureChapterRepository: _InMemoryStructureChapterRepository(
+            initialChapters: <StructureChapter>[
+              StructureChapter.create(
+                id: 'chapter-1',
+                projectId: projectId,
+                chapterTitle: '第一章',
+                chapterSortOrder: 0,
+              ),
+            ],
+          ),
+          narrativeElementRepository: elementRepository,
+          projectRelationRepository: _InMemoryProjectRelationRepository(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('整理'));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('globalArrangePendingButton')),
+      );
+      await tester.pumpAndSettle();
+      await tester.drag(find.byType(Scrollable).first, const Offset(0, -220));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('pendingChapterCard-chapter-1')),
+      );
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('pendingElementCard-element-chapter-1')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('pendingElementCard-element-chapter-1')),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.arrow_back_ios_new));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('pendingUnsavedDialogTitle')),
+        findsOneWidget,
+      );
+      expect(find.text('全部保存'), findsOneWidget);
+      expect(find.text('仍然返回'), findsOneWidget);
+
+      await tester.tap(
+        find.byKey(const ValueKey('pendingUnsavedDialogCloseButton')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(PendingOrganizePage), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('pendingUnsavedDialogTitle')),
+        findsNothing,
+      );
+
+      await tester.tap(find.byIcon(Icons.arrow_back_ios_new));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('pendingUnsavedDialogDiscardButton')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(PendingOrganizePage), findsNothing);
+
+      final updatedElements = await elementRepository.listElementsForProject(
+        projectId,
+      );
+      final pendingSource = updatedElements.firstWhere(
+        (element) => element.elementId == 'element-pending-a',
+      );
+      final chapterElement = updatedElements.firstWhere(
+        (element) => element.elementId == 'element-chapter-1',
+      );
+      expect(pendingSource.photoPaths, contains('/tmp/pending-a.jpg'));
+      expect(chapterElement.photoPaths, isNot(contains('/tmp/pending-a.jpg')));
+    },
+  );
+
+  testWidgets(
+    'pending organize back dialog save all persists dirty photos before leaving',
+    (tester) async {
+      const projectId = 'project-pending-save-all';
+      final elementRepository = _InMemoryNarrativeElementRepository(
+        initialElements: <NarrativeElement>[
+          NarrativeElement.create(
+            id: 'element-pending-a',
+            projectId: projectId,
+            elementTitle: '待整理 A',
+            linkedPhotoPaths: <String>['/tmp/pending-a.jpg'],
+          ),
+          NarrativeElement.create(
+            id: 'element-chapter-1',
+            projectId: projectId,
+            chapterId: 'chapter-1',
+            elementTitle: '章节元素',
+            linkedPhotoPaths: <String>['/tmp/chapter-photo.jpg'],
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        EchoApp(
+          projectRepository: _InMemoryProjectRepository(
+            initialProjects: <Project>[
+              Project.create(
+                id: projectId,
+                projectTitle: '待整理全部保存',
+                projectThemeStatement: '验证返回时全部保存',
+                createdTimestamp: DateTime(2026, 1, 1),
+                updatedTimestamp: DateTime(2026, 1, 1),
+              ),
+            ],
+            currentProjectId: projectId,
+          ),
+          structureChapterRepository: _InMemoryStructureChapterRepository(
+            initialChapters: <StructureChapter>[
+              StructureChapter.create(
+                id: 'chapter-1',
+                projectId: projectId,
+                chapterTitle: '第一章',
+                chapterSortOrder: 0,
+              ),
+            ],
+          ),
+          narrativeElementRepository: elementRepository,
+          projectRelationRepository: _InMemoryProjectRelationRepository(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('整理'));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('globalArrangePendingButton')),
+      );
+      await tester.pumpAndSettle();
+      await tester.drag(find.byType(Scrollable).first, const Offset(0, -220));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('pendingChapterCard-chapter-1')),
+      );
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('pendingElementCard-element-chapter-1')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('pendingElementCard-element-chapter-1')),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.arrow_back_ios_new));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('pendingUnsavedDialogSaveAllButton')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(PendingOrganizePage), findsNothing);
+
+      final updatedElements = await elementRepository.listElementsForProject(
+        projectId,
+      );
+      final pendingSource = updatedElements.firstWhere(
+        (element) => element.elementId == 'element-pending-a',
+      );
+      final chapterElement = updatedElements.firstWhere(
+        (element) => element.elementId == 'element-chapter-1',
+      );
+      expect(pendingSource.photoPaths, isEmpty);
+      expect(chapterElement.photoPaths, contains('/tmp/pending-a.jpg'));
+    },
+  );
+
+  testWidgets(
+    'pending organize save all skips dirty photos without target element and still exits',
+    (tester) async {
+      const projectId = 'project-pending-save-all-skip-invalid';
+      final elementRepository = _InMemoryNarrativeElementRepository(
+        initialElements: <NarrativeElement>[
+          NarrativeElement.create(
+            id: 'element-pending-a',
+            projectId: projectId,
+            elementTitle: '待整理 A',
+            linkedPhotoPaths: <String>['/tmp/pending-a.jpg'],
+          ),
+          NarrativeElement.create(
+            id: 'element-pending-b',
+            projectId: projectId,
+            elementTitle: '待整理 B',
+            linkedPhotoPaths: <String>['/tmp/pending-b.jpg'],
+          ),
+          NarrativeElement.create(
+            id: 'element-chapter-1',
+            projectId: projectId,
+            chapterId: 'chapter-1',
+            elementTitle: '章节元素',
+            linkedPhotoPaths: <String>['/tmp/chapter-photo.jpg'],
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        EchoApp(
+          projectRepository: _InMemoryProjectRepository(
+            initialProjects: <Project>[
+              Project.create(
+                id: projectId,
+                projectTitle: '待整理全部保存跳过不可保存',
+                projectThemeStatement: '验证全部保存只保存可保存项',
+                createdTimestamp: DateTime(2026, 1, 1),
+                updatedTimestamp: DateTime(2026, 1, 1),
+              ),
+            ],
+            currentProjectId: projectId,
+          ),
+          structureChapterRepository: _InMemoryStructureChapterRepository(
+            initialChapters: <StructureChapter>[
+              StructureChapter.create(
+                id: 'chapter-1',
+                projectId: projectId,
+                chapterTitle: '第一章',
+                chapterSortOrder: 0,
+              ),
+            ],
+          ),
+          narrativeElementRepository: elementRepository,
+          projectRelationRepository: _InMemoryProjectRelationRepository(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('整理'));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('globalArrangePendingButton')),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.drag(find.byType(Scrollable).first, const Offset(0, -220));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('pendingChapterCard-chapter-1')),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.dragFrom(const Offset(400, 180), const Offset(-400, 0));
+      await tester.pumpAndSettle();
+      await tester.drag(find.byType(Scrollable).first, const Offset(0, -220));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('pendingChapterCard-chapter-1')),
+      );
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('pendingElementCard-element-chapter-1')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('pendingElementCard-element-chapter-1')),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.arrow_back_ios_new));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('pendingUnsavedDialogSaveAllButton')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(PendingOrganizePage), findsNothing);
+
+      final updatedElements = await elementRepository.listElementsForProject(
+        projectId,
+      );
+      final pendingA = updatedElements.firstWhere(
+        (element) => element.elementId == 'element-pending-a',
+      );
+      final pendingB = updatedElements.firstWhere(
+        (element) => element.elementId == 'element-pending-b',
+      );
+      final chapterElement = updatedElements.firstWhere(
+        (element) => element.elementId == 'element-chapter-1',
+      );
+
+      expect(pendingA.photoPaths, contains('/tmp/pending-a.jpg'));
+      expect(pendingB.photoPaths, isEmpty);
+      expect(chapterElement.photoPaths, contains('/tmp/pending-b.jpg'));
     },
   );
 
@@ -6052,6 +6830,15 @@ class _InMemoryProjectRelationRepository implements ProjectRelationRepository {
     );
     return relationTypes;
   }
+}
+
+Color? _containerColor(WidgetTester tester, Finder finder) {
+  final container = tester.widget<Container>(finder);
+  final decoration = container.decoration;
+  if (decoration is! BoxDecoration) {
+    return null;
+  }
+  return decoration.color;
 }
 
 ImageProvider<Object> _baseImageProvider(ImageProvider<Object> provider) {
