@@ -21,7 +21,10 @@ class SaveCaptureRecord {
   Future<void> Function()? debugBeforeDerivedRows;
 
   Future<Isar> _database() {
-    return _isarFuture ??= _openIsar();
+    return _isarFuture ??= _openIsar().catchError((error) {
+      _isarFuture = null;
+      throw error;
+    });
   }
 
   Future<SaveCaptureResult> execute(SaveCaptureRequest request) async {

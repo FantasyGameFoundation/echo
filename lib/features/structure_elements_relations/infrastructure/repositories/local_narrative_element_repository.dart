@@ -11,7 +11,10 @@ class LocalNarrativeElementRepository implements NarrativeElementRepository {
   Future<Isar>? _isarFuture;
 
   Future<Isar> _database() {
-    return _isarFuture ??= _openIsar();
+    return _isarFuture ??= _openIsar().catchError((error) {
+      _isarFuture = null;
+      throw error;
+    });
   }
 
   int _compareElements(NarrativeElement left, NarrativeElement right) {

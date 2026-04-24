@@ -330,7 +330,7 @@ class _QuickRecordOverlayPrototypeState
             key: const ValueKey('quickRecordSaveButton'),
             onTap: _canSave ? _save : null,
             child: Container(
-              height: 64,
+              height: 62,
               color: _canSave
                   ? const Color(0xFF5A5A5A)
                   : const Color(0xFF9C9C9C),

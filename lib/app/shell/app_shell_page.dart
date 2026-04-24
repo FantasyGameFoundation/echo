@@ -7,7 +7,10 @@ import 'package:echo/features/capture/domain/models/save_capture_result.dart';
 import 'package:echo/features/capture/domain/repositories/capture_record_repository.dart';
 import 'package:echo/features/project/domain/entities/project.dart';
 import 'package:echo/features/project/domain/repositories/project_repository.dart';
+import 'package:echo/features/beacon/domain/entities/beacon_task.dart';
+import 'package:echo/features/beacon/domain/repositories/beacon_task_repository.dart';
 import 'package:echo/features/beacon/presentation/pages/beacon_page_prototype.dart';
+import 'package:echo/features/beacon/presentation/pages/beacon_task_editor_page.dart';
 import 'package:echo/features/curation/presentation/pages/global_arrange_page.dart';
 import 'package:echo/features/curation/presentation/models/pending_organize_models.dart';
 import 'package:echo/features/curation/presentation/pages/pending_organize_page.dart';
@@ -51,6 +54,7 @@ class AppShellPage extends StatefulWidget {
     required this.structureChapterRepository,
     required this.narrativeElementRepository,
     required this.projectRelationRepository,
+    required this.beaconTaskRepository,
     required this.captureRecordRepository,
     this.narrativeElementPhotoPicker,
     this.narrativeElementPhotoImporter,
@@ -62,6 +66,7 @@ class AppShellPage extends StatefulWidget {
   final StructureChapterRepository structureChapterRepository;
   final NarrativeElementRepository narrativeElementRepository;
   final ProjectRelationRepository projectRelationRepository;
+  final BeaconTaskRepository beaconTaskRepository;
   final CaptureRecordRepository captureRecordRepository;
   final PickGalleryImages? narrativeElementPhotoPicker;
   final ImportNarrativePhoto? narrativeElementPhotoImporter;
@@ -88,6 +93,7 @@ class _AppShellPageState extends State<AppShellPage> {
   List<ProjectRelationMember> _relationMembers =
       const <ProjectRelationMember>[];
   List<CaptureRecord> _captureRecords = const <CaptureRecord>[];
+  List<BeaconTask> _beaconTasks = const <BeaconTask>[];
   List<StructureChapterCardData> _chapterCards =
       const <StructureChapterCardData>[];
   List<Map<String, dynamic>> _narrativeElementGroups =
@@ -601,8 +607,13 @@ class _AppShellPageState extends State<AppShellPage> {
       case PrototypeTab.overview:
         return BeaconPagePrototype(
           projectTitle: _currentProject?.title ?? '',
+          tasks: _beaconTasks,
+          elements: _narrativeElements,
+          chapterTitleById: _buildChapterTitleById(_structureChapters),
           onOpenSidebar: () => setState(() => _sidebarOpen = true),
           onBottomTabChanged: _changeTab,
+          onCreateTask: _openCreateBeaconTaskPage,
+          onOpenTask: _openBeaconTaskPage,
         );
       case PrototypeTab.timeline:
         return TimelinePagePrototype(
@@ -696,6 +707,9 @@ class _AppShellPageState extends State<AppShellPage> {
     final captureRecords = currentProject == null
         ? const <CaptureRecord>[]
         : await _loadCaptureRecordsSafe(currentProject.projectId);
+    final beaconTasks = currentProject == null
+        ? const <BeaconTask>[]
+        : await _loadBeaconTasksSafe(currentProject.projectId);
     if (!mounted) {
       return;
     }
@@ -709,6 +723,7 @@ class _AppShellPageState extends State<AppShellPage> {
       _relationGroups = relationGroups;
       _relationMembers = relationMembers;
       _captureRecords = captureRecords;
+      _beaconTasks = beaconTasks;
       _chapterCards = _buildChapterCards(
         chapters: chapters,
         elements: elements,
@@ -728,6 +743,82 @@ class _AppShellPageState extends State<AppShellPage> {
     } catch (_) {
       return const <CaptureRecord>[];
     }
+  }
+
+  Future<List<BeaconTask>> _loadBeaconTasksSafe(String projectId) async {
+    try {
+      return await widget.beaconTaskRepository.listTasksForProject(projectId);
+    } catch (_) {
+      return const <BeaconTask>[];
+    }
+  }
+
+  Map<String, String> _buildChapterTitleById(List<StructureChapter> chapters) {
+    return <String, String>{
+      for (final chapter in chapters) chapter.chapterId: chapter.title,
+    };
+  }
+
+  Future<void> _openCreateBeaconTaskPage() async {
+    if (_currentProject == null) {
+      return;
+    }
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => BeaconTaskEditorPage(
+          chapters: _structureChapters,
+          elements: _narrativeElements,
+          onSave:
+              ({
+                required String title,
+                required String description,
+                required List<String> linkedElementIds,
+              }) async {
+                await widget.beaconTaskRepository.createTask(
+                  projectId: _currentProject!.projectId,
+                  title: title,
+                  description: description,
+                  linkedElementIds: linkedElementIds,
+                );
+                await _refreshProjects();
+              },
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openBeaconTaskPage(BeaconTask task) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => BeaconTaskEditorPage(
+          task: task,
+          chapters: _structureChapters,
+          elements: _narrativeElements,
+          onSave:
+              ({
+                required String title,
+                required String description,
+                required List<String> linkedElementIds,
+              }) async {
+                await widget.beaconTaskRepository.updateTask(
+                  taskId: task.taskId,
+                  title: title,
+                  description: description,
+                  linkedElementIds: linkedElementIds,
+                );
+                await _refreshProjects();
+              },
+          onDelete: () async {
+            await widget.beaconTaskRepository.deleteTask(task.taskId);
+            await _refreshProjects();
+          },
+          onArchive: () async {
+            await widget.beaconTaskRepository.archiveTask(task.taskId);
+            await _refreshProjects();
+          },
+        ),
+      ),
+    );
   }
 
   List<Map<String, dynamic>> _groupNarrativeElements({

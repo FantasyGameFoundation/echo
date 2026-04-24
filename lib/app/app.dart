@@ -1,5 +1,8 @@
 import 'package:echo/app/shell/app_shell_page.dart';
 import 'package:echo/app/theme/app_theme.dart';
+import 'package:echo/features/beacon/domain/entities/beacon_task.dart';
+import 'package:echo/features/beacon/domain/repositories/beacon_task_repository.dart';
+import 'package:echo/features/beacon/infrastructure/repositories/local_beacon_task_repository.dart';
 import 'package:echo/features/capture/domain/entities/capture_record.dart';
 import 'package:echo/features/capture/domain/models/save_capture_request.dart';
 import 'package:echo/features/capture/domain/models/save_capture_result.dart';
@@ -35,11 +38,17 @@ class EchoApp extends StatelessWidget {
     this.capturePhotoPicker,
     this.saveCaptureRecord,
     this.captureRecordRepository,
+    this.beaconTaskRepository,
   });
 
-  static final Future<Isar> _sharedIsarFuture = openProjectIsar();
+  static Future<Isar>? _sharedIsarFuture;
 
-  static Future<Isar> _sharedOpenIsar() => _sharedIsarFuture;
+  static Future<Isar> _sharedOpenIsar() {
+    return _sharedIsarFuture ??= openProjectIsar().catchError((error) {
+      _sharedIsarFuture = null;
+      throw error;
+    });
+  }
 
   static final ProjectRepository _defaultProjectRepository =
       LocalProjectRepository(openIsar: _sharedOpenIsar);
@@ -49,6 +58,8 @@ class EchoApp extends StatelessWidget {
       LocalNarrativeElementRepository(openIsar: _sharedOpenIsar);
   static final ProjectRelationRepository _defaultProjectRelationRepository =
       LocalProjectRelationRepository(openIsar: _sharedOpenIsar);
+  static final BeaconTaskRepository _defaultBeaconTaskRepository =
+      _buildDefaultBeaconTaskRepository();
   static final CaptureRecordRepository _defaultCaptureRecordRepository =
       _buildDefaultCaptureRecordRepository();
   static final SaveCaptureRecord _defaultSaveCaptureRecord = SaveCaptureRecord(
@@ -60,6 +71,13 @@ class EchoApp extends StatelessWidget {
       return _NoopCaptureRecordRepository();
     }
     return LocalCaptureRecordRepository(openIsar: _sharedOpenIsar);
+  }
+
+  static BeaconTaskRepository _buildDefaultBeaconTaskRepository() {
+    if (_isUnderWidgetTestRuntime) {
+      return _NoopBeaconTaskRepository();
+    }
+    return LocalBeaconTaskRepository(openIsar: _sharedOpenIsar);
   }
 
   static bool get _isUnderWidgetTestRuntime {
@@ -76,6 +94,10 @@ class EchoApp extends StatelessWidget {
   final PickCapturedPhoto? capturePhotoPicker;
   final SaveCaptureRecordRunner? saveCaptureRecord;
   final CaptureRecordRepository? captureRecordRepository;
+  final BeaconTaskRepository? beaconTaskRepository;
+
+  BeaconTaskRepository get resolvedBeaconTaskRepository =>
+      beaconTaskRepository ?? _defaultBeaconTaskRepository;
 
   @override
   Widget build(BuildContext context) {
@@ -91,6 +113,7 @@ class EchoApp extends StatelessWidget {
             narrativeElementRepository ?? _defaultNarrativeElementRepository,
         projectRelationRepository:
             projectRelationRepository ?? _defaultProjectRelationRepository,
+        beaconTaskRepository: resolvedBeaconTaskRepository,
         captureRecordRepository:
             captureRecordRepository ?? _defaultCaptureRecordRepository,
         narrativeElementPhotoPicker: narrativeElementPhotoPicker,
@@ -153,5 +176,84 @@ class _NoopCaptureRecordRepository implements CaptureRecordRepository {
       }
     }
     return null;
+  }
+}
+
+class _NoopBeaconTaskRepository implements BeaconTaskRepository {
+  final List<BeaconTask> _tasks = <BeaconTask>[];
+
+  @override
+  Future<List<BeaconTask>> listTasksForProject(String projectId) async {
+    final matchingTasks = _tasks
+        .where((task) => task.owningProjectId == projectId.trim())
+        .toList(growable: false);
+    matchingTasks.sort(
+      (left, right) => right.updatedAt.compareTo(left.updatedAt),
+    );
+    return matchingTasks;
+  }
+
+  @override
+  Future<BeaconTask> createTask({
+    required String projectId,
+    required String title,
+    required String description,
+    required List<String> linkedElementIds,
+  }) async {
+    final task = BeaconTask.create(
+      projectId: projectId.trim(),
+      taskTitle: title.trim(),
+      taskDescription: description.trim(),
+      linkedElementIds: linkedElementIds
+          .map((elementId) => elementId.trim())
+          .where((elementId) => elementId.isNotEmpty)
+          .toList(growable: false),
+    );
+    _tasks.add(task);
+    return task;
+  }
+
+  @override
+  Future<BeaconTask?> updateTask({
+    required String taskId,
+    required String title,
+    required String description,
+    required List<String> linkedElementIds,
+  }) async {
+    for (final task in _tasks) {
+      if (task.taskId == taskId) {
+        task.title = title.trim();
+        task.description = description.trim();
+        task.linkedElementIds = linkedElementIds
+            .map((elementId) => elementId.trim())
+            .where((elementId) => elementId.isNotEmpty)
+            .toList(growable: false);
+        task.updatedAt = DateTime.now();
+        return task;
+      }
+    }
+    return null;
+  }
+
+  @override
+  Future<BeaconTask?> archiveTask(String taskId) async {
+    for (final task in _tasks) {
+      if (task.taskId == taskId) {
+        task.statusValue = BeaconTaskStatus.archived;
+        task.updatedAt = DateTime.now();
+        return task;
+      }
+    }
+    return null;
+  }
+
+  @override
+  Future<bool> deleteTask(String taskId) async {
+    final index = _tasks.indexWhere((task) => task.taskId == taskId);
+    if (index < 0) {
+      return false;
+    }
+    _tasks.removeAt(index);
+    return true;
   }
 }

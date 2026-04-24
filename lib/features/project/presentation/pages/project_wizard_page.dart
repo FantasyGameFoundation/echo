@@ -65,13 +65,28 @@ class _ProjectWizardPageState extends State<ProjectWizardPage> {
     await Future.delayed(const Duration(milliseconds: 150));
 
     if (!mounted) return;
-    await widget.onFinish(
-      _nameController.text.trim(),
-      _intentController.text.trim(),
-      _coverImagePath,
-    );
-    if (!mounted) return;
-    Navigator.pop(context);
+    try {
+      await widget.onFinish(
+        _nameController.text.trim(),
+        _intentController.text.trim(),
+        _coverImagePath,
+      );
+      if (!mounted) return;
+      Navigator.pop(context);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _isFlashing = false);
+      final messenger = ScaffoldMessenger.of(context);
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('创建项目失败：$error'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   Future<void> _pickCoverImage() async {

@@ -3,6 +3,9 @@ import 'dart:ffi' show Abi;
 import 'dart:io';
 
 import 'package:echo/app/app.dart';
+import 'package:echo/features/beacon/domain/entities/beacon_task.dart';
+import 'package:echo/features/beacon/domain/repositories/beacon_task_repository.dart';
+import 'package:echo/features/beacon/infrastructure/repositories/local_beacon_task_repository.dart';
 import 'package:echo/features/capture/domain/entities/capture_record.dart';
 import 'package:echo/features/capture/domain/models/capture_mode.dart';
 import 'package:echo/features/capture/domain/models/save_capture_request.dart';
@@ -15,7 +18,7 @@ import 'package:echo/features/project/infrastructure/repositories/local_project_
 import 'package:echo/features/project/presentation/pages/project_edit_page.dart';
 import 'package:echo/features/project/presentation/pages/project_wizard_page.dart';
 import 'package:echo/features/project/presentation/widgets/project_sidebar.dart';
-import 'package:echo/features/beacon/presentation/pages/beacon_page_prototype.dart';
+import 'package:echo/features/beacon/presentation/pages/beacon_task_editor_page.dart';
 import 'package:echo/features/curation/presentation/pages/global_arrange_page.dart';
 import 'package:echo/features/curation/presentation/pages/pending_organize_page.dart';
 import 'package:echo/features/structure_elements_relations/domain/element_status.dart';
@@ -90,6 +93,74 @@ void main() {
       await directory.delete(recursive: true);
     },
   );
+
+  test(
+    'local beacon task repository persists tasks and archive/delete changes',
+    () async {
+      await Isar.initializeIsarCore(
+        libraries: <Abi, String>{
+          Abi.current(): await _resolveIsarLibraryPath(),
+        },
+      );
+      final directory = await Directory.systemTemp.createTemp(
+        'echo-beacon-task-repo-test',
+      );
+      Future<Isar> openIsar() => openProjectIsar(
+        name: 'echo_beacon_task_test_db',
+        directoryPath: directory.path,
+      );
+
+      final firstRepository = LocalBeaconTaskRepository(openIsar: openIsar);
+      final createdTask = await firstRepository.createTask(
+        projectId: 'project-a',
+        title: '剧院放映孔微光',
+        description: '注意灰尘和投影孔中的弱光层次。',
+        linkedElementIds: <String>['element-1', 'element-2'],
+      );
+      await firstRepository.archiveTask(createdTask.taskId);
+      await firstRepository.close();
+
+      final restoredRepository = LocalBeaconTaskRepository(openIsar: openIsar);
+      final restoredTasks = await restoredRepository.listTasksForProject(
+        'project-a',
+      );
+
+      expect(restoredTasks, hasLength(1));
+      expect(restoredTasks.single.taskId, createdTask.taskId);
+      expect(restoredTasks.single.title, '剧院放映孔微光');
+      expect(restoredTasks.single.isArchived, isTrue);
+      expect(restoredTasks.single.linkedElementIds, <String>[
+        'element-1',
+        'element-2',
+      ]);
+
+      final deleted = await restoredRepository.deleteTask(createdTask.taskId);
+      expect(deleted, isTrue);
+      expect(
+        await restoredRepository.listTasksForProject('project-a'),
+        isEmpty,
+      );
+
+      await restoredRepository.close();
+      await directory.delete(recursive: true);
+    },
+  );
+
+  test('beacon task schema ids match the generated xxh3 values', () {
+    expect(BeaconTaskSchema.id, -5558700412993255369);
+    expect(
+      BeaconTaskSchema.indexes['taskId']?.id,
+      -6391211041487498726,
+    );
+    expect(
+      BeaconTaskSchema.indexes['owningProjectId']?.id,
+      8853439974620037944,
+    );
+    expect(
+      BeaconTaskSchema.indexes['status']?.id,
+      -107785170620420283,
+    );
+  });
 
   test('in-memory repository archives and deletes projects', () async {
     final repository = _InMemoryProjectRepository(
@@ -796,6 +867,84 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(createdCoverImagePath, '/tmp/project-cover.jpg');
+    },
+  );
+
+  testWidgets(
+    'project wizard recovers from onFinish failure without staying on white flash screen',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ProjectWizardPage(
+            onFinish: (unusedTitle, unusedThemeStatement, unusedCoverImagePath) async {
+              throw StateError('mock create failure');
+            },
+          ),
+        ),
+      );
+
+      await tester.enterText(
+        find.byKey(const ValueKey('projectIntentField')),
+        '追踪河流与厂房的关系',
+      );
+      await tester.tap(find.byIcon(Icons.arrow_forward));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const ValueKey('projectNameField')),
+        '工业河岸',
+      );
+      await tester.tap(find.byIcon(Icons.arrow_forward));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('详 细 编 辑'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.pumpAndSettle();
+
+      expect(find.text('详 细 编 辑'), findsOneWidget);
+      expect(find.textContaining('创建项目失败：'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'echo app project creation flow surfaces create failure instead of leaving a white screen',
+    (tester) async {
+      await tester.pumpWidget(
+        EchoApp(
+          projectRepository: _FailingProjectRepository(),
+          structureChapterRepository: _InMemoryStructureChapterRepository(),
+          narrativeElementRepository: _InMemoryNarrativeElementRepository(),
+          projectRelationRepository: _InMemoryProjectRelationRepository(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('新 建 项 目'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const ValueKey('projectIntentField')),
+        '记录河流与工业废墟之间的关系',
+      );
+      await tester.tap(find.byIcon(Icons.arrow_forward));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const ValueKey('projectNameField')),
+        '江岸计划',
+      );
+      await tester.tap(find.byIcon(Icons.arrow_forward));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('详 细 编 辑'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.pumpAndSettle();
+
+      expect(find.text('详 细 编 辑'), findsOneWidget);
+      expect(find.textContaining('创建项目失败：'), findsOneWidget);
+      expect(find.text('章节骨架'), findsNothing);
     },
   );
 
@@ -6960,22 +7109,939 @@ void main() {
     },
   );
 
-  testWidgets('beacon page keeps core markers after extraction', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: BeaconPagePrototype(
-          onOpenSidebar: _noop,
-          onBottomTabChanged: _noopPrototypeTab,
-        ),
-      ),
-    );
+  testWidgets(
+    'echo app overview uses injected beacon tasks with derived chapter and element lines',
+    (tester) async {
+      final beaconTaskRepository = _InMemoryBeaconTaskRepository(
+        initialTasks: <BeaconTask>[
+          BeaconTask.create(
+            id: 'task-1',
+            projectId: 'project-beacon',
+            taskTitle: '县城剧院废弃放映厅',
+            taskDescription: '极低照度拍摄，捕捉放映机投射孔透出的微光。',
+            linkedElementIds: <String>['element-1'],
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+        ],
+      );
 
-    expect(find.text('待执行'), findsOneWidget);
-    expect(find.text('已归档'), findsOneWidget);
-    expect(find.text('执 行 模 式'), findsOneWidget);
-  });
+      await tester.pumpWidget(
+        EchoApp(
+          projectRepository: _InMemoryProjectRepository(
+            initialProjects: <Project>[
+              Project.create(
+                id: 'project-beacon',
+                projectTitle: '赤水河沿岸寻访',
+                projectThemeStatement: '用于验证信标页接线',
+                createdTimestamp: DateTime(2026),
+                updatedTimestamp: DateTime(2026),
+              ),
+            ],
+            currentProjectId: 'project-beacon',
+          ),
+          structureChapterRepository: _InMemoryStructureChapterRepository(
+            initialChapters: <StructureChapter>[
+              StructureChapter.create(
+                id: 'chapter-1',
+                projectId: 'project-beacon',
+                chapterTitle: '晨曦之眼',
+                chapterDescription: '章节说明',
+                chapterSortOrder: 0,
+                createdTimestamp: DateTime(2026),
+                updatedTimestamp: DateTime(2026),
+              ),
+            ],
+          ),
+          narrativeElementRepository: _InMemoryNarrativeElementRepository(
+            initialElements: <NarrativeElement>[
+              NarrativeElement.create(
+                id: 'element-1',
+                projectId: 'project-beacon',
+                chapterId: 'chapter-1',
+                elementTitle: '某种醉态',
+                elementDescription: '元素说明',
+                createdTimestamp: DateTime(2026),
+                updatedTimestamp: DateTime(2026),
+              ),
+            ],
+          ),
+          projectRelationRepository: _InMemoryProjectRelationRepository(),
+          beaconTaskRepository: beaconTaskRepository,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('信标'));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('beaconNormalModeRoot')), findsOneWidget);
+      expect(find.text('县城剧院废弃放映厅'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('beaconTaskChapterLine-task-1')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('beaconTaskElementLine-task-1')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('beaconAddTaskButton')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('beaconExecutionEntryButton')),
+        findsOneWidget,
+      );
+      final searchToggleRect = tester.getRect(
+        find.byKey(const ValueKey('beaconSearchToggleButton')),
+      );
+      expect(searchToggleRect.width, greaterThanOrEqualTo(48));
+      expect(searchToggleRect.height, greaterThanOrEqualTo(48));
+      expect(
+        find.byKey(const ValueKey('beaconPendingSectionHeader')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('beaconArchivedSectionHeader')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('beaconTaskCard-task-1')),
+          matching: find.byType(Image),
+        ),
+        findsNothing,
+      );
+    },
+  );
+
+  testWidgets(
+    'echo app beacon page derives chapter and element summary lines from linked elements only',
+    (tester) async {
+      final beaconTaskRepository = _InMemoryBeaconTaskRepository(
+        initialTasks: <BeaconTask>[
+          BeaconTask.create(
+            id: 'task-both',
+            projectId: 'project-beacon',
+            taskTitle: '跨章线索',
+            taskDescription: '同时命中多个元素与章节。',
+            linkedElementIds: <String>[
+              'element-a',
+              'element-b',
+              'element-c',
+              'element-missing',
+            ],
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026, 1, 5),
+          ),
+          BeaconTask.create(
+            id: 'task-element-only',
+            projectId: 'project-beacon',
+            taskTitle: '只关联元素',
+            taskDescription: '没有章节归属的元素。',
+            linkedElementIds: <String>['element-no-chapter'],
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026, 1, 4),
+          ),
+          BeaconTask.create(
+            id: 'task-none',
+            projectId: 'project-beacon',
+            taskTitle: '纯文字任务',
+            taskDescription: '不关联任何元素。',
+            linkedElementIds: const <String>[],
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026, 1, 3),
+          ),
+          BeaconTask.create(
+            id: 'task-unresolved-chapter',
+            projectId: 'project-beacon',
+            taskTitle: '缺失章节映射',
+            taskDescription: '元素带 chapterId 但 lookup 缺失。',
+            linkedElementIds: <String>['element-unresolved'],
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026, 1, 2),
+          ),
+        ],
+      );
+
+      await _pumpBeaconApp(
+        tester,
+        beaconTaskRepository: beaconTaskRepository,
+        chapters: <StructureChapter>[
+          StructureChapter.create(
+            id: 'chapter-1',
+            projectId: 'project-beacon',
+            chapterTitle: '晨曦之眼',
+            chapterSortOrder: 0,
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+          StructureChapter.create(
+            id: 'chapter-2',
+            projectId: 'project-beacon',
+            chapterTitle:
+                '潮湿而冗长的第二章标题用于验证章节摘要在超长文案下保持单行省略而不是撑高卡片',
+            chapterSortOrder: 1,
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+        ],
+        elements: <NarrativeElement>[
+          NarrativeElement.create(
+            id: 'element-a',
+            projectId: 'project-beacon',
+            chapterId: 'chapter-1',
+            elementTitle: '同章元素一',
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+          NarrativeElement.create(
+            id: 'element-b',
+            projectId: 'project-beacon',
+            chapterId: 'chapter-1',
+            elementTitle: '同章元素二',
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+          NarrativeElement.create(
+            id: 'element-c',
+            projectId: 'project-beacon',
+            chapterId: 'chapter-2',
+            elementTitle:
+                '潮湿而冗长的元素标题用于验证元素摘要在超长文案下保持单行省略而不是换行',
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+          NarrativeElement.create(
+            id: 'element-no-chapter',
+            projectId: 'project-beacon',
+            elementTitle: '游离元素',
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+          NarrativeElement.create(
+            id: 'element-unresolved',
+            projectId: 'project-beacon',
+            chapterId: 'chapter-missing',
+            elementTitle: '找不到章节标题的元素',
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+        ],
+      );
+
+      final chapterLine = tester.widget<Text>(
+        find.byKey(const ValueKey('beaconTaskChapterLine-task-both')),
+      );
+      final elementLine = tester.widget<Text>(
+        find.byKey(const ValueKey('beaconTaskElementLine-task-both')),
+      );
+
+      expect(chapterLine.data, '[章节]  晨曦之眼，潮湿而冗长的第二章标题用于验证章节摘要在超长文案下保持单行省略而不是撑高卡片');
+      expect(chapterLine.maxLines, 1);
+      expect(chapterLine.overflow, TextOverflow.ellipsis);
+      expect(elementLine.data, '[元素]  同章元素一，同章元素二，潮湿而冗长的元素标题用于验证元素摘要在超长文案下保持单行省略而不是换行');
+      expect(elementLine.maxLines, 1);
+      expect(elementLine.overflow, TextOverflow.ellipsis);
+      expect(chapterLine.data?.split('晨曦之眼').length, 2);
+
+      expect(
+        find.byKey(const ValueKey('beaconTaskChapterLine-task-element-only')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('beaconTaskElementLine-task-element-only')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('beaconTaskChapterLine-task-none')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('beaconTaskElementLine-task-none')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(
+          const ValueKey('beaconTaskChapterLine-task-unresolved-chapter'),
+        ),
+        findsNothing,
+      );
+      expect(
+        find.byKey(
+          const ValueKey('beaconTaskElementLine-task-unresolved-chapter'),
+        ),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets(
+    'echo app beacon page supports search and add or edit task flow through the repository',
+    (tester) async {
+      final beaconTaskRepository = _InMemoryBeaconTaskRepository(
+        initialTasks: <BeaconTask>[
+          BeaconTask.create(
+            id: 'task-1',
+            projectId: 'project-beacon',
+            taskTitle: '盐道码头',
+            taskDescription: '关注铁锈与水面的反光对比。',
+            linkedElementIds: <String>['element-1'],
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026, 1, 2),
+          ),
+          BeaconTask.create(
+            id: 'task-2',
+            projectId: 'project-beacon',
+            taskTitle: '空仓入口',
+            taskDescription: '从介绍文本里搜索剧院关键词。',
+            linkedElementIds: <String>['element-2'],
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026, 1, 1),
+          ),
+        ],
+      );
+
+      await _pumpBeaconApp(
+        tester,
+        beaconTaskRepository: beaconTaskRepository,
+        chapters: <StructureChapter>[
+          StructureChapter.create(
+            id: 'chapter-1',
+            projectId: 'project-beacon',
+            chapterTitle: '晨曦之眼',
+            chapterSortOrder: 0,
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+        ],
+        elements: <NarrativeElement>[
+          NarrativeElement.create(
+            id: 'element-1',
+            projectId: 'project-beacon',
+            chapterId: 'chapter-1',
+            elementTitle: '斑驳的树影',
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+          NarrativeElement.create(
+            id: 'element-2',
+            projectId: 'project-beacon',
+            elementTitle: '某种醉态',
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+        ],
+      );
+
+      await tester.tap(find.byKey(const ValueKey('beaconSearchToggleButton')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('beaconSearchField')),
+        '剧院',
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('空仓入口'), findsOneWidget);
+      expect(find.text('盐道码头'), findsNothing);
+
+      await tester.enterText(
+        find.byKey(const ValueKey('beaconSearchField')),
+        '',
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('盐道码头'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('beaconAddTaskButton')));
+      await tester.pumpAndSettle();
+      expect(find.byType(BeaconTaskEditorPage), findsOneWidget);
+
+      await tester.enterText(
+        find.byKey(const ValueKey('beaconTaskEditorTitleField')),
+        '林道伐木痕迹',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('beaconTaskEditorDescriptionField')),
+        '记录树桩年轮与青苔细节。',
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('beaconTaskEditorElement-element-1')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('beaconTaskEditorSaveButton')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('林道伐木痕迹'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('beaconTaskElementLine-task-3')),
+        findsOneWidget,
+      );
+      expect(
+        beaconTaskRepository.tasks.map((task) => task.taskId),
+        contains('task-3'),
+      );
+
+      await tester.tap(find.byKey(const ValueKey('beaconTaskCard-task-3')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('beaconTaskEditorTitleField')),
+        '林道伐木痕迹更新',
+      );
+      await tester.tap(find.byKey(const ValueKey('beaconTaskEditorSaveButton')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('林道伐木痕迹更新'), findsOneWidget);
+      expect(find.text('林道伐木痕迹'), findsNothing);
+      expect(
+        beaconTaskRepository.tasks
+            .singleWhere((task) => task.taskId == 'task-3')
+            .title,
+        '林道伐木痕迹更新',
+      );
+    },
+  );
+
+  testWidgets(
+    'echo app beacon page keeps search inside tab filters and supports archive or delete',
+    (tester) async {
+      final beaconTaskRepository = _InMemoryBeaconTaskRepository(
+        initialTasks: <BeaconTask>[
+          BeaconTask.create(
+            id: 'task-1',
+            projectId: 'project-beacon',
+            taskTitle: '放映厅微光',
+            taskDescription: '极低照度拍摄。',
+            linkedElementIds: <String>['element-1'],
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026, 1, 3),
+          ),
+          BeaconTask.create(
+            id: 'task-2',
+            projectId: 'project-beacon',
+            taskTitle: '河滩残骸',
+            taskDescription: '观察河床切割线。',
+            linkedElementIds: const <String>[],
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026, 1, 2),
+          ),
+          BeaconTask.create(
+            id: 'task-3',
+            projectId: 'project-beacon',
+            taskTitle: '已归档剧院记录',
+            taskDescription: '用于搜索和 tab 边界验证。',
+            linkedElementIds: const <String>[],
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026, 1, 1),
+          )..statusValue = BeaconTaskStatus.archived,
+        ],
+      );
+
+      await _pumpBeaconApp(
+        tester,
+        beaconTaskRepository: beaconTaskRepository,
+        elements: <NarrativeElement>[
+          NarrativeElement.create(
+            id: 'element-1',
+            projectId: 'project-beacon',
+            elementTitle: '某种醉态',
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+        ],
+      );
+
+      await tester.tap(find.text('待执行'));
+      await tester.pumpAndSettle();
+      expect(find.text('放映厅微光'), findsOneWidget);
+      expect(find.text('已归档剧院记录'), findsNothing);
+
+      await tester.tap(find.byKey(const ValueKey('beaconSearchToggleButton')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('beaconSearchField')),
+        '剧院',
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('放映厅微光'), findsNothing);
+      expect(find.text('已归档剧院记录'), findsNothing);
+
+      await tester.tap(find.text('已归档'));
+      await tester.pumpAndSettle();
+      expect(find.text('已归档剧院记录'), findsOneWidget);
+      expect(find.text('放映厅微光'), findsNothing);
+
+      await tester.tap(find.byKey(const ValueKey('beaconSearchToggleButton')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('beaconSearchField')),
+        '',
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('全部'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('beaconTaskCard-task-1')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('beaconTaskEditorArchiveButton')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('归档').last);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('待执行'));
+      await tester.pumpAndSettle();
+      expect(find.text('放映厅微光'), findsNothing);
+
+      await tester.tap(find.text('已归档'));
+      await tester.pumpAndSettle();
+      expect(find.text('放映厅微光'), findsOneWidget);
+
+      await tester.tap(find.text('全部'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('beaconTaskCard-task-2')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('beaconTaskEditorDeleteButton')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('删除').last);
+      await tester.pumpAndSettle();
+
+      expect(find.text('河滩残骸'), findsNothing);
+      expect(
+        beaconTaskRepository.tasks.map((task) => task.taskId),
+        isNot(contains('task-2')),
+      );
+    },
+  );
+
+  testWidgets(
+    'echo app beacon all tab groups pending tasks above archived tasks',
+    (tester) async {
+      final beaconTaskRepository = _InMemoryBeaconTaskRepository(
+        initialTasks: <BeaconTask>[
+          BeaconTask.create(
+            id: 'task-pending',
+            projectId: 'project-beacon',
+            taskTitle: '进行中任务',
+            taskDescription: '仍在进行。',
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026, 1, 2),
+          ),
+          BeaconTask.create(
+            id: 'task-archived',
+            projectId: 'project-beacon',
+            taskTitle: '已归档任务',
+            taskDescription: '已经完成。',
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026, 1, 1),
+          )..statusValue = BeaconTaskStatus.archived,
+        ],
+      );
+
+      await _pumpBeaconApp(
+        tester,
+        beaconTaskRepository: beaconTaskRepository,
+      );
+
+      final pendingHeaderY = tester.getTopLeft(
+        find.byKey(const ValueKey('beaconPendingSectionHeader')),
+      ).dy;
+      final pendingCardY = tester.getTopLeft(
+        find.byKey(const ValueKey('beaconTaskCard-task-pending')),
+      ).dy;
+      final archivedHeaderY = tester.getTopLeft(
+        find.byKey(const ValueKey('beaconArchivedSectionHeader')),
+      ).dy;
+      final archivedCardY = tester.getTopLeft(
+        find.byKey(const ValueKey('beaconTaskCard-task-archived')),
+      ).dy;
+
+      expect(pendingHeaderY, lessThan(pendingCardY));
+      expect(pendingCardY, lessThan(archivedHeaderY));
+      expect(archivedHeaderY, lessThan(archivedCardY));
+    },
+  );
+
+  testWidgets(
+    'echo app beacon execution mode replaces the normal view, supports multi-select, and resets temporary selections',
+    (tester) async {
+      final beaconTaskRepository = _InMemoryBeaconTaskRepository(
+        initialTasks: <BeaconTask>[
+          BeaconTask.create(
+            id: 'task-1',
+            projectId: 'project-beacon',
+            taskTitle: '放映厅微光',
+            taskDescription: '极低照度拍摄。',
+            linkedElementIds: <String>['element-1', 'element-2'],
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026, 1, 3),
+          ),
+          BeaconTask.create(
+            id: 'task-2',
+            projectId: 'project-beacon',
+            taskTitle: '河滩残骸',
+            taskDescription: '观察河床切割线。',
+            linkedElementIds: <String>['element-2'],
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026, 1, 2),
+          ),
+          BeaconTask.create(
+            id: 'task-4',
+            projectId: 'project-beacon',
+            taskTitle: '未选中的进行中任务',
+            taskDescription: '它的元素不应该出现在执行模式。',
+            linkedElementIds: <String>['element-3'],
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026, 1, 2, 1),
+          ),
+          BeaconTask.create(
+            id: 'task-3',
+            projectId: 'project-beacon',
+            taskTitle: '不会出现在执行模式',
+            taskDescription: '因为已归档。',
+            linkedElementIds: const <String>[],
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026, 1, 1),
+          )..statusValue = BeaconTaskStatus.archived,
+        ],
+      );
+
+      await _pumpBeaconApp(
+        tester,
+        beaconTaskRepository: beaconTaskRepository,
+        elements: <NarrativeElement>[
+          NarrativeElement.create(
+            id: 'element-1',
+            projectId: 'project-beacon',
+            elementTitle: '某种醉态',
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+          NarrativeElement.create(
+            id: 'element-2',
+            projectId: 'project-beacon',
+            elementTitle: '河岸石块',
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+          NarrativeElement.create(
+            id: 'element-3',
+            projectId: 'project-beacon',
+            elementTitle: '不应出现的独有元素',
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+        ],
+      );
+
+      final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+      final entryButtonFinder = find.byKey(
+        const ValueKey('beaconExecutionEntryButton'),
+      );
+      expect(navigator.canPop(), isFalse);
+      expect(
+        find.descendant(
+          of: entryButtonFinder,
+          matching: find.byIcon(Icons.playlist_add_check_rounded),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: entryButtonFinder, matching: find.text('执行模式')),
+        findsOneWidget,
+      );
+
+      final normalRootRect = tester.getRect(
+        find.byKey(const ValueKey('beaconNormalModeRoot')),
+      );
+      final entryRect = tester.getRect(entryButtonFinder);
+      expect(entryRect.center.dx, greaterThan(normalRootRect.center.dx));
+      expect(entryRect.center.dy, greaterThan(normalRootRect.center.dy));
+
+      await tester.tap(entryButtonFinder);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('beaconExecutionTaskPickerDialog')),
+        findsOneWidget,
+      );
+      expect(find.text('放映厅微光'), findsOneWidget);
+      expect(find.text('河滩残骸'), findsOneWidget);
+      expect(find.byType(Checkbox), findsNothing);
+      expect(find.text('极低照度拍摄。'), findsNothing);
+      expect(find.text('观察河床切割线。'), findsNothing);
+      expect(find.byKey(const ValueKey('beaconExecutionModeRoot')), findsNothing);
+      expect(
+        find.byKey(const ValueKey('beaconExecutionTaskPickerRow-task-3')),
+        findsNothing,
+      );
+      expect(
+        tester.widget<Opacity>(
+          find.ancestor(
+            of: find.byKey(
+              const ValueKey('beaconExecutionTaskPickerConfirmButton'),
+            ),
+            matching: find.byType(Opacity),
+          ),
+        ).opacity,
+        0.35,
+      );
+      final pickerTitle = tester.widget<Text>(
+        find.descendant(
+          of: find.byKey(const ValueKey('beaconExecutionTaskPickerRow-task-1')),
+          matching: find.text('放映厅微光'),
+        ),
+      );
+      expect(pickerTitle.maxLines, 1);
+      expect(pickerTitle.overflow, TextOverflow.ellipsis);
+      await tester.tap(
+        find.byKey(const ValueKey('beaconExecutionTaskPickerRow-task-1')),
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('beaconExecutionTaskPickerRow-task-2')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('beaconExecutionTaskPickerConfirmButton')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('beaconNormalModeRoot')), findsNothing);
+      expect(find.byKey(const ValueKey('beaconExecutionModeRoot')), findsOneWidget);
+      expect(find.byType(CustomBottomNavBar), findsNothing);
+      expect(find.byKey(const ValueKey('beaconSearchField')), findsNothing);
+      expect(find.byKey(const ValueKey('beaconAddTaskButton')), findsNothing);
+      expect(find.byKey(const ValueKey('beaconExecutionExitButton')), findsOneWidget);
+      expect(find.byType(Image), findsNothing);
+      expect(find.text('不会出现在执行模式'), findsNothing);
+      expect(
+        find.text('选择任务后，这里只保留当前外拍需要记住的提示。'),
+        findsNothing,
+      );
+      expect(navigator.canPop(), isFalse);
+
+      final elementSectionFinder = find.byKey(
+        const ValueKey('beaconExecutionElementSection'),
+      );
+      final taskSectionFinder = find.byKey(
+        const ValueKey('beaconExecutionTaskSection'),
+      );
+      expect(elementSectionFinder, findsOneWidget);
+      expect(taskSectionFinder, findsOneWidget);
+      expect(
+        tester.getTopLeft(elementSectionFinder).dy,
+        lessThan(tester.getTopLeft(taskSectionFinder).dy),
+      );
+      expect(
+        tester
+            .widget<Text>(
+              find.descendant(
+                of: find.byKey(const ValueKey('beaconExecutionModeRoot')),
+                matching: find.text('寻 找 中'),
+              ),
+            )
+            .style
+            ?.fontSize,
+        greaterThan(
+          tester
+              .widget<Text>(
+                find.descendant(
+                  of: taskSectionFinder,
+                  matching: find.text('任务介绍'),
+                ),
+              )
+              .style
+              ?.fontSize ??
+              0,
+        ),
+      );
+
+      final elementRowOne = find.byKey(
+        const ValueKey('beaconExecutionElementRow-element-1'),
+      );
+      final elementRowTwo = find.byKey(
+        const ValueKey('beaconExecutionElementRow-element-2'),
+      );
+
+      expect(elementRowOne, findsOneWidget);
+      expect(elementRowTwo, findsOneWidget);
+      expect(find.text('某种醉态'), findsOneWidget);
+      expect(find.text('河岸石块'), findsOneWidget);
+      expect(find.text('不应出现的独有元素'), findsNothing);
+      expect(
+        find.byKey(const ValueKey('beaconExecutionElementRow-element-2')),
+        findsOneWidget,
+      );
+      expect(find.text('极低照度拍摄。'), findsOneWidget);
+      expect(find.text('观察河床切割线。'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('beaconExecutionExitButton')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('beaconNormalModeRoot')), findsOneWidget);
+
+      await tester.tap(entryButtonFinder);
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('beaconExecutionTaskPickerDialog')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('beaconExecutionTaskPickerRow-task-3')),
+        findsNothing,
+      );
+      expect(
+        tester.widget<Opacity>(
+          find.ancestor(
+            of: find.byKey(
+              const ValueKey('beaconExecutionTaskPickerConfirmButton'),
+            ),
+            matching: find.byType(Opacity),
+          ),
+        ).opacity,
+        0.35,
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('beaconExecutionTaskPickerConfirmButton')),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('beaconExecutionTaskPickerDialog')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('beaconExecutionModeRoot')), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'beacon task editor groups elements by chapter order and leaves unassigned elements last',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BeaconTaskEditorPage(
+            chapters: <StructureChapter>[
+              StructureChapter.create(
+                id: 'chapter-2',
+                projectId: 'project-beacon',
+                chapterTitle: '后出现章节',
+                chapterSortOrder: 1,
+                createdTimestamp: DateTime(2026),
+                updatedTimestamp: DateTime(2026),
+              ),
+              StructureChapter.create(
+                id: 'chapter-1',
+                projectId: 'project-beacon',
+                chapterTitle: '先出现章节',
+                chapterSortOrder: 0,
+                createdTimestamp: DateTime(2026),
+                updatedTimestamp: DateTime(2026),
+              ),
+            ],
+            elements: <NarrativeElement>[
+              NarrativeElement.create(
+                id: 'element-b',
+                projectId: 'project-beacon',
+                chapterId: 'chapter-2',
+                elementTitle: '第二章元素',
+                createdTimestamp: DateTime(2026),
+                updatedTimestamp: DateTime(2026),
+              ),
+              NarrativeElement.create(
+                id: 'element-a',
+                projectId: 'project-beacon',
+                chapterId: 'chapter-1',
+                elementTitle: '第一章元素',
+                createdTimestamp: DateTime(2026),
+                updatedTimestamp: DateTime(2026),
+              ),
+              NarrativeElement.create(
+                id: 'element-c',
+                projectId: 'project-beacon',
+                elementTitle: '未归章节元素',
+                createdTimestamp: DateTime(2026),
+                updatedTimestamp: DateTime(2026),
+              ),
+            ],
+            onSave:
+                ({
+                  required String title,
+                  required String description,
+                  required List<String> linkedElementIds,
+                }) async {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('C H A P T E R  01  /  先出现章节'), findsOneWidget);
+      expect(find.text('C H A P T E R  02  /  后出现章节'), findsOneWidget);
+      expect(find.text('未 归 章 节'), findsOneWidget);
+
+      expect(
+        find.text('C H A P T E R  01  /  先出现章节').evaluate().single,
+        isNotNull,
+      );
+      final chapterOneY = tester.getTopLeft(
+        find.text('C H A P T E R  01  /  先出现章节'),
+      ).dy;
+      final chapterTwoY = tester.getTopLeft(
+        find.text('C H A P T E R  02  /  后出现章节'),
+      ).dy;
+      final unassignedY = tester.getTopLeft(find.text('未 归 章 节')).dy;
+
+      expect(chapterOneY, lessThan(chapterTwoY));
+      expect(chapterTwoY, lessThan(unassignedY));
+      expect(find.text('第一章元素'), findsOneWidget);
+      expect(find.text('第二章元素'), findsOneWidget);
+      expect(find.text('未归章节元素'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'beacon task editor archive and delete confirmation reuse shared dialog style',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BeaconTaskEditorPage(
+            task: BeaconTask.create(
+              id: 'task-confirm',
+              projectId: 'project-beacon',
+              taskTitle: '放映厅微光',
+              taskDescription: '极低照度拍摄。',
+              createdTimestamp: DateTime(2026),
+              updatedTimestamp: DateTime(2026),
+            ),
+            chapters: const <StructureChapter>[],
+            elements: const <NarrativeElement>[],
+            onSave:
+                ({
+                  required String title,
+                  required String description,
+                  required List<String> linkedElementIds,
+                }) async {},
+            onDelete: () async {},
+            onArchive: () async {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('beaconTaskEditorArchiveButton')));
+      await tester.pumpAndSettle();
+      expect(find.text('归档任务'), findsOneWidget);
+      expect(find.byType(Dialog), findsOneWidget);
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.text('取 消'), findsOneWidget);
+      expect(find.text('归档').last, findsOneWidget);
+
+      await tester.tap(find.text('取 消'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('beaconTaskEditorDeleteButton')));
+      await tester.pumpAndSettle();
+      expect(find.text('删除任务'), findsOneWidget);
+      expect(find.byType(Dialog), findsOneWidget);
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(
+        find.descendant(of: find.byType(Dialog), matching: find.text('删 除')),
+        findsOneWidget,
+      );
+    },
+  );
 }
 
 void _noop() {}
@@ -7003,6 +8069,41 @@ Future<void> _noopMovePhoto({
   required String targetElementId,
   required int targetPhotoIndex,
 }) async {}
+
+Future<void> _pumpBeaconApp(
+  WidgetTester tester, {
+  required _InMemoryBeaconTaskRepository beaconTaskRepository,
+  List<StructureChapter>? chapters,
+  List<NarrativeElement>? elements,
+}) async {
+  await tester.pumpWidget(
+    EchoApp(
+      projectRepository: _InMemoryProjectRepository(
+        initialProjects: <Project>[
+          Project.create(
+            id: 'project-beacon',
+            projectTitle: '赤水河沿岸寻访',
+            projectThemeStatement: '用于验证信标页接线',
+            createdTimestamp: DateTime(2026),
+            updatedTimestamp: DateTime(2026),
+          ),
+        ],
+        currentProjectId: 'project-beacon',
+      ),
+      structureChapterRepository: _InMemoryStructureChapterRepository(
+        initialChapters: chapters,
+      ),
+      narrativeElementRepository: _InMemoryNarrativeElementRepository(
+        initialElements: elements,
+      ),
+      projectRelationRepository: _InMemoryProjectRelationRepository(),
+      beaconTaskRepository: beaconTaskRepository,
+    ),
+  );
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('信标'));
+  await tester.pumpAndSettle();
+}
 
 Future<String> _resolveIsarLibraryPath() async {
   final packageConfigFile = File('.dart_tool/package_config.json');
@@ -7135,6 +8236,45 @@ class _InMemoryProjectRepository implements ProjectRepository {
       _currentProject = _projects.isEmpty ? null : _projects.first;
     }
   }
+}
+
+class _FailingProjectRepository implements ProjectRepository {
+  @override
+  Future<Project> createProject({
+    required String title,
+    required String themeStatement,
+    String? description,
+    String? coverImagePath,
+  }) async {
+    throw StateError('mock create failure');
+  }
+
+  @override
+  Future<Project?> getCurrentProject() async => null;
+
+  @override
+  Future<List<Project>> listProjects() async => const <Project>[];
+
+  @override
+  Future<void> setCurrentProject(String projectId) async {}
+
+  @override
+  Future<Project?> updateProject({
+    required String projectId,
+    required String title,
+    required String themeStatement,
+    String? coverImagePath,
+  }) async {
+    return null;
+  }
+
+  @override
+  Future<Project?> archiveProject(String projectId) async {
+    return null;
+  }
+
+  @override
+  Future<void> deleteProject(String projectId) async {}
 }
 
 class _InMemoryStructureChapterRepository
@@ -7448,6 +8588,85 @@ class _InMemoryNarrativeElementRepository
       deletedElement.owningChapterId,
     );
     _normalizeBucket(remainingBucket);
+    return true;
+  }
+}
+
+class _InMemoryBeaconTaskRepository implements BeaconTaskRepository {
+  _InMemoryBeaconTaskRepository({List<BeaconTask>? initialTasks})
+    : _tasks = List<BeaconTask>.from(initialTasks ?? <BeaconTask>[]);
+
+  final List<BeaconTask> _tasks;
+
+  List<BeaconTask> get tasks => List<BeaconTask>.unmodifiable(_tasks);
+
+  @override
+  Future<List<BeaconTask>> listTasksForProject(String projectId) async {
+    final tasks = _tasks
+        .where((task) => task.owningProjectId == projectId)
+        .toList();
+    tasks.sort((left, right) => right.updatedAt.compareTo(left.updatedAt));
+    return tasks;
+  }
+
+  @override
+  Future<BeaconTask> createTask({
+    required String projectId,
+    required String title,
+    required String description,
+    required List<String> linkedElementIds,
+  }) async {
+    final task = BeaconTask.create(
+      id: 'task-${_tasks.length + 1}',
+      projectId: projectId,
+      taskTitle: title,
+      taskDescription: description,
+      linkedElementIds: linkedElementIds,
+      createdTimestamp: DateTime(2026),
+      updatedTimestamp: DateTime(2026),
+    );
+    _tasks.add(task);
+    return task;
+  }
+
+  @override
+  Future<BeaconTask?> updateTask({
+    required String taskId,
+    required String title,
+    required String description,
+    required List<String> linkedElementIds,
+  }) async {
+    for (final task in _tasks) {
+      if (task.taskId == taskId) {
+        task.title = title.trim();
+        task.description = description.trim();
+        task.linkedElementIds = List<String>.from(linkedElementIds);
+        task.updatedAt = DateTime(2026, 1, 10);
+        return task;
+      }
+    }
+    return null;
+  }
+
+  @override
+  Future<BeaconTask?> archiveTask(String taskId) async {
+    for (final task in _tasks) {
+      if (task.taskId == taskId) {
+        task.statusValue = BeaconTaskStatus.archived;
+        task.updatedAt = DateTime(2026, 1, 11);
+        return task;
+      }
+    }
+    return null;
+  }
+
+  @override
+  Future<bool> deleteTask(String taskId) async {
+    final index = _tasks.indexWhere((task) => task.taskId == taskId);
+    if (index < 0) {
+      return false;
+    }
+    _tasks.removeAt(index);
     return true;
   }
 }
