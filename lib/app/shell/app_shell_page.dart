@@ -34,6 +34,7 @@ import 'package:echo/features/structure_elements_relations/presentation/pages/na
 import 'package:echo/features/structure_elements_relations/presentation/pages/project_relation_create_page.dart';
 import 'package:echo/features/structure_elements_relations/presentation/pages/project_relation_group_page.dart';
 import 'package:echo/features/structure_elements_relations/presentation/pages/structure_page_prototype.dart';
+import 'package:echo/features/timeline/presentation/models/timeline_item.dart';
 import 'package:echo/features/timeline/presentation/pages/timeline_page_prototype.dart';
 import 'package:echo/shared/models/content_preview_item.dart';
 import 'package:echo/shared/models/prototype_tab.dart';
@@ -72,6 +73,8 @@ class AppShellPage extends StatefulWidget {
 }
 
 class _AppShellPageState extends State<AppShellPage> {
+  static const String _syntheticUnassignedPhotoRecordText = '整理页未归属照片';
+
   PrototypeTab _currentTab = PrototypeTab.structure;
   bool _sidebarOpen = false;
   bool _showAddOverlay = false;
@@ -89,6 +92,7 @@ class _AppShellPageState extends State<AppShellPage> {
       const <StructureChapterCardData>[];
   List<Map<String, dynamic>> _narrativeElementGroups =
       const <Map<String, dynamic>>[];
+  GlobalArrangePhotoLandingRequest? _globalArrangeLandingRequest;
 
   @override
   void initState() {
@@ -245,6 +249,90 @@ class _AppShellPageState extends State<AppShellPage> {
     }
     setState(() {
       _showAddOverlay = false;
+    });
+  }
+
+  bool _isTimelineEligibleRecord(CaptureRecord record) {
+    if (record.rawText.trim() == _syntheticUnassignedPhotoRecordText) {
+      return false;
+    }
+    final photoPaths = _normalizedPhotoPaths(record.photoPaths);
+    if (record.captureModeValue == CaptureMode.portfolio) {
+      return photoPaths.isNotEmpty;
+    }
+    return record.rawText.trim().isNotEmpty || photoPaths.isNotEmpty;
+  }
+
+  List<String> _normalizedPhotoPaths(List<String> photoPaths) {
+    return photoPaths
+        .map((path) => path.trim())
+        .where((path) => path.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  List<TimelineItem> _buildTimelineItems() {
+    final items = <TimelineItem>[];
+    for (final record in _captureRecords) {
+      if (!_isTimelineEligibleRecord(record)) {
+        continue;
+      }
+      final trimmedText = record.rawText.trim();
+      final photoPaths = _normalizedPhotoPaths(record.photoPaths);
+      if (record.captureModeValue == CaptureMode.portfolio) {
+        final primaryPhotoPath = photoPaths.first;
+        items.add(
+          TimelineItem(
+            id: 'timeline-photo-${record.recordId}',
+            createdAt: record.createdAt,
+            type: TimelineItemType.photo,
+            content: trimmedText,
+            images: photoPaths,
+            photoTarget: TimelinePhotoTarget(
+              recordId: record.recordId,
+              photoPath: primaryPhotoPath,
+            ),
+          ),
+        );
+        continue;
+      }
+      items.add(
+        TimelineItem(
+          id: 'timeline-note-${record.recordId}',
+          createdAt: record.createdAt,
+          type: TimelineItemType.note,
+          content: trimmedText,
+          images: photoPaths,
+        ),
+      );
+    }
+    items.sort((left, right) => right.createdAt.compareTo(left.createdAt));
+    return items;
+  }
+
+  void _handleTimelineItemTap(TimelineItem item) {
+    final photoTarget = item.photoTarget;
+    if (photoTarget == null) {
+      return;
+    }
+    setState(() {
+      _currentTab = PrototypeTab.curation;
+      _sidebarOpen = false;
+      _showAddOverlay = false;
+      _globalArrangeLandingRequest = GlobalArrangePhotoLandingRequest(
+        requestId:
+            '${photoTarget.recordId}::${photoTarget.photoPath}::${DateTime.now().microsecondsSinceEpoch}',
+        sourceRecordId: photoTarget.recordId,
+        photoPath: photoTarget.photoPath,
+      );
+    });
+  }
+
+  void _handleGlobalArrangeLandingRequestConsumed(String requestId) {
+    if (_globalArrangeLandingRequest?.requestId != requestId) {
+      return;
+    }
+    setState(() {
+      _globalArrangeLandingRequest = null;
     });
   }
 
@@ -507,6 +595,8 @@ class _AppShellPageState extends State<AppShellPage> {
           onMoveChapter: _moveChapter,
           onMoveElement: _moveElement,
           onMovePhoto: _movePhoto,
+          landingRequest: _globalArrangeLandingRequest,
+          onLandingRequestConsumed: _handleGlobalArrangeLandingRequestConsumed,
         );
       case PrototypeTab.overview:
         return BeaconPagePrototype(
@@ -517,8 +607,10 @@ class _AppShellPageState extends State<AppShellPage> {
       case PrototypeTab.timeline:
         return TimelinePagePrototype(
           projectTitle: _currentProject?.title ?? '',
+          items: _buildTimelineItems(),
           onOpenSidebar: () => setState(() => _sidebarOpen = true),
           onBottomTabChanged: _changeTab,
+          onTimelineItemTap: _handleTimelineItemTap,
         );
     }
   }
@@ -528,6 +620,7 @@ class _AppShellPageState extends State<AppShellPage> {
       setState(() {
         _showAddOverlay = true;
         _sidebarOpen = false;
+        _globalArrangeLandingRequest = null;
       });
       return;
     }
@@ -536,6 +629,9 @@ class _AppShellPageState extends State<AppShellPage> {
       _currentTab = tab;
       _sidebarOpen = false;
       _showAddOverlay = false;
+      if (tab != PrototypeTab.curation) {
+        _globalArrangeLandingRequest = null;
+      }
     });
   }
 
@@ -921,7 +1017,7 @@ class _AppShellPageState extends State<AppShellPage> {
     await widget.captureRecordRepository.createRecord(
       projectId: project.projectId,
       mode: CaptureMode.record.storageValue,
-      rawText: '整理页未归属照片',
+      rawText: _syntheticUnassignedPhotoRecordText,
       photoPaths: <String>[photoPath],
     );
   }
@@ -1165,6 +1261,9 @@ class _AppShellPageState extends State<AppShellPage> {
                     photoTagsByKey['${element.elementId}::${element.photoPaths[index]}'] ??
                         const <String>{},
                   ),
+                  sourceRecordId: _captureRecordForPhotoPath(
+                    element.photoPaths[index],
+                  )?.recordId,
                 ),
             ],
           ),

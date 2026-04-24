@@ -40,6 +40,7 @@ import 'package:echo/features/structure_elements_relations/presentation/pages/pr
 import 'package:echo/features/structure_elements_relations/presentation/pages/project_relation_group_selection_page.dart';
 import 'package:echo/features/structure_elements_relations/presentation/pages/structure_page_prototype.dart';
 import 'package:echo/features/structure_elements_relations/presentation/widgets/narrative_list_tile.dart';
+import 'package:echo/features/timeline/presentation/models/timeline_item.dart';
 import 'package:echo/features/timeline/presentation/pages/timeline_page_prototype.dart';
 import 'package:echo/shared/models/content_preview_item.dart';
 import 'package:echo/shared/models/prototype_tab.dart';
@@ -317,6 +318,77 @@ void main() {
   );
 
   testWidgets(
+    'portfolio mode keeps save disabled until at least one photo is mounted',
+    (tester) async {
+      SaveCaptureRequest? capturedRequest;
+
+      await tester.pumpWidget(
+        EchoApp(
+          projectRepository: _InMemoryProjectRepository(
+            initialProjects: <Project>[
+              Project.create(
+                id: 'project-overlay-portfolio-guard',
+                projectTitle: '作品模式项目',
+                projectThemeStatement: '验证作品模式保存约束',
+                createdTimestamp: DateTime(2026),
+                updatedTimestamp: DateTime(2026),
+              ),
+            ],
+            currentProjectId: 'project-overlay-portfolio-guard',
+          ),
+          structureChapterRepository: _InMemoryStructureChapterRepository(),
+          narrativeElementRepository: _InMemoryNarrativeElementRepository(),
+          projectRelationRepository: _InMemoryProjectRelationRepository(),
+          narrativeElementPhotoPicker: () async => <String>['/tmp/source.jpg'],
+          narrativeElementPhotoImporter: (sourcePath) async =>
+              '/tmp/imported.jpg',
+          saveCaptureRecord: (request) async {
+            capturedRequest = request;
+            return const SaveCaptureResult(recordId: 'record-guard');
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.descendant(
+          of: find.byType(CustomBottomNavBar),
+          matching: find.byIcon(Icons.add),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('quickRecordModeSelector')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('作品').last);
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const ValueKey('quickRecordTextField')),
+        '只有文字不能保存作品',
+      );
+      await tester.pumpAndSettle();
+
+      final disabledSaveButton = tester.widget<InkWell>(
+        find.byKey(const ValueKey('quickRecordSaveButton')),
+      );
+      expect(disabledSaveButton.onTap, isNull);
+
+      await tester.tap(find.byKey(const ValueKey('quickRecordSaveButton')));
+      await tester.pumpAndSettle();
+      expect(capturedRequest, isNull);
+
+      await tester.tap(find.byKey(const ValueKey('quickRecordGalleryButton')));
+      await tester.pumpAndSettle();
+
+      final enabledSaveButton = tester.widget<InkWell>(
+        find.byKey(const ValueKey('quickRecordSaveButton')),
+      );
+      expect(enabledSaveButton.onTap, isNotNull);
+    },
+  );
+
+  testWidgets(
     'quick record mode menu uses square corners and airy typography',
     (tester) async {
       await tester.pumpWidget(
@@ -352,21 +424,34 @@ void main() {
         find.byKey(const ValueKey('quickRecordModeSelector')),
       );
       final shape = selector.shape! as RoundedRectangleBorder;
-      expect(shape.borderRadius, BorderRadius.zero);
-      expect(selector.menuPadding, EdgeInsets.zero);
+      expect(
+        shape.borderRadius,
+        const BorderRadius.all(Radius.circular(12)),
+      );
+      expect(
+        selector.menuPadding,
+        const EdgeInsets.symmetric(vertical: 4),
+      );
+      expect(
+        selector.constraints,
+        const BoxConstraints(minWidth: 96, maxWidth: 104),
+      );
 
       final triggerLabel = tester.widget<Text>(
         find.byKey(const ValueKey('quickRecordModeLabel')),
       );
       expect(triggerLabel.style?.fontWeight, FontWeight.w300);
+      expect(triggerLabel.style?.fontSize, 17);
       expect(triggerLabel.style?.letterSpacing, 2.2);
 
       await tester.tap(find.byKey(const ValueKey('quickRecordModeSelector')));
       await tester.pumpAndSettle();
 
       final portfolioLabel = tester.widget<Text>(find.text('作品').last);
+      expect(portfolioLabel.textAlign, TextAlign.center);
       expect(portfolioLabel.style?.fontWeight, FontWeight.w300);
-      expect(portfolioLabel.style?.letterSpacing, 2.4);
+      expect(portfolioLabel.style?.fontSize, 16);
+      expect(portfolioLabel.style?.letterSpacing, 1.6);
     },
   );
 
@@ -6415,6 +6500,29 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: TimelinePagePrototype(
+          items: [
+            TimelineItem(
+              id: 'photo-1',
+              createdAt: DateTime(2026, 1, 12, 10, 30),
+              type: TimelineItemType.photo,
+              content: '照片条目',
+              images: const <String>['https://example.com/photo-a.jpg'],
+              photoTarget: const TimelinePhotoTarget(
+                recordId: 'record-photo',
+                photoPath: '/tmp/photo-a.jpg',
+              ),
+            ),
+            TimelineItem(
+              id: 'note-1',
+              createdAt: DateTime(2026, 1, 11, 8, 20),
+              type: TimelineItemType.note,
+              content: '带照片的手记',
+              images: const <String>[
+                'https://example.com/note-a.jpg',
+                'https://example.com/note-b.jpg',
+              ],
+            ),
+          ],
           onOpenSidebar: _noop,
           onBottomTabChanged: _noopPrototypeTab,
         ),
@@ -6424,7 +6532,433 @@ void main() {
     expect(find.text('全部'), findsOneWidget);
     expect(find.text('照片'), findsOneWidget);
     expect(find.text('手记'), findsOneWidget);
+    expect(find.text('整理'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(CustomBottomNavBar),
+        matching: find.text('整理'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('节点'), findsNothing);
+    expect(find.byIcon(Icons.search), findsNothing);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('timelineItem-photo-1')),
+        matching: find.byType(Image),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('timelineItem-note-1')),
+        matching: find.byType(Image),
+      ),
+      findsNWidgets(2),
+    );
+    expect(
+      tester.widget<Text>(find.text('带照片的手记')).style?.fontStyle,
+      FontStyle.italic,
+    );
+    expect(find.text('作品'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('timelineImageStrip-photo-1')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('timelineImageStrip-note-1')),
+        matching: find.byType(Image),
+      ),
+      findsNWidgets(2),
+    );
   });
+
+  testWidgets(
+    'timeline classifies capture records by capture mode and ignores synthetic repair records',
+    (tester) async {
+      final project = Project.create(
+        id: 'project-timeline',
+        projectTitle: '历程项目',
+        projectThemeStatement: '验证历程接入真实数据',
+        createdTimestamp: DateTime(2026, 1, 1),
+        updatedTimestamp: DateTime(2026, 1, 1),
+      );
+      final captureRecordRepository = _InMemoryCaptureRecordRepository(
+        initialRecords: <CaptureRecord>[
+          CaptureRecord.create(
+            id: 'record-portfolio',
+            projectId: project.projectId,
+            captureMode: CaptureMode.portfolio.storageValue,
+            captureText: '作品照片',
+            capturedPhotoPaths: <String>['/tmp/portfolio-a.jpg'],
+            pendingPhotoPaths: <String>['/tmp/portfolio-a.jpg'],
+            createdTimestamp: DateTime(2026, 2, 2, 10),
+            updatedTimestamp: DateTime(2026, 2, 2, 10),
+          ),
+          CaptureRecord.create(
+            id: 'record-note',
+            projectId: project.projectId,
+            captureMode: CaptureMode.record.storageValue,
+            captureText: '纯文本手记',
+            createdTimestamp: DateTime(2026, 2, 1, 9),
+            updatedTimestamp: DateTime(2026, 2, 1, 9),
+          ),
+          CaptureRecord.create(
+            id: 'record-note-photo',
+            projectId: project.projectId,
+            captureMode: CaptureMode.record.storageValue,
+            captureText: '带图记录',
+            capturedPhotoPaths: <String>['/tmp/note-a.jpg'],
+            pendingPhotoPaths: <String>['/tmp/note-a.jpg'],
+            createdTimestamp: DateTime(2026, 1, 31, 8),
+            updatedTimestamp: DateTime(2026, 2, 9, 8),
+          ),
+          CaptureRecord.create(
+            id: 'record-synthetic',
+            projectId: project.projectId,
+            captureMode: CaptureMode.record.storageValue,
+            captureText: '整理页未归属照片',
+            capturedPhotoPaths: <String>['/tmp/synthetic-a.jpg'],
+            pendingPhotoPaths: <String>['/tmp/synthetic-a.jpg'],
+            createdTimestamp: DateTime(2026, 2, 3, 7),
+            updatedTimestamp: DateTime(2026, 2, 3, 7),
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        EchoApp(
+          projectRepository: _InMemoryProjectRepository(
+            initialProjects: <Project>[project],
+            currentProjectId: project.projectId,
+          ),
+          structureChapterRepository: _InMemoryStructureChapterRepository(),
+          narrativeElementRepository: _InMemoryNarrativeElementRepository(),
+          projectRelationRepository: _InMemoryProjectRelationRepository(),
+          captureRecordRepository: captureRecordRepository,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('历程'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('作品照片'), findsOneWidget);
+      expect(find.text('纯文本手记'), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.text('带图记录'),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('带图记录'), findsOneWidget);
+      expect(find.text('整理页未归属照片'), findsNothing);
+
+      await tester.tap(find.text('照片'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('作品照片'), findsOneWidget);
+      expect(find.text('作品'), findsOneWidget);
+      expect(find.text('纯文本手记'), findsNothing);
+      expect(find.text('带图记录'), findsNothing);
+
+      await tester.tap(find.text('手记'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('作品'), findsNothing);
+      expect(find.text('作品照片'), findsNothing);
+      expect(find.text('纯文本手记'), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.text('带图记录'),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('带图记录'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'timeline image strips show all attached images in a horizontal list',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: TimelinePagePrototype(
+            items: [
+              TimelineItem(
+                id: 'note-gallery',
+                createdAt: DateTime(2026, 2, 1, 10),
+                type: TimelineItemType.note,
+                content: '多图手记',
+                images: const <String>[
+                  'https://example.com/a.jpg',
+                  'https://example.com/b.jpg',
+                  'https://example.com/c.jpg',
+                ],
+              ),
+            ],
+            onOpenSidebar: _noop,
+            onBottomTabChanged: _noopPrototypeTab,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('timelineImageStrip-note-gallery')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('timelineImageStrip-note-gallery')),
+          matching: find.byType(Image),
+        ),
+        findsNWidgets(3),
+      );
+    },
+  );
+
+  testWidgets(
+    'portfolio records with multiple photos create a single timeline entry',
+    (tester) async {
+      final project = Project.create(
+        id: 'project-timeline-portfolio-single-entry',
+        projectTitle: '作品聚合',
+        projectThemeStatement: '验证作品多图只生成一条历程',
+        createdTimestamp: DateTime(2026, 1, 1),
+        updatedTimestamp: DateTime(2026, 1, 1),
+      );
+      final captureRecordRepository = _InMemoryCaptureRecordRepository(
+        initialRecords: <CaptureRecord>[
+          CaptureRecord.create(
+            id: 'record-portfolio-multi',
+            projectId: project.projectId,
+            captureMode: CaptureMode.portfolio.storageValue,
+            captureText: '多图作品',
+            capturedPhotoPaths: <String>[
+              '/tmp/portfolio-a.jpg',
+              '/tmp/portfolio-b.jpg',
+              '/tmp/portfolio-c.jpg',
+            ],
+            pendingPhotoPaths: <String>[
+              '/tmp/portfolio-a.jpg',
+              '/tmp/portfolio-b.jpg',
+              '/tmp/portfolio-c.jpg',
+            ],
+            createdTimestamp: DateTime(2026, 2, 2, 10),
+            updatedTimestamp: DateTime(2026, 2, 2, 10),
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        EchoApp(
+          projectRepository: _InMemoryProjectRepository(
+            initialProjects: <Project>[project],
+            currentProjectId: project.projectId,
+          ),
+          structureChapterRepository: _InMemoryStructureChapterRepository(),
+          narrativeElementRepository: _InMemoryNarrativeElementRepository(),
+          projectRelationRepository: _InMemoryProjectRelationRepository(),
+          captureRecordRepository: captureRecordRepository,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('历程'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(
+          const ValueKey('timelineItem-timeline-photo-record-portfolio-multi'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(
+            const ValueKey(
+              'timelineImageStrip-timeline-photo-record-portfolio-multi',
+            ),
+          ),
+          matching: find.byType(Image),
+        ),
+        findsNWidgets(3),
+      );
+    },
+  );
+
+  testWidgets(
+    'timeline photo item opens curation and lands on visible loose photo card once',
+    (tester) async {
+      final project = Project.create(
+        id: 'project-timeline-jump',
+        projectTitle: '历程跳转',
+        projectThemeStatement: '验证历程照片跳转',
+        createdTimestamp: DateTime(2026, 1, 1),
+        updatedTimestamp: DateTime(2026, 1, 1),
+      );
+      final captureRecordRepository = _InMemoryCaptureRecordRepository(
+        initialRecords: <CaptureRecord>[
+          CaptureRecord.create(
+            id: 'record-portfolio',
+            projectId: project.projectId,
+            captureMode: CaptureMode.portfolio.storageValue,
+            captureText: '待整理作品',
+            capturedPhotoPaths: <String>['/tmp/portfolio-a.jpg'],
+            pendingPhotoPaths: <String>['/tmp/portfolio-a.jpg'],
+            createdTimestamp: DateTime(2026, 2, 2, 10),
+            updatedTimestamp: DateTime(2026, 2, 2, 10),
+          ),
+          CaptureRecord.create(
+            id: 'record-note',
+            projectId: project.projectId,
+            captureMode: CaptureMode.record.storageValue,
+            captureText: '旁白手记',
+            createdTimestamp: DateTime(2026, 2, 1, 9),
+            updatedTimestamp: DateTime(2026, 2, 1, 9),
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        EchoApp(
+          projectRepository: _InMemoryProjectRepository(
+            initialProjects: <Project>[project],
+            currentProjectId: project.projectId,
+          ),
+          structureChapterRepository: _InMemoryStructureChapterRepository(),
+          narrativeElementRepository: _InMemoryNarrativeElementRepository(),
+          projectRelationRepository: _InMemoryProjectRelationRepository(),
+          captureRecordRepository: captureRecordRepository,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('历程'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(
+          const ValueKey('timelineItem-timeline-photo-record-portfolio'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(
+          const ValueKey(
+            'globalArrangePhotoCard-record-portfolio::0::/tmp/portfolio-a.jpg',
+          ),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('未 关 联 照 片'), findsOneWidget);
+
+      await tester.pump();
+      await tester.pump();
+
+      expect(
+        find.byKey(
+          const ValueKey(
+            'globalArrangePhotoCard-record-portfolio::0::/tmp/portfolio-a.jpg',
+          ),
+        ),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets(
+    'global arrange landing request auto-expands a collapsed element to reveal the target photo',
+    (tester) async {
+      final landingRequest = ValueNotifier<GlobalArrangePhotoLandingRequest?>(
+        null,
+      );
+      var consumedCount = 0;
+      final chapter = GlobalArrangeChapterData(
+        chapterId: 'chapter-1',
+        title: '第一章',
+        elements: <GlobalArrangeElementData>[
+          const GlobalArrangeElementData(
+            elementId: 'element-1',
+            title: '元素一',
+            relationTags: <String>[],
+            photos: <GlobalArrangePhotoData>[
+              GlobalArrangePhotoData(
+                photoId: 'element-1::0::/tmp/nested-photo.jpg',
+                imageSource: '/tmp/nested-photo.jpg',
+                relationTags: <String>[],
+                sourceRecordId: 'record-portfolio',
+              ),
+            ],
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ValueListenableBuilder<GlobalArrangePhotoLandingRequest?>(
+            valueListenable: landingRequest,
+            builder: (context, request, _) {
+              return GlobalArrangePage(
+                projectTitle: '历程跳转',
+                boardData: GlobalArrangeBoardData(
+                  chapters: <GlobalArrangeChapterData>[chapter],
+                ),
+                onOpenSidebar: _noop,
+                onBottomTabChanged: _noopPrototypeTab,
+                onOpenPendingOrganize: _noopAsync,
+                onMoveChapter: _noopMoveChapter,
+                onMoveElement: _noopMoveElement,
+                onMovePhoto: _noopMovePhoto,
+                landingRequest: request,
+                onLandingRequestConsumed: (_) {
+                  consumedCount += 1;
+                  landingRequest.value = null;
+                },
+              );
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('元素一'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(
+          const ValueKey(
+            'globalArrangePhotoCard-element-1::0::/tmp/nested-photo.jpg',
+          ),
+        ),
+        findsNothing,
+      );
+
+      landingRequest.value = const GlobalArrangePhotoLandingRequest(
+        requestId: 'landing-1',
+        sourceRecordId: 'record-portfolio',
+        photoPath: '/tmp/nested-photo.jpg',
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(
+          const ValueKey(
+            'globalArrangePhotoCard-element-1::0::/tmp/nested-photo.jpg',
+          ),
+        ),
+        findsOneWidget,
+      );
+      expect(consumedCount, 1);
+
+      await tester.pump();
+      await tester.pump();
+      expect(consumedCount, 1);
+    },
+  );
 
   testWidgets('beacon page keeps core markers after extraction', (
     tester,

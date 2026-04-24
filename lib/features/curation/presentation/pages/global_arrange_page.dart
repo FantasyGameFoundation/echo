@@ -63,6 +63,18 @@ class GlobalArrangePhotoData {
   final String? sourceRecordId;
 }
 
+class GlobalArrangePhotoLandingRequest {
+  const GlobalArrangePhotoLandingRequest({
+    required this.requestId,
+    required this.photoPath,
+    this.sourceRecordId,
+  });
+
+  final String requestId;
+  final String photoPath;
+  final String? sourceRecordId;
+}
+
 class GlobalArrangePage extends StatefulWidget {
   const GlobalArrangePage({
     super.key,
@@ -74,6 +86,8 @@ class GlobalArrangePage extends StatefulWidget {
     required this.onMoveChapter,
     required this.onMoveElement,
     required this.onMovePhoto,
+    this.landingRequest,
+    this.onLandingRequestConsumed,
   });
 
   final String projectTitle;
@@ -99,6 +113,8 @@ class GlobalArrangePage extends StatefulWidget {
     required int targetPhotoIndex,
   })
   onMovePhoto;
+  final GlobalArrangePhotoLandingRequest? landingRequest;
+  final ValueChanged<String>? onLandingRequestConsumed;
 
   @override
   State<GlobalArrangePage> createState() => _GlobalArrangePageState();
@@ -172,6 +188,8 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
   bool _chapterDragFinalizing = false;
   bool _elementDragFinalizing = false;
   bool _isUnassignedChapterExpanded = true;
+  String? _processingLandingRequestId;
+  String? _consumedLandingRequestId;
 
   _ElementDragState? get _elementDragState => _elementDragStateListenable.value;
   set _elementDragState(_ElementDragState? value) {
@@ -190,6 +208,7 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
     _elementDragStateListenable = ValueNotifier<_ElementDragState?>(null);
     _photoDragStateListenable = ValueNotifier<_PhotoDragState?>(null);
     _syncBoardData();
+    _queueLandingRequestIfNeeded();
   }
 
   @override
@@ -207,6 +226,11 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
     super.didUpdateWidget(oldWidget);
     if (oldWidget.boardData != widget.boardData) {
       _syncBoardData();
+    }
+    final didLandingRequestChange =
+        oldWidget.landingRequest?.requestId != widget.landingRequest?.requestId;
+    if (oldWidget.boardData != widget.boardData || didLandingRequestChange) {
+      _queueLandingRequestIfNeeded();
     }
   }
 
@@ -258,6 +282,132 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
         _expandedElementIds.add(element.elementId);
       }
     }
+  }
+
+  void _queueLandingRequestIfNeeded() {
+    final request = widget.landingRequest;
+    if (request == null ||
+        request.requestId == _consumedLandingRequestId ||
+        request.requestId == _processingLandingRequestId) {
+      return;
+    }
+    _processingLandingRequestId = request.requestId;
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      unawaited(_consumeLandingRequest(request));
+    });
+  }
+
+  Future<void> _consumeLandingRequest(
+    GlobalArrangePhotoLandingRequest request,
+  ) async {
+    if (!mounted || widget.landingRequest?.requestId != request.requestId) {
+      _processingLandingRequestId = null;
+      return;
+    }
+
+    final target = _findLandingTarget(request);
+    if (target == null) {
+      _finishLandingRequest(request.requestId);
+      return;
+    }
+
+    var needsAnotherFrame = false;
+    if (target.chapterId != null &&
+        !_expandedChapterIds.contains(target.chapterId)) {
+      _expandedChapterIds.add(target.chapterId!);
+      needsAnotherFrame = true;
+    }
+    if (target.elementId != null &&
+        !_expandedElementIds.contains(target.elementId)) {
+      _expandedElementIds.add(target.elementId!);
+      needsAnotherFrame = true;
+    }
+
+    if (needsAnotherFrame) {
+      if (mounted) {
+        setState(() {});
+      }
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        unawaited(_consumeLandingRequest(request));
+      });
+      return;
+    }
+
+    final targetContext = _photoKey(target.photoId).currentContext;
+    if (targetContext == null) {
+      _finishLandingRequest(request.requestId);
+      return;
+    }
+
+    await Scrollable.ensureVisible(
+      targetContext,
+      duration: const Duration(milliseconds: 360),
+      curve: Curves.easeInOutCubic,
+      alignment: 0.14,
+    );
+    _finishLandingRequest(request.requestId);
+  }
+
+  _PhotoLandingTarget? _findLandingTarget(
+    GlobalArrangePhotoLandingRequest request,
+  ) {
+    if (request.sourceRecordId != null) {
+      final exactTarget = _findLandingTargetWithMatcher(
+        (photo) =>
+            photo.imageSource == request.photoPath &&
+            photo.sourceRecordId == request.sourceRecordId,
+      );
+      if (exactTarget != null) {
+        return exactTarget;
+      }
+    }
+
+    return _findLandingTargetWithMatcher(
+      (photo) => photo.imageSource == request.photoPath,
+    );
+  }
+
+  _PhotoLandingTarget? _findLandingTargetWithMatcher(
+    bool Function(_ArrangePhotoVm photo) matches,
+  ) {
+    for (final photo in _unassignedPhotos) {
+      if (matches(photo)) {
+        return _PhotoLandingTarget(photoId: photo.photoId);
+      }
+    }
+
+    for (final chapter in _chapters) {
+      for (final element in chapter.elements) {
+        for (final photo in element.photos) {
+          if (matches(photo)) {
+            return _PhotoLandingTarget(
+              chapterId: chapter.chapterId,
+              elementId: element.elementId,
+              photoId: photo.photoId,
+            );
+          }
+        }
+      }
+    }
+
+    for (final element in _unassignedElements) {
+      for (final photo in element.photos) {
+        if (matches(photo)) {
+          return _PhotoLandingTarget(
+            elementId: element.elementId,
+            photoId: photo.photoId,
+          );
+        }
+      }
+    }
+
+    return null;
+  }
+
+  void _finishLandingRequest(String requestId) {
+    _processingLandingRequestId = null;
+    _consumedLandingRequestId = requestId;
+    widget.onLandingRequestConsumed?.call(requestId);
   }
 
   bool _isChapterExpanded(String chapterId) {
@@ -2485,6 +2635,18 @@ class _ArrangePhotoVm {
       sourceRecordId: sourceRecordId,
     );
   }
+}
+
+class _PhotoLandingTarget {
+  const _PhotoLandingTarget({
+    required this.photoId,
+    this.chapterId,
+    this.elementId,
+  });
+
+  final String photoId;
+  final String? chapterId;
+  final String? elementId;
 }
 
 class _ChapterDragPayload {

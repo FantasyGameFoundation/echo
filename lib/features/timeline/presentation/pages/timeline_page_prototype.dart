@@ -1,3 +1,5 @@
+import 'package:echo/features/structure_elements_relations/presentation/widgets/narrative_thumbnail_provider.dart';
+import 'package:echo/features/timeline/presentation/models/timeline_item.dart';
 import 'package:echo/shared/models/prototype_tab.dart';
 import 'package:echo/shared/widgets/custom_bottom_nav_bar.dart';
 import 'package:flutter/material.dart';
@@ -6,136 +8,53 @@ class TimelinePagePrototype extends StatefulWidget {
   const TimelinePagePrototype({
     super.key,
     this.projectTitle = '',
+    this.items = const <TimelineItem>[],
     required this.onOpenSidebar,
     required this.onBottomTabChanged,
+    this.onTimelineItemTap,
   });
 
   final String projectTitle;
+  final List<TimelineItem> items;
   final VoidCallback onOpenSidebar;
   final ValueChanged<PrototypeTab> onBottomTabChanged;
+  final ValueChanged<TimelineItem>? onTimelineItemTap;
 
   @override
   State<TimelinePagePrototype> createState() => _TimelinePagePrototypeState();
 }
 
 class _TimelinePagePrototypeState extends State<TimelinePagePrototype> {
-  String _activeTab = '全部';
+  static const List<String> _tabs = <String>['全部', '照片', '手记'];
 
-  final List<TimelineEvent> _allEvents = [
-    TimelineEvent(
-      date: DateTime(2026, 10, 24, 14, 30),
-      type: TimelineEventType.photo,
-      location: '贵州省 遵义市 习水县',
-      content: '发现了一些有趣的钢铁结构，光影对比很强烈。赤水河畔的旧工厂正逐渐被植被吞噬。',
-      images: [
-        'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=400',
-        'https://images.unsplash.com/photo-1496307653780-42ee777d4833?w=400',
-      ],
-    ),
-    TimelineEvent(
-      date: DateTime(2026, 10, 22, 11, 15),
-      type: TimelineEventType.node,
-      content: '',
-      highlightText: '元素【废弃的盐道码头】已标记完成',
-      images: [
-        'https://images.unsplash.com/photo-1496307653780-42ee777d4833?w=200',
-      ],
-    ),
-    TimelineEvent(
-      date: DateTime(2026, 10, 21, 20, 45),
-      type: TimelineEventType.note,
-      content:
-          '「今天的寻访非常顺利，赤水河的水位比预想的要低一些，正好露出了那些旧时代的盐道遗迹。下次需要带上无人机，从空中俯瞰河道与古道的拓扑关系。」',
-    ),
-    TimelineEvent(
-      date: DateTime(2026, 10, 18, 9, 10),
-      type: TimelineEventType.photo,
-      location: '贵州省 遵义市 茅台镇',
-      content:
-          '清晨的雾气还未散去，空气中弥漫着淡淡的酒糟香气。车间的外墙上爬满了厚厚的苍藓，这种历史感是新建筑无法模拟的。记录下了光线穿透雾气照刷在石阶上的瞬间。',
-      images: [
-        'https://images.unsplash.com/photo-1513694203232-719a280e022f?w=800',
-      ],
-    ),
-    TimelineEvent(
-      date: DateTime(2026, 10, 15, 16, 40),
-      type: TimelineEventType.organize,
-      content: '',
-      highlightText: '建立关联：【码头遗址】与【第三章：水路文明】',
-      images: [
-        'https://images.unsplash.com/photo-1494438639946-1ebd1d20bf85?w=200',
-        'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=200',
-      ],
-    ),
-    TimelineEvent(
-      date: DateTime(2026, 10, 12, 22, 15),
-      type: TimelineEventType.note,
-      content:
-          '「整理照片时发现，那些看似无序的碎石滩其实遵循着河流的几何走向。需要对水文地理学做更深入的案头研究。关于『消逝的建筑』这一主题，我想表达的不只是物理的坍塌，更是意义的迁移。」',
-      images: [
-        'https://images.unsplash.com/photo-1518131341018-095034639e44?w=400',
-      ],
-    ),
-    TimelineEvent(
-      date: DateTime(2026, 9, 28, 14, 00),
-      type: TimelineEventType.node,
-      content: '',
-      highlightText: '章节【第一章：河岸线】框架已搭建完成',
-      images: [],
-    ),
-    TimelineEvent(
-      date: DateTime(2026, 9, 25, 10, 30),
-      type: TimelineEventType.photo,
-      location: '四川省 泸州市 赤水市',
-      content: '项目启动。首次跨越省界，从不同的行政视角观察同一条河流。',
-      images: [
-        'https://images.unsplash.com/photo-1517581177682-a085bb7ffb15?w=800',
-      ],
-    ),
-  ];
+  String _activeTab = _tabs.first;
 
-  List<TimelineEvent> get _filteredEvents {
-    if (_activeTab == '全部') return _allEvents;
-    return _filterEvents(_activeTab);
+  List<TimelineItem> get _filteredItems {
+    final items = List<TimelineItem>.from(widget.items)
+      ..sort((left, right) => right.createdAt.compareTo(left.createdAt));
+    return switch (_activeTab) {
+      '照片' =>
+        items.where((item) => item.type == TimelineItemType.photo).toList(),
+      '手记' =>
+        items.where((item) => item.type == TimelineItemType.note).toList(),
+      _ => items,
+    };
   }
 
-  List<TimelineEvent> _filterEvents(String tab) {
-    switch (tab) {
-      case '照片':
-        return _allEvents
-            .where((e) => e.type == TimelineEventType.photo)
-            .toList();
-      case '手记':
-        return _allEvents
-            .where((e) => e.type == TimelineEventType.note)
-            .toList();
-      case '整理':
-        return _allEvents
-            .where((e) => e.type == TimelineEventType.organize)
-            .toList();
-      case '节点':
-        return _allEvents
-            .where((e) => e.type == TimelineEventType.node)
-            .toList();
-      default:
-        return _allEvents;
-    }
-  }
-
-  Map<String, List<TimelineEvent>> get _groupedEvents {
-    final groups = <String, List<TimelineEvent>>{};
-    for (final event in _filteredEvents) {
+  Map<String, List<TimelineItem>> get _groupedItems {
+    final groups = <String, List<TimelineItem>>{};
+    for (final item in _filteredItems) {
       final monthKey =
-          '${event.date.year}年${event.date.month.toString().padLeft(2, '0')}月';
-      groups.putIfAbsent(monthKey, () => []);
-      groups[monthKey]!.add(event);
+          '${item.createdAt.year}年${item.createdAt.month.toString().padLeft(2, '0')}月';
+      groups.putIfAbsent(monthKey, () => <TimelineItem>[]);
+      groups[monthKey]!.add(item);
     }
     return groups;
   }
 
   @override
   Widget build(BuildContext context) {
-    final groupedData = _groupedEvents;
+    final groupedData = _groupedItems;
 
     return Scaffold(
       body: SafeArea(
@@ -143,7 +62,7 @@ class _TimelinePagePrototypeState extends State<TimelinePagePrototype> {
           children: [
             _buildTopBar(),
             const SizedBox(height: 16),
-            _buildTabsWithSearch(),
+            _buildTabs(),
             const SizedBox(height: 16),
             Expanded(
               child: groupedData.isEmpty
@@ -209,7 +128,7 @@ class _TimelinePagePrototypeState extends State<TimelinePagePrototype> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w300,
                   letterSpacing: 4.0,
@@ -227,18 +146,15 @@ class _TimelinePagePrototypeState extends State<TimelinePagePrototype> {
     );
   }
 
-  Widget _buildTabsWithSearch() {
-    const tabs = ['全部', '照片', '手记', '整理', '节点'];
+  Widget _buildTabs() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24.0),
       child: Row(
         children: [
-          for (var i = 0; i < tabs.length; i++) ...[
-            _buildTab(tabs[i]),
-            if (i != tabs.length - 1) const SizedBox(width: 24),
+          for (var index = 0; index < _tabs.length; index++) ...[
+            _buildTab(_tabs[index]),
+            if (index != _tabs.length - 1) const SizedBox(width: 24),
           ],
-          const Spacer(),
-          const Icon(Icons.search, color: Colors.black54, size: 18),
         ],
       ),
     );
@@ -271,7 +187,14 @@ class _TimelinePagePrototypeState extends State<TimelinePagePrototype> {
     );
   }
 
-  Widget _buildTimelineTile(TimelineEvent event, bool isLastInMonth) {
+  Widget _buildTimelineTile(TimelineItem item, bool isLastInMonth) {
+    final canOpenCuration =
+        item.photoTarget != null && widget.onTimelineItemTap != null;
+    final card = KeyedSubtree(
+      key: ValueKey('timelineItem-${item.id}'),
+      child: _buildEventCard(item),
+    );
+
     return Padding(
       padding: const EdgeInsets.only(left: 24, right: 24),
       child: IntrinsicHeight(
@@ -284,7 +207,7 @@ class _TimelinePagePrototypeState extends State<TimelinePagePrototype> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '${event.date.month}月${event.date.day}日',
+                    '${item.createdAt.month}月${item.createdAt.day}日',
                     style: const TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.w600,
@@ -293,7 +216,7 @@ class _TimelinePagePrototypeState extends State<TimelinePagePrototype> {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    '${event.date.hour.toString().padLeft(2, '0')}:${event.date.minute.toString().padLeft(2, '0')}',
+                    '${item.createdAt.hour.toString().padLeft(2, '0')}:${item.createdAt.minute.toString().padLeft(2, '0')}',
                     style: TextStyle(
                       fontSize: 16,
                       color: Colors.grey.shade400,
@@ -327,22 +250,31 @@ class _TimelinePagePrototypeState extends State<TimelinePagePrototype> {
                 ],
               ),
             ),
-            Expanded(child: _buildEventCard(event)),
+            Expanded(
+              child: canOpenCuration
+                  ? GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => widget.onTimelineItemTap?.call(item),
+                      child: card,
+                    )
+                  : card,
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildEventCard(TimelineEvent event) {
-    final isImageHeavy = event.type == TimelineEventType.photo;
+  Widget _buildEventCard(TimelineItem item) {
+    final contentText = item.content.trim();
+    final shouldShowLabel = item.isPhoto;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 36.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (event.location != null)
+          if (item.location != null)
             Padding(
               padding: const EdgeInsets.only(bottom: 16.0),
               child: Row(
@@ -355,7 +287,7 @@ class _TimelinePagePrototypeState extends State<TimelinePagePrototype> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      event.location!,
+                      item.location!,
                       style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -366,71 +298,51 @@ class _TimelinePagePrototypeState extends State<TimelinePagePrototype> {
                 ],
               ),
             ),
-          if (isImageHeavy && event.images.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 20.0),
-              child: Image.network(
-                event.images.first,
-                fit: BoxFit.cover,
-                width: double.infinity,
-                height: 180,
-                errorBuilder: (context, error, stackTrace) =>
-                    Container(height: 180, color: Colors.grey.shade200),
+          if (shouldShowLabel || contentText.isNotEmpty)
+            Text.rich(
+              TextSpan(
+                children: [
+                  if (shouldShowLabel)
+                    const WidgetSpan(
+                      alignment: PlaceholderAlignment.middle,
+                      child: Padding(
+                        padding: EdgeInsets.only(right: 10),
+                        child: _TimelineTypeTag(label: '作品'),
+                      ),
+                    ),
+                  if (contentText.isNotEmpty) TextSpan(text: contentText),
+                ],
               ),
-            ),
-          if (event.highlightText != null)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade100,
-                border: Border(
-                  left: BorderSide(color: Colors.grey.shade400, width: 2),
-                ),
-              ),
-              child: Text(
-                event.highlightText!,
-                style: const TextStyle(
-                  fontSize: 18,
-                  color: Colors.black87,
-                  fontStyle: FontStyle.italic,
-                  height: 1.4,
-                ),
-              ),
-            )
-          else
-            Text(
-              event.content,
               style: TextStyle(
                 fontSize: 16,
                 color: Colors.grey.shade600,
                 height: 1.8,
-                fontStyle: event.type == TimelineEventType.note
-                    ? FontStyle.italic
-                    : FontStyle.normal,
+                fontStyle: FontStyle.italic,
               ),
             ),
-          if (!isImageHeavy && event.images.isNotEmpty) ...[
-            const SizedBox(height: 16),
+          if (item.images.isNotEmpty) ...[
+            if (shouldShowLabel || contentText.isNotEmpty)
+              const SizedBox(height: 16),
             SizedBox(
               height: 84,
-              child: Row(
-                children: event.images.take(2).map((url) {
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8.0),
-                    child: Image.network(
-                      url,
-                      width: 84,
+              child: ListView.separated(
+                key: ValueKey('timelineImageStrip-${item.id}'),
+                scrollDirection: Axis.horizontal,
+                itemCount: item.images.length,
+                separatorBuilder: (_, _) => const SizedBox(width: 8),
+                itemBuilder: (context, index) {
+                  final source = item.images[index];
+                  return SizedBox(
+                    width: 84,
+                    height: 84,
+                    child: _buildImage(
+                      source,
                       height: 84,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => Container(
-                        width: 84,
-                        height: 84,
-                        color: Colors.grey.shade200,
-                      ),
+                      width: 84,
+                      resizeWidth: 240,
                     ),
                   );
-                }).toList(),
+                },
               ),
             ),
           ],
@@ -438,26 +350,32 @@ class _TimelinePagePrototypeState extends State<TimelinePagePrototype> {
       ),
     );
   }
-}
 
-enum TimelineEventType { photo, note, organize, node }
-
-class TimelineEvent {
-  TimelineEvent({
-    required this.date,
-    required this.type,
-    required this.content,
-    this.location,
-    this.images = const [],
-    this.highlightText,
-  });
-
-  final DateTime date;
-  final TimelineEventType type;
-  final String content;
-  final String? location;
-  final List<String> images;
-  final String? highlightText;
+  Widget _buildImage(
+    String source, {
+    required double height,
+    double? width,
+    required int resizeWidth,
+  }) {
+    return Image(
+      image: ResizeImage.resizeIfNeeded(
+        resizeWidth,
+        null,
+        narrativeThumbnailProvider(source),
+      ),
+      fit: BoxFit.cover,
+      width: width ?? double.infinity,
+      height: height,
+      filterQuality: FilterQuality.low,
+      errorBuilder: (context, error, stackTrace) {
+        return Container(
+          width: width ?? double.infinity,
+          height: height,
+          color: Colors.grey.shade200,
+        );
+      },
+    );
+  }
 }
 
 class _MonthHeaderDelegate extends SliverPersistentHeaderDelegate {
@@ -496,5 +414,33 @@ class _MonthHeaderDelegate extends SliverPersistentHeaderDelegate {
   @override
   bool shouldRebuild(covariant _MonthHeaderDelegate oldDelegate) {
     return monthText != oldDelegate.monthText;
+  }
+}
+
+class _TimelineTypeTag extends StatelessWidget {
+  const _TimelineTypeTag({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: ValueKey('timelineTypeTag-$label'),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.black12, width: 0.5),
+        color: const Color(0xFFF7F7F9),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w500,
+          letterSpacing: 1.4,
+          color: Color(0xFF7B7B80),
+          height: 1.0,
+        ),
+      ),
+    );
   }
 }

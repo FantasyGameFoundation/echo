@@ -52,7 +52,10 @@ class _QuickRecordOverlayPrototypeState
 
   bool get _hasText => _textController.text.trim().isNotEmpty;
 
-  bool get _canSave => !_isSaving && (_hasText || _mountedPhotos.isNotEmpty);
+  bool get _canSave => switch (_mode) {
+    CaptureMode.portfolio => !_isSaving && _mountedPhotos.isNotEmpty,
+    CaptureMode.record => !_isSaving && (_hasText || _mountedPhotos.isNotEmpty),
+  };
 
   void _handleTextChanged() {
     if (mounted) {
@@ -362,11 +365,14 @@ class _QuickRecordOverlayPrototypeState
       key: const ValueKey('quickRecordModeSelector'),
       initialValue: _mode,
       color: const Color(0xFFF5F5F5),
-      elevation: 10,
-      shadowColor: Colors.black.withValues(alpha: 0.18),
+      elevation: 6,
+      shadowColor: Colors.black.withValues(alpha: 0.12),
       surfaceTintColor: Colors.transparent,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-      menuPadding: EdgeInsets.zero,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.all(Radius.circular(12)),
+      ),
+      menuPadding: const EdgeInsets.symmetric(vertical: 4),
+      constraints: const BoxConstraints(minWidth: 96, maxWidth: 104),
       onSelected: (mode) {
         if (_mode == mode) {
           return;
@@ -380,11 +386,14 @@ class _QuickRecordOverlayPrototypeState
           for (final mode in CaptureMode.values)
             PopupMenuItem<CaptureMode>(
               value: mode,
-              height: 72,
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(mode.label, style: _modeMenuTextStyle),
+              height: 48,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Center(
+                child: Text(
+                  mode.label,
+                  textAlign: TextAlign.center,
+                  style: _modeMenuTextStyle,
+                ),
               ),
             ),
         ];
@@ -416,9 +425,9 @@ class _QuickRecordOverlayPrototypeState
   );
 
   TextStyle get _modeMenuTextStyle => const TextStyle(
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: FontWeight.w300,
-    letterSpacing: 2.4,
+    letterSpacing: 1.6,
     height: 1.0,
     color: Color(0xFF2F2F2F),
   );
