@@ -15,7 +15,6 @@ class ProjectRelationMember {
     String? elementId,
     String? photoPath,
     String? sourceElementId,
-    String? textCardId,
     required int sortOrder,
     DateTime? createdTimestamp,
   }) : relationMemberId = id ?? const Uuid().v4(),
@@ -25,7 +24,6 @@ class ProjectRelationMember {
        linkedElementId = elementId,
        linkedPhotoPath = photoPath,
        linkedSourceElementId = sourceElementId,
-       linkedTextCardId = textCardId,
        memberSortOrder = sortOrder,
        createdAt = createdTimestamp ?? DateTime.now();
 
@@ -44,7 +42,6 @@ class ProjectRelationMember {
   String? linkedElementId;
   String? linkedPhotoPath;
   String? linkedSourceElementId;
-  String? linkedTextCardId;
   late int memberSortOrder;
   late DateTime createdAt;
 }

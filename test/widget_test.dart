@@ -8,8 +8,6 @@ import 'package:echo/features/capture/domain/models/capture_mode.dart';
 import 'package:echo/features/capture/domain/models/save_capture_request.dart';
 import 'package:echo/features/capture/domain/models/save_capture_result.dart';
 import 'package:echo/features/capture/domain/repositories/capture_record_repository.dart';
-import 'package:echo/features/content_cards/domain/entities/text_card.dart';
-import 'package:echo/features/content_cards/domain/repositories/text_card_repository.dart';
 import 'package:echo/features/project/domain/entities/project.dart';
 import 'package:echo/features/project/domain/repositories/project_repository.dart';
 import 'package:echo/features/project/infrastructure/database/project_isar.dart';
@@ -39,11 +37,11 @@ import 'package:echo/features/structure_elements_relations/presentation/pages/ch
 import 'package:echo/features/structure_elements_relations/presentation/pages/narrative_element_create_page.dart';
 import 'package:echo/features/structure_elements_relations/presentation/pages/project_relation_create_page.dart';
 import 'package:echo/features/structure_elements_relations/presentation/pages/project_relation_group_create_page.dart';
-import 'package:echo/features/structure_elements_relations/presentation/pages/project_relation_group_page.dart';
 import 'package:echo/features/structure_elements_relations/presentation/pages/project_relation_group_selection_page.dart';
 import 'package:echo/features/structure_elements_relations/presentation/pages/structure_page_prototype.dart';
 import 'package:echo/features/structure_elements_relations/presentation/widgets/narrative_list_tile.dart';
 import 'package:echo/features/timeline/presentation/pages/timeline_page_prototype.dart';
+import 'package:echo/shared/models/content_preview_item.dart';
 import 'package:echo/shared/models/prototype_tab.dart';
 import 'package:echo/shared/widgets/custom_bottom_nav_bar.dart';
 import 'package:flutter/material.dart';
@@ -193,7 +191,7 @@ void main() {
   );
 
   testWidgets(
-    'add button opens overlay with default record-only mode and close button dismisses it',
+    'add button opens overlay with default record mode and close button dismisses it',
     (tester) async {
       await tester.pumpWidget(
         EchoApp(
@@ -225,12 +223,12 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('保 存 记 录'), findsOneWidget);
-      expect(find.text('在此输入文字速记...'), findsOneWidget);
+      expect(find.text('在此输入记录内容...'), findsOneWidget);
       expect(
         find.byKey(const ValueKey('quickRecordModeSelector')),
         findsOneWidget,
       );
-      expect(find.text('仅记录'), findsOneWidget);
+      expect(find.text('记录'), findsOneWidget);
       expect(find.text('上海·静安'), findsNothing);
 
       await tester.tap(find.byIcon(Icons.close));
@@ -286,7 +284,7 @@ void main() {
 
       await tester.tap(find.byKey(const ValueKey('quickRecordModeSelector')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('全部').last);
+      await tester.tap(find.text('作品').last);
       await tester.pumpAndSettle();
 
       await tester.tap(find.byKey(const ValueKey('quickRecordGalleryButton')));
@@ -311,10 +309,64 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(capturedRequest, isNotNull);
-      expect(capturedRequest?.mode, CaptureMode.all);
+      expect(capturedRequest?.mode, CaptureMode.portfolio);
       expect(capturedRequest?.rawText, '现场文字');
       expect(capturedRequest?.photoPaths, <String>['/tmp/imported.jpg']);
       expect(find.text('保 存 记 录'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'quick record mode menu uses square corners and airy typography',
+    (tester) async {
+      await tester.pumpWidget(
+        EchoApp(
+          projectRepository: _InMemoryProjectRepository(
+            initialProjects: <Project>[
+              Project.create(
+                id: 'project-overlay-style',
+                projectTitle: '覆盖层样式项目',
+                projectThemeStatement: '验证记录模式菜单视觉样式',
+                createdTimestamp: DateTime(2026),
+                updatedTimestamp: DateTime(2026),
+              ),
+            ],
+            currentProjectId: 'project-overlay-style',
+          ),
+          structureChapterRepository: _InMemoryStructureChapterRepository(),
+          narrativeElementRepository: _InMemoryNarrativeElementRepository(),
+          projectRelationRepository: _InMemoryProjectRelationRepository(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.descendant(
+          of: find.byType(CustomBottomNavBar),
+          matching: find.byIcon(Icons.add),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final selector = tester.widget<PopupMenuButton<CaptureMode>>(
+        find.byKey(const ValueKey('quickRecordModeSelector')),
+      );
+      final shape = selector.shape! as RoundedRectangleBorder;
+      expect(shape.borderRadius, BorderRadius.zero);
+      expect(selector.menuPadding, EdgeInsets.zero);
+
+      final triggerLabel = tester.widget<Text>(
+        find.byKey(const ValueKey('quickRecordModeLabel')),
+      );
+      expect(triggerLabel.style?.fontWeight, FontWeight.w300);
+      expect(triggerLabel.style?.letterSpacing, 2.2);
+
+      await tester.tap(find.byKey(const ValueKey('quickRecordModeSelector')));
+      await tester.pumpAndSettle();
+
+      final portfolioLabel = tester.widget<Text>(find.text('作品').last);
+      expect(portfolioLabel.style?.fontWeight, FontWeight.w300);
+      expect(portfolioLabel.style?.letterSpacing, 2.4);
     },
   );
 
@@ -339,7 +391,6 @@ void main() {
           narrativeElementRepository: _InMemoryNarrativeElementRepository(),
           projectRelationRepository: _InMemoryProjectRelationRepository(),
           captureRecordRepository: _InMemoryCaptureRecordRepository(),
-          textCardRepository: _InMemoryTextCardRepository(),
           narrativeElementPhotoPicker: () async => <String>[
             '/tmp/source-a.jpg',
             '/tmp/source-b.jpg',
@@ -408,7 +459,6 @@ void main() {
     (tester) async {
       const projectId = 'project-overlay-to-pending';
       final captureRecordRepository = _InMemoryCaptureRecordRepository();
-      final textCardRepository = _InMemoryTextCardRepository();
 
       await tester.pumpWidget(
         EchoApp(
@@ -428,7 +478,6 @@ void main() {
           narrativeElementRepository: _InMemoryNarrativeElementRepository(),
           projectRelationRepository: _InMemoryProjectRelationRepository(),
           captureRecordRepository: captureRecordRepository,
-          textCardRepository: textCardRepository,
           narrativeElementPhotoPicker: () async => <String>[
             '/tmp/source-a.jpg',
           ],
@@ -456,7 +505,7 @@ void main() {
 
       await tester.tap(find.byKey(const ValueKey('quickRecordModeSelector')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('照片').last);
+      await tester.tap(find.text('作品').last);
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('quickRecordGalleryButton')));
       await tester.pumpAndSettle();
@@ -734,6 +783,44 @@ void main() {
   );
 
   testWidgets(
+    'structure page chapter cards keep blank description space without fallback copy',
+    (tester) async {
+      await tester.pumpWidget(
+        EchoApp(
+          projectRepository: _InMemoryProjectRepository(
+            initialProjects: <Project>[
+              Project.create(
+                id: 'project-blank-chapter-desc',
+                projectTitle: '空白章节说明测试',
+                projectThemeStatement: '验证章节卡片空说明留白',
+                createdTimestamp: DateTime(2026),
+                updatedTimestamp: DateTime(2026),
+              ),
+            ],
+            currentProjectId: 'project-blank-chapter-desc',
+          ),
+          structureChapterRepository: _InMemoryStructureChapterRepository(
+            initialChapters: <StructureChapter>[
+              StructureChapter.create(
+                id: 'chapter-blank-desc',
+                projectId: 'project-blank-chapter-desc',
+                chapterTitle: '无说明章节',
+                chapterSortOrder: 0,
+              ),
+            ],
+          ),
+          narrativeElementRepository: _InMemoryNarrativeElementRepository(),
+          projectRelationRepository: _InMemoryProjectRelationRepository(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('无说明章节'), findsOneWidget);
+      expect(find.text('暂无章节说明'), findsNothing);
+    },
+  );
+
+  testWidgets(
     'chapter create page saves chapter and attached draft elements together',
     (tester) async {
       int? savedSortOrder;
@@ -802,6 +889,38 @@ void main() {
       expect(savedSortOrder, 1);
       expect(savedElements?.length, 1);
       expect(savedElements?.first.title, '章节内元素');
+    },
+  );
+
+  testWidgets(
+    'chapter create page sequence list keeps blank description space without fallback copy',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ChapterCreatePage(
+            existingChapters: <StructureChapter>[
+              StructureChapter.create(
+                id: 'chapter-sequence-blank-desc',
+                projectId: 'project-sequence-blank-desc',
+                chapterTitle: '空说明章节',
+                chapterSortOrder: 0,
+              ),
+            ],
+            onSave:
+                ({
+                  required String title,
+                  required String description,
+                  required int sortOrder,
+                  required String statusLabel,
+                  required List<NarrativeElementDraft> elements,
+                }) async {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('空说明章节'), findsOneWidget);
+      expect(find.text('暂无章节说明'), findsNothing);
     },
   );
 
@@ -1731,6 +1850,7 @@ void main() {
           ),
         ],
       );
+      final captureRecordRepository = _InMemoryCaptureRecordRepository();
       final relationRepository = _InMemoryProjectRelationRepository();
       final relationType =
           (await relationRepository.listRelationTypesForProject(
@@ -1754,6 +1874,7 @@ void main() {
           structureChapterRepository: chapterRepository,
           narrativeElementRepository: elementRepository,
           projectRelationRepository: relationRepository,
+          captureRecordRepository: captureRecordRepository,
         ),
       );
       await tester.pumpAndSettle();
@@ -1787,9 +1908,15 @@ void main() {
       );
       final relationGroups = await relationRepository
           .listRelationGroupsForProject('project-element-delete');
+      final captureRecords = await captureRecordRepository
+          .listRecordsForProject('project-element-delete');
 
       expect(elements, isEmpty);
       expect(relationGroups, isEmpty);
+      expect(captureRecords, hasLength(1));
+      expect(captureRecords.single.unorganizedPhotoPaths, <String>[
+        '/tmp/delete.png',
+      ]);
       expect(find.text('待删除元素'), findsNothing);
     },
   );
@@ -2542,7 +2669,12 @@ void main() {
               title: 'test-yuansu1',
               description: 'test-yuansu1',
               status: ElementStatus.finding,
-              images: <String>['/tmp/echo/media/narrative/photo-1.jpg'],
+              previewItems: <ContentPreviewItem>[
+                ContentPreviewItem.photo(
+                  stableId: '/tmp/echo/media/narrative/photo-1.jpg',
+                  imageSource: '/tmp/echo/media/narrative/photo-1.jpg',
+                ),
+              ],
             ),
           ),
         ),
@@ -2564,7 +2696,12 @@ void main() {
               title: 'test-yuansu1',
               description: 'test-yuansu1',
               status: ElementStatus.finding,
-              images: <String>['https://example.com/photo-1.jpg'],
+              previewItems: <ContentPreviewItem>[
+                ContentPreviewItem.photo(
+                  stableId: 'https://example.com/photo-1.jpg',
+                  imageSource: 'https://example.com/photo-1.jpg',
+                ),
+              ],
             ),
           ),
         ),
@@ -4875,7 +5012,6 @@ void main() {
                                 updatedTimestamp: DateTime(2026),
                               ),
                             ],
-                            textCards: const <TextCard>[],
                             chapters: <StructureChapter>[
                               StructureChapter.create(
                                 id: 'chapter-relation-unsaved',
@@ -5184,239 +5320,6 @@ void main() {
   );
 
   testWidgets(
-    'relation group containing photo and text card opens editor without crashing',
-    (tester) async {
-      const projectId = 'project-relation-mixed-members';
-      final projectRepository = _InMemoryProjectRepository(
-        initialProjects: <Project>[
-          Project.create(
-            id: projectId,
-            projectTitle: '关系混合成员测试',
-            projectThemeStatement: '验证照片与文字卡片混合成员可正常编辑',
-            createdTimestamp: DateTime(2026),
-            updatedTimestamp: DateTime(2026),
-          ),
-        ],
-        currentProjectId: projectId,
-      );
-      final chapterRepository = _InMemoryStructureChapterRepository(
-        initialChapters: <StructureChapter>[
-          StructureChapter.create(
-            id: 'chapter-mixed',
-            projectId: projectId,
-            chapterTitle: '第一章',
-            chapterSortOrder: 0,
-            createdTimestamp: DateTime(2026),
-            updatedTimestamp: DateTime(2026),
-          ),
-        ],
-      );
-      final narrativeElementRepository = _InMemoryNarrativeElementRepository(
-        initialElements: <NarrativeElement>[
-          NarrativeElement.create(
-            id: 'element-mixed-photo',
-            projectId: projectId,
-            chapterId: 'chapter-mixed',
-            elementTitle: '照片来源元素',
-            linkedPhotoPaths: <String>['/tmp/mixed-photo.jpg'],
-            createdTimestamp: DateTime(2026),
-            updatedTimestamp: DateTime(2026),
-          ),
-        ],
-      );
-      final textCardRepository = _InMemoryTextCardRepository(
-        initialCards: <TextCard>[
-          TextCard.create(
-            id: 'text-card-mixed',
-            projectId: projectId,
-            chapterId: 'chapter-mixed',
-            elementId: 'element-mixed-photo',
-            title: '混合成员文字卡片',
-            body: '用于验证关系组编辑页不会因为文字卡片成员崩溃。',
-            cardSortOrder: 0,
-            createdTimestamp: DateTime(2026),
-            updatedTimestamp: DateTime(2026),
-          ),
-        ],
-      );
-      final relationRepository = _InMemoryProjectRelationRepository();
-      final relationType =
-          (await relationRepository.listRelationTypesForProject(
-            projectId,
-          )).firstWhere((type) => type.name == '呼应');
-      await relationRepository.createRelationGroup(
-        projectId: projectId,
-        relationTypeId: relationType.relationTypeId,
-        title: '混合关系组',
-        members: const <ProjectRelationDraftMember>[
-          ProjectRelationDraftMember.photo(
-            photoPath: '/tmp/mixed-photo.jpg',
-            sourceElementId: 'element-mixed-photo',
-          ),
-          ProjectRelationDraftMember.textCard(textCardId: 'text-card-mixed'),
-        ],
-      );
-
-      await tester.pumpWidget(
-        EchoApp(
-          projectRepository: projectRepository,
-          structureChapterRepository: chapterRepository,
-          narrativeElementRepository: narrativeElementRepository,
-          projectRelationRepository: relationRepository,
-          textCardRepository: textCardRepository,
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.text('关联关系'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('呼应'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('混合关系组'));
-      await tester.pumpAndSettle();
-
-      expect(tester.takeException(), isNull);
-      expect(
-        find.byKey(const ValueKey('relationGroupEditorTitle')),
-        findsOneWidget,
-      );
-      expect(find.text('混合成员文字卡片'), findsOneWidget);
-      expect(
-        find.byKey(
-          const ValueKey(
-            'relationGroupRemoveNode-photo:element-mixed-photo:/tmp/mixed-photo.jpg',
-          ),
-        ),
-        findsOneWidget,
-      );
-      expect(
-        find.byKey(
-          const ValueKey('relationGroupRemoveNode-text-card:text-card-mixed'),
-        ),
-        findsOneWidget,
-      );
-    },
-  );
-
-  testWidgets(
-    'relation group page tolerates malformed persisted members when opening editor',
-    (tester) async {
-      final validElementMember = ProjectRelationMember()
-        ..relationMemberId = 'member-valid'
-        ..owningProjectId = 'project-malformed-members'
-        ..owningGroupId = 'group-malformed-members'
-        ..kind = ProjectRelationTargetKind.element.name
-        ..linkedElementId = 'element-valid'
-        ..memberSortOrder = 0
-        ..createdAt = DateTime(2026);
-      final malformedPhotoMember = ProjectRelationMember()
-        ..relationMemberId = 'member-bad-photo'
-        ..owningProjectId = 'project-malformed-members'
-        ..owningGroupId = 'group-malformed-members'
-        ..kind = ProjectRelationTargetKind.photo.name
-        ..linkedPhotoPath = '/tmp/bad-photo.jpg'
-        ..memberSortOrder = 1
-        ..createdAt = DateTime(2026);
-      final malformedTextCardMember = ProjectRelationMember()
-        ..relationMemberId = 'member-bad-text'
-        ..owningProjectId = 'project-malformed-members'
-        ..owningGroupId = 'group-malformed-members'
-        ..kind = ProjectRelationTargetKind.textCard.name
-        ..memberSortOrder = 2
-        ..createdAt = DateTime(2026);
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: ProjectRelationGroupPage(
-            projectId: 'project-malformed-members',
-            projectRelationRepository: _InMemoryProjectRelationRepository(),
-            relationType: ProjectRelationType.create(
-              id: 'type-malformed-members',
-              projectId: 'project-malformed-members',
-              relationName: '呼应',
-              relationDescription: '容错测试',
-              relationSortOrder: 0,
-              createdTimestamp: DateTime(2026),
-              updatedTimestamp: DateTime(2026),
-            ),
-            relationGroups: <ProjectRelationGroup>[
-              ProjectRelationGroup.create(
-                id: 'group-malformed-members',
-                projectId: 'project-malformed-members',
-                relationTypeId: 'type-malformed-members',
-                relationGroupTitle: '容错关系组',
-                createdTimestamp: DateTime(2026),
-                updatedTimestamp: DateTime(2026),
-              ),
-            ],
-            relationMembers: <ProjectRelationMember>[
-              validElementMember,
-              malformedPhotoMember,
-              malformedTextCardMember,
-            ],
-            narrativeElements: <NarrativeElement>[
-              NarrativeElement.create(
-                id: 'element-valid',
-                projectId: 'project-malformed-members',
-                chapterId: 'chapter-valid',
-                elementTitle: '有效元素标题',
-                createdTimestamp: DateTime(2026),
-                updatedTimestamp: DateTime(2026),
-              ),
-            ],
-            textCards: const <TextCard>[],
-            chapters: <StructureChapter>[
-              StructureChapter.create(
-                id: 'chapter-valid',
-                projectId: 'project-malformed-members',
-                chapterTitle: '第一章',
-                chapterSortOrder: 0,
-                createdTimestamp: DateTime(2026),
-                updatedTimestamp: DateTime(2026),
-              ),
-            ],
-            onUpdateRelationType:
-                ({required name, required description}) async =>
-                    ProjectRelationType.create(
-                      id: 'type-malformed-members',
-                      projectId: 'project-malformed-members',
-                      relationName: name,
-                      relationDescription: description,
-                      relationSortOrder: 0,
-                      createdTimestamp: DateTime(2026),
-                      updatedTimestamp: DateTime(2026),
-                    ),
-            onDeleteRelationType: () async {},
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.text('容错关系组'));
-      await tester.pumpAndSettle();
-
-      expect(tester.takeException(), isNull);
-      expect(
-        find.byKey(const ValueKey('relationGroupTitleField')),
-        findsOneWidget,
-      );
-      expect(find.text('有效元素标题'), findsOneWidget);
-      expect(
-        find.byKey(
-          const ValueKey(
-            'relationGroupRemoveNode-photo:null:/tmp/bad-photo.jpg',
-          ),
-        ),
-        findsNothing,
-      );
-      expect(
-        find.byKey(const ValueKey('relationGroupRemoveNode-text-card:null')),
-        findsNothing,
-      );
-    },
-  );
-
-  testWidgets(
     'delete confirmation: relation edit page shows delete action and removes relation type with linked groups',
     (tester) async {
       final projectRepository = _InMemoryProjectRepository(
@@ -5687,314 +5590,6 @@ void main() {
             .data,
         '1 / 2',
       );
-    },
-  );
-
-  testWidgets(
-    'pending organize page includes capture-record photos and text cards awaiting organization',
-    (tester) async {
-      const projectId = 'project-pending-record-and-text';
-      await tester.pumpWidget(
-        EchoApp(
-          projectRepository: _InMemoryProjectRepository(
-            initialProjects: <Project>[
-              Project.create(
-                id: projectId,
-                projectTitle: '待整理混合内容',
-                projectThemeStatement: '验证待整理汇合',
-                createdTimestamp: DateTime(2026, 1, 1),
-                updatedTimestamp: DateTime(2026, 1, 1),
-              ),
-            ],
-            currentProjectId: projectId,
-          ),
-          structureChapterRepository: _InMemoryStructureChapterRepository(),
-          narrativeElementRepository: _InMemoryNarrativeElementRepository(),
-          projectRelationRepository: _InMemoryProjectRelationRepository(),
-          captureRecordRepository: _InMemoryCaptureRecordRepository(
-            initialRecords: <CaptureRecord>[
-              CaptureRecord.create(
-                id: 'record-1',
-                projectId: projectId,
-                captureMode: CaptureMode.photo.storageValue,
-                capturedPhotoPaths: <String>['/tmp/capture-photo.jpg'],
-                pendingPhotoPaths: <String>['/tmp/capture-photo.jpg'],
-                createdTimestamp: DateTime(2026, 1, 1),
-                updatedTimestamp: DateTime(2026, 1, 1),
-              ),
-            ],
-          ),
-          textCardRepository: _InMemoryTextCardRepository(
-            initialCards: <TextCard>[
-              TextCard.create(
-                id: 'text-card-1',
-                projectId: projectId,
-                chapterId: null,
-                sourceRecordId: 'record-1',
-                title: '待整理文字卡片',
-                body: '等待用户整理到章节',
-                cardSortOrder: 0,
-                createdTimestamp: DateTime(2026, 1, 2),
-                updatedTimestamp: DateTime(2026, 1, 2),
-              ),
-            ],
-          ),
-          saveCaptureRecord: (request) async =>
-              const SaveCaptureResult(recordId: 'record-1'),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.text('整理'));
-      await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(const ValueKey('globalArrangePendingButton')),
-      );
-      await tester.pumpAndSettle();
-
-      expect(find.byType(PendingOrganizePage), findsOneWidget);
-      expect(
-        tester
-            .widget<Text>(
-              find.byKey(
-                const ValueKey('pendingOrganizePhotoCounter'),
-                skipOffstage: false,
-              ),
-            )
-            .data,
-        '1 / 2',
-      );
-
-      await tester.dragFrom(const Offset(400, 180), const Offset(-400, 0));
-      await tester.pumpAndSettle();
-
-      expect(
-        tester
-            .widget<Text>(
-              find.byKey(
-                const ValueKey('pendingOrganizePhotoCounter'),
-                skipOffstage: false,
-              ),
-            )
-            .data,
-        '2 / 2',
-      );
-      expect(find.text('等待用户整理到章节'), findsOneWidget);
-      expect(
-        find.byKey(const ValueKey('pendingTextCard-text-card-1')),
-        findsOneWidget,
-      );
-    },
-  );
-
-  testWidgets(
-    'pending organize text card can mount to element and relation groups then leave pending',
-    (tester) async {
-      const projectId = 'project-pending-text-organize';
-      final relationRepository = _InMemoryProjectRelationRepository();
-      final relationTypes = await relationRepository
-          .listRelationTypesForProject(projectId);
-      final echoType = relationTypes.firstWhere((type) => type.name == '呼应');
-      final relationGroup = await relationRepository.createRelationGroup(
-        projectId: projectId,
-        relationTypeId: echoType.relationTypeId,
-        title: '文字呼应组',
-        members: const <ProjectRelationDraftMember>[
-          ProjectRelationDraftMember.element(elementId: 'element-chapter-1'),
-          ProjectRelationDraftMember.photo(
-            photoPath: '/tmp/anchor.jpg',
-            sourceElementId: 'element-anchor',
-          ),
-        ],
-      );
-
-      final textCardRepository = _InMemoryTextCardRepository(
-        initialCards: <TextCard>[
-          TextCard.create(
-            id: 'text-card-1',
-            projectId: projectId,
-            chapterId: null,
-            sourceRecordId: 'record-1',
-            title: '派生标题',
-            body: '这是一整段等待整理的文字内容',
-            cardSortOrder: 0,
-            createdTimestamp: DateTime(2026, 1, 2),
-            updatedTimestamp: DateTime(2026, 1, 2),
-          ),
-        ],
-      );
-
-      await tester.pumpWidget(
-        EchoApp(
-          projectRepository: _InMemoryProjectRepository(
-            initialProjects: <Project>[
-              Project.create(
-                id: projectId,
-                projectTitle: '待整理文字挂载',
-                projectThemeStatement: '验证文字卡片同轨整理',
-                createdTimestamp: DateTime(2026, 1, 1),
-                updatedTimestamp: DateTime(2026, 1, 1),
-              ),
-            ],
-            currentProjectId: projectId,
-          ),
-          structureChapterRepository: _InMemoryStructureChapterRepository(
-            initialChapters: <StructureChapter>[
-              StructureChapter.create(
-                id: 'chapter-1',
-                projectId: projectId,
-                chapterTitle: '第一章',
-                chapterSortOrder: 0,
-              ),
-            ],
-          ),
-          narrativeElementRepository: _InMemoryNarrativeElementRepository(
-            initialElements: <NarrativeElement>[
-              NarrativeElement.create(
-                id: 'element-chapter-1',
-                projectId: projectId,
-                chapterId: 'chapter-1',
-                elementTitle: '章节元素',
-                linkedPhotoPaths: <String>['/tmp/chapter-photo.jpg'],
-              ),
-              NarrativeElement.create(
-                id: 'element-anchor',
-                projectId: projectId,
-                chapterId: 'chapter-1',
-                elementTitle: '锚点元素',
-                linkedPhotoPaths: <String>['/tmp/anchor.jpg'],
-              ),
-            ],
-          ),
-          projectRelationRepository: relationRepository,
-          captureRecordRepository: _InMemoryCaptureRecordRepository(
-            initialRecords: <CaptureRecord>[
-              CaptureRecord.create(
-                id: 'record-1',
-                projectId: projectId,
-                captureMode: CaptureMode.text.storageValue,
-                captureText: '这是一整段等待整理的文字内容',
-                capturedPhotoPaths: const <String>[],
-                pendingPhotoPaths: const <String>[],
-                createdTimestamp: DateTime(2026, 1, 2),
-                updatedTimestamp: DateTime(2026, 1, 2),
-              ),
-            ],
-          ),
-          textCardRepository: textCardRepository,
-          saveCaptureRecord: (request) async =>
-              const SaveCaptureResult(recordId: 'record-1'),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.text('整理'));
-      await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(const ValueKey('globalArrangePendingButton')),
-      );
-      await tester.pumpAndSettle();
-
-      expect(find.text('这是一整段等待整理的文字内容'), findsOneWidget);
-
-      await tester.scrollUntilVisible(
-        find.byKey(const ValueKey('pendingChapterCard-chapter-1')),
-        300,
-        scrollable: find.byType(Scrollable).first,
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(const ValueKey('pendingChapterCard-chapter-1')),
-      );
-      await tester.pumpAndSettle();
-      await tester.ensureVisible(
-        find.byKey(const ValueKey('pendingElementCard-element-chapter-1')),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(const ValueKey('pendingElementCard-element-chapter-1')),
-      );
-      await tester.pumpAndSettle();
-
-      await tester.scrollUntilVisible(
-        find.byKey(
-          ValueKey('pendingRelationTypeCard-${echoType.relationTypeId}'),
-        ),
-        300,
-        scrollable: find.byType(Scrollable).first,
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(
-          ValueKey('pendingRelationTypeCard-${echoType.relationTypeId}'),
-        ),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(
-          ValueKey('pendingRelationGroupCard-${relationGroup.relationGroupId}'),
-        ),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(const ValueKey('pendingRelationSelectionCompleteButton')),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('pendingOrganizeSaveButton')));
-      await tester.pumpAndSettle();
-
-      expect(find.byType(PendingOrganizePage), findsOneWidget);
-      expect(find.text('这是一整段等待整理的文字内容'), findsNothing);
-
-      final updatedCards = await textCardRepository.listTextCardsForProject(
-        projectId,
-      );
-      final updatedCard = updatedCards.single;
-      final updatedMembers = await relationRepository
-          .listRelationMembersForProject(projectId);
-
-      expect(updatedCard.owningChapterId, 'chapter-1');
-      expect(updatedCard.owningElementId, 'element-chapter-1');
-      expect(
-        updatedMembers.where(
-          (member) =>
-              member.kind == ProjectRelationTargetKind.textCard.name &&
-              member.linkedTextCardId == 'text-card-1' &&
-              member.owningGroupId == relationGroup.relationGroupId,
-        ),
-        isNotEmpty,
-      );
-
-      await tester.tap(find.byIcon(Icons.arrow_back_ios_new).first);
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.text('结构'));
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.text('第一章'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('派生标题'), findsOneWidget);
-      expect(find.text('这是一整段等待整理的文字内容'), findsOneWidget);
-      expect(
-        find.byKey(const ValueKey('chapterTextCard-title-text-card-1')),
-        findsOneWidget,
-      );
-
-      await tester.tap(find.byIcon(Icons.arrow_back_ios_new).first);
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.text('叙事元素'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('章节元素'));
-      await tester.pumpAndSettle();
-
-      expect(
-        find.byKey(const ValueKey('narrativeTextCard-title-text-card-1')),
-        findsOneWidget,
-      );
-      expect(find.text('派生标题'), findsOneWidget);
-      expect(find.text('这是一整段等待整理的文字内容'), findsOneWidget);
     },
   );
 
@@ -7385,132 +6980,6 @@ class _InMemoryCaptureRecordRepository implements CaptureRecordRepository {
   }
 }
 
-class _InMemoryTextCardRepository implements TextCardRepository {
-  _InMemoryTextCardRepository({List<TextCard>? initialCards})
-    : _cards = List<TextCard>.from(initialCards ?? <TextCard>[]);
-
-  final List<TextCard> _cards;
-
-  @override
-  Future<TextCard> createTextCard({
-    required String projectId,
-    String? chapterId,
-    String? elementId,
-    String? sourceRecordId,
-    required String title,
-    required String body,
-    int? sortOrder,
-  }) async {
-    final card = TextCard.create(
-      id: 'text-card-${_cards.length + 1}',
-      projectId: projectId,
-      chapterId: chapterId,
-      elementId: elementId,
-      sourceRecordId: sourceRecordId,
-      title: title,
-      body: body,
-      cardSortOrder: sortOrder ?? _cards.length,
-      createdTimestamp: DateTime(2026),
-      updatedTimestamp: DateTime(2026),
-    );
-    _cards.add(card);
-    return card;
-  }
-
-  @override
-  Future<TextCard> createCard({
-    required String projectId,
-    String? chapterId,
-    String? elementId,
-    String? sourceRecordId,
-    required String rawText,
-    int? sortOrder,
-  }) {
-    final normalizedBody = TextCard.normalizeBody(rawText);
-    return createTextCard(
-      projectId: projectId,
-      chapterId: chapterId,
-      elementId: elementId,
-      sourceRecordId: sourceRecordId,
-      title: TextCard.deriveTitle(normalizedBody),
-      body: normalizedBody,
-      sortOrder: sortOrder,
-    );
-  }
-
-  @override
-  Future<TextCard?> getTextCardById(String textCardId) async {
-    for (final card in _cards) {
-      if (card.textCardId == textCardId) {
-        return card;
-      }
-    }
-    return null;
-  }
-
-  @override
-  Future<TextCard?> getCardById(String textCardId) {
-    return getTextCardById(textCardId);
-  }
-
-  @override
-  Future<List<TextCard>> listTextCardsForProject(String projectId) async {
-    final cards = _cards
-        .where((card) => card.owningProjectId == projectId)
-        .toList();
-    cards.sort((left, right) => left.createdAt.compareTo(right.createdAt));
-    return cards;
-  }
-
-  @override
-  Future<List<TextCard>> listCardsForProject(String projectId) {
-    return listTextCardsForProject(projectId);
-  }
-
-  @override
-  Future<List<TextCard>> listTextCardsForSourceRecord(
-    String sourceRecordId,
-  ) async {
-    final cards = _cards
-        .where((card) => card.sourceRecordId == sourceRecordId)
-        .toList();
-    cards.sort((left, right) => left.createdAt.compareTo(right.createdAt));
-    return cards;
-  }
-
-  @override
-  Future<List<TextCard>> listCardsForSourceRecord(String sourceRecordId) {
-    return listTextCardsForSourceRecord(sourceRecordId);
-  }
-
-  @override
-  Future<TextCard?> updateTextCard({
-    required String textCardId,
-    required String title,
-    required String body,
-    String? chapterId,
-    String? elementId,
-    String? sourceRecordId,
-    int? sortOrder,
-  }) async {
-    for (final card in _cards) {
-      if (card.textCardId == textCardId) {
-        card.title = title;
-        card.body = body;
-        card.owningChapterId = chapterId;
-        card.owningElementId = elementId;
-        card.sourceRecordId = sourceRecordId;
-        if (sortOrder != null) {
-          card.sortOrder = sortOrder;
-        }
-        card.updatedAt = DateTime(2026, 1, 10);
-        return card;
-      }
-    }
-    return null;
-  }
-}
-
 class _InMemoryProjectRelationRepository implements ProjectRelationRepository {
   static const String _hiddenRelationTypeName = '__echo_hidden_relation_type__';
   static const String _hiddenRelationTypeDescription =
@@ -7696,7 +7165,6 @@ class _InMemoryProjectRelationRepository implements ProjectRelationRepository {
           elementId: members[index].elementId,
           photoPath: members[index].photoPath,
           sourceElementId: members[index].sourceElementId,
-          textCardId: members[index].textCardId,
           sortOrder: index,
           createdTimestamp: now,
         ),
@@ -7745,7 +7213,6 @@ class _InMemoryProjectRelationRepository implements ProjectRelationRepository {
               elementId: members[index].elementId,
               photoPath: members[index].photoPath,
               sourceElementId: members[index].sourceElementId,
-              textCardId: members[index].textCardId,
               sortOrder: index,
               createdTimestamp: now,
             ),

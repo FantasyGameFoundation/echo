@@ -5,8 +5,6 @@ import 'package:echo/features/capture/domain/models/capture_mode.dart';
 import 'package:echo/features/capture/domain/models/save_capture_request.dart';
 import 'package:echo/features/capture/domain/models/save_capture_result.dart';
 import 'package:echo/features/capture/domain/repositories/capture_record_repository.dart';
-import 'package:echo/features/content_cards/domain/entities/text_card.dart';
-import 'package:echo/features/content_cards/domain/repositories/text_card_repository.dart';
 import 'package:echo/features/project/domain/entities/project.dart';
 import 'package:echo/features/project/domain/repositories/project_repository.dart';
 import 'package:echo/features/beacon/presentation/pages/beacon_page_prototype.dart';
@@ -37,6 +35,7 @@ import 'package:echo/features/structure_elements_relations/presentation/pages/pr
 import 'package:echo/features/structure_elements_relations/presentation/pages/project_relation_group_page.dart';
 import 'package:echo/features/structure_elements_relations/presentation/pages/structure_page_prototype.dart';
 import 'package:echo/features/timeline/presentation/pages/timeline_page_prototype.dart';
+import 'package:echo/shared/models/content_preview_item.dart';
 import 'package:echo/shared/models/prototype_tab.dart';
 import 'package:echo/shared/widgets/quick_record_overlay_prototype.dart';
 import 'package:flutter/material.dart';
@@ -52,7 +51,6 @@ class AppShellPage extends StatefulWidget {
     required this.narrativeElementRepository,
     required this.projectRelationRepository,
     required this.captureRecordRepository,
-    required this.textCardRepository,
     this.narrativeElementPhotoPicker,
     this.narrativeElementPhotoImporter,
     this.capturePhotoPicker,
@@ -64,7 +62,6 @@ class AppShellPage extends StatefulWidget {
   final NarrativeElementRepository narrativeElementRepository;
   final ProjectRelationRepository projectRelationRepository;
   final CaptureRecordRepository captureRecordRepository;
-  final TextCardRepository textCardRepository;
   final PickGalleryImages? narrativeElementPhotoPicker;
   final ImportNarrativePhoto? narrativeElementPhotoImporter;
   final PickCapturedPhoto? capturePhotoPicker;
@@ -88,7 +85,6 @@ class _AppShellPageState extends State<AppShellPage> {
   List<ProjectRelationMember> _relationMembers =
       const <ProjectRelationMember>[];
   List<CaptureRecord> _captureRecords = const <CaptureRecord>[];
-  List<TextCard> _textCards = const <TextCard>[];
   List<StructureChapterCardData> _chapterCards =
       const <StructureChapterCardData>[];
   List<Map<String, dynamic>> _narrativeElementGroups =
@@ -321,16 +317,12 @@ class _AppShellPageState extends State<AppShellPage> {
                   (element) => element.owningChapterId == chapter.chapterId,
                 )
                 .toList();
-            final chapterTextCards = _textCards
-                .where((card) => card.owningChapterId == chapter.chapterId)
-                .toList();
             await Navigator.of(context).push(
               MaterialPageRoute(
                 builder: (_) => ChapterEditPage(
                   existingChapters: _structureChapters,
                   chapter: chapter,
                   existingElements: chapterElements,
-                  existingTextCards: chapterTextCards,
                   onOpenExistingElement: (element) async {
                     return _openNarrativeElementEditor(
                       element: element,
@@ -477,7 +469,6 @@ class _AppShellPageState extends State<AppShellPage> {
                   relationGroups: _relationGroups,
                   relationMembers: _relationMembers,
                   narrativeElements: _narrativeElements,
-                  textCards: _textCards,
                   chapters: _structureChapters,
                   onUpdateRelationType:
                       ({required name, required description}) async {
@@ -609,9 +600,6 @@ class _AppShellPageState extends State<AppShellPage> {
     final captureRecords = currentProject == null
         ? const <CaptureRecord>[]
         : await _loadCaptureRecordsSafe(currentProject.projectId);
-    final textCards = currentProject == null
-        ? const <TextCard>[]
-        : await _loadTextCardsSafe(currentProject.projectId);
     if (!mounted) {
       return;
     }
@@ -625,7 +613,6 @@ class _AppShellPageState extends State<AppShellPage> {
       _relationGroups = relationGroups;
       _relationMembers = relationMembers;
       _captureRecords = captureRecords;
-      _textCards = textCards;
       _chapterCards = _buildChapterCards(
         chapters: chapters,
         elements: elements,
@@ -647,14 +634,6 @@ class _AppShellPageState extends State<AppShellPage> {
     }
   }
 
-  Future<List<TextCard>> _loadTextCardsSafe(String projectId) async {
-    try {
-      return await widget.textCardRepository.listTextCardsForProject(projectId);
-    } catch (_) {
-      return const <TextCard>[];
-    }
-  }
-
   List<Map<String, dynamic>> _groupNarrativeElements({
     required List<StructureChapter> chapters,
     required List<NarrativeElement> elements,
@@ -664,7 +643,6 @@ class _AppShellPageState extends State<AppShellPage> {
         chapters[index].chapterId:
             'C H A P T E R  ${(index + 1).toString().padLeft(2, '0')}  /  ${chapters[index].title}',
     };
-
     final grouped = <String?, List<Map<String, dynamic>>>{};
     for (final element in elements) {
       final chapterKey = chapterTitles.containsKey(element.owningChapterId)
@@ -678,7 +656,7 @@ class _AppShellPageState extends State<AppShellPage> {
         'status': element.status == 'ready'
             ? ElementStatus.ready
             : ElementStatus.finding,
-        'images': element.photoPaths,
+        'previewItems': _elementPreviewItems(element),
       });
     }
 
@@ -726,12 +704,13 @@ class _AppShellPageState extends State<AppShellPage> {
           title: chapters[index].title,
           description: chapters[index].description?.trim().isNotEmpty == true
               ? chapters[index].description!
-              : '暂无章节说明',
+              : '',
           statusLabel: _normalizeChapterStatus(chapters[index].statusLabel),
           elementCount:
               elementsByChapter[chapters[index].chapterId]?.length ?? 0,
-          previewImageSources: _chapterPreviewImageSources(
-            elementsByChapter[chapters[index].chapterId] ??
+          previewItems: _chapterPreviewItems(
+            elements:
+                elementsByChapter[chapters[index].chapterId] ??
                 const <NarrativeElement>[],
           ),
         ),
@@ -881,6 +860,9 @@ class _AppShellPageState extends State<AppShellPage> {
   }
 
   Future<void> _deleteElement(NarrativeElement element) async {
+    for (final photoPath in element.photoPaths) {
+      await _appendPhotoToUnassignedPool(photoPath: photoPath);
+    }
     await _deleteRelationGroupsReferencingElement(element.elementId);
 
     final deleted = await widget.narrativeElementRepository.deleteElement(
@@ -893,6 +875,55 @@ class _AppShellPageState extends State<AppShellPage> {
     }
 
     await _refreshProjects();
+  }
+
+  CaptureRecord? _captureRecordForPhotoPath(String photoPath) {
+    for (final record in _captureRecords) {
+      if (record.unorganizedPhotoPaths.contains(photoPath) ||
+          record.photoPaths.contains(photoPath)) {
+        return record;
+      }
+    }
+    return null;
+  }
+
+  Future<void> _appendPhotoToUnassignedPool({
+    required String photoPath,
+    String? preferredRecordId,
+  }) async {
+    CaptureRecord? targetRecord;
+    if (preferredRecordId != null) {
+      for (final record in _captureRecords) {
+        if (record.recordId == preferredRecordId) {
+          targetRecord = record;
+          break;
+        }
+      }
+    }
+    targetRecord ??= _captureRecordForPhotoPath(photoPath);
+
+    if (targetRecord != null) {
+      final pending = List<String>.from(targetRecord.unorganizedPhotoPaths);
+      if (!pending.contains(photoPath)) {
+        pending.add(photoPath);
+        await widget.captureRecordRepository.updatePendingPhotoPaths(
+          recordId: targetRecord.recordId,
+          pendingPhotoPaths: pending,
+        );
+      }
+      return;
+    }
+
+    final project = _currentProject;
+    if (project == null) {
+      return;
+    }
+    await widget.captureRecordRepository.createRecord(
+      projectId: project.projectId,
+      mode: CaptureMode.record.storageValue,
+      rawText: '整理页未归属照片',
+      photoPaths: <String>[photoPath],
+    );
   }
 
   Future<void> _deleteRelationGroupsReferencingElement(String elementId) async {
@@ -935,9 +966,6 @@ class _AppShellPageState extends State<AppShellPage> {
           chapters: _structureChapters,
           element: element,
           allowChapterSelection: allowChapterSelection,
-          linkedTextCards: _textCards
-              .where((card) => card.owningElementId == element.elementId)
-              .toList(),
           onSave:
               ({
                 required String title,
@@ -991,34 +1019,44 @@ class _AppShellPageState extends State<AppShellPage> {
     return ChapterElementEditorResult.deleted(element.elementId);
   }
 
-  List<String> _chapterPreviewImageSources(List<NarrativeElement> elements) {
-    final previewPhotos = <_ChapterPreviewPhoto>[];
+  List<ContentPreviewItem> _elementPreviewItems(NarrativeElement element) {
+    return <ContentPreviewItem>[
+      for (var index = 0; index < element.photoPaths.length; index++)
+        ContentPreviewItem.photo(
+          stableId: element.photoPaths[index],
+          imageSource: element.photoPaths[index],
+        ),
+    ];
+  }
 
+  List<ContentPreviewItem> _chapterPreviewItems({
+    required List<NarrativeElement> elements,
+  }) {
+    final previewItems = <_ChronologicalPreviewItem>[];
     for (final element in elements) {
-      if (element.photoPaths.isEmpty) {
-        continue;
-      }
-
       for (var index = element.photoPaths.length - 1; index >= 0; index--) {
-        previewPhotos.add(
-          _ChapterPreviewPhoto(
-            source: element.photoPaths[index],
+        previewItems.add(
+          _ChronologicalPreviewItem(
+            item: ContentPreviewItem.photo(
+              stableId: element.photoPaths[index],
+              imageSource: element.photoPaths[index],
+            ),
             sortTime: element.updatedAt,
-            photoOrder: index,
+            order: index,
           ),
         );
       }
     }
 
-    previewPhotos.sort((left, right) {
+    previewItems.sort((left, right) {
       final timeCompare = right.sortTime.compareTo(left.sortTime);
       if (timeCompare != 0) {
         return timeCompare;
       }
-      return right.photoOrder.compareTo(left.photoOrder);
+      return right.order.compareTo(left.order);
     });
 
-    return previewPhotos.map((photo) => photo.source).toList();
+    return previewItems.map((item) => item.item).toList(growable: false);
   }
 
   List<StructureRelationCardData> _buildRelationCards() {
@@ -1133,6 +1171,33 @@ class _AppShellPageState extends State<AppShellPage> {
       ];
     }
 
+    List<GlobalArrangePhotoData> buildUnassignedPhotos() {
+      final photoSeeds =
+          <({DateTime updatedAt, GlobalArrangePhotoData photo})>[];
+      for (final record in _captureRecords) {
+        for (
+          var index = 0;
+          index < record.unorganizedPhotoPaths.length;
+          index++
+        ) {
+          final photoPath = record.unorganizedPhotoPaths[index];
+          photoSeeds.add((
+            updatedAt: record.updatedAt,
+            photo: GlobalArrangePhotoData(
+              photoId: '${record.recordId}::$index::$photoPath',
+              imageSource: photoPath,
+              relationTags: const <String>[],
+              sourceRecordId: record.recordId,
+            ),
+          ));
+        }
+      }
+      photoSeeds.sort(
+        (left, right) => right.updatedAt.compareTo(left.updatedAt),
+      );
+      return [for (final seed in photoSeeds) seed.photo];
+    }
+
     return GlobalArrangeBoardData(
       chapters: [
         for (final chapter in _structureChapters)
@@ -1143,6 +1208,7 @@ class _AppShellPageState extends State<AppShellPage> {
           ),
       ],
       unassignedElements: buildElements(null),
+      unassignedPhotos: buildUnassignedPhotos(),
     );
   }
 
@@ -1205,17 +1271,80 @@ class _AppShellPageState extends State<AppShellPage> {
     required String targetElementId,
     required int targetPhotoIndex,
   }) async {
+    final sourceIsLoosePool =
+        sourceElementId == globalArrangeLoosePhotoBucketId;
+    final targetIsLoosePool =
+        targetElementId == globalArrangeLoosePhotoBucketId;
+
+    if (sourceIsLoosePool && targetIsLoosePool) {
+      return;
+    }
+
+    if (sourceIsLoosePool) {
+      final loosePhotos = _buildGlobalArrangeBoardData().unassignedPhotos;
+      if (sourcePhotoIndex < 0 || sourcePhotoIndex >= loosePhotos.length) {
+        return;
+      }
+      final sourcePhoto = loosePhotos[sourcePhotoIndex];
+      final sourceRecordId = sourcePhoto.sourceRecordId;
+      if (sourceRecordId == null) {
+        return;
+      }
+
+      NarrativeElement? targetElement;
+      for (final element in _narrativeElements) {
+        if (element.elementId == targetElementId) {
+          targetElement = element;
+          break;
+        }
+      }
+      if (targetElement == null) {
+        return;
+      }
+
+      final updatedTargetPhotos = List<String>.from(targetElement.photoPaths);
+      final normalizedTargetIndex = targetPhotoIndex.clamp(
+        0,
+        updatedTargetPhotos.length,
+      );
+      updatedTargetPhotos.insert(
+        normalizedTargetIndex,
+        sourcePhoto.imageSource,
+      );
+      await widget.narrativeElementRepository.updateElement(
+        elementId: targetElement.elementId,
+        title: targetElement.title,
+        description: targetElement.description,
+        chapterId: targetElement.owningChapterId,
+        status: targetElement.status,
+        photoPaths: updatedTargetPhotos,
+      );
+
+      final sourceRecord = _captureRecords.firstWhere(
+        (record) => record.recordId == sourceRecordId,
+      );
+      final remainingPending = List<String>.from(
+        sourceRecord.unorganizedPhotoPaths,
+      )..remove(sourcePhoto.imageSource);
+      await widget.captureRecordRepository.updatePendingPhotoPaths(
+        recordId: sourceRecord.recordId,
+        pendingPhotoPaths: remainingPending,
+      );
+      await _refreshProjects();
+      return;
+    }
+
     NarrativeElement? sourceElement;
     NarrativeElement? targetElement;
     for (final element in _narrativeElements) {
       if (element.elementId == sourceElementId) {
         sourceElement = element;
       }
-      if (element.elementId == targetElementId) {
+      if (!targetIsLoosePool && element.elementId == targetElementId) {
         targetElement = element;
       }
     }
-    if (sourceElement == null || targetElement == null) {
+    if (sourceElement == null) {
       return;
     }
     if (sourcePhotoIndex < 0 ||
@@ -1226,6 +1355,28 @@ class _AppShellPageState extends State<AppShellPage> {
     final movedPhotoPath = sourceElement.photoPaths[sourcePhotoIndex];
     final updatedSourcePhotos = List<String>.from(sourceElement.photoPaths)
       ..removeAt(sourcePhotoIndex);
+
+    if (targetIsLoosePool) {
+      await widget.narrativeElementRepository.updateElement(
+        elementId: sourceElement.elementId,
+        title: sourceElement.title,
+        description: sourceElement.description,
+        chapterId: sourceElement.owningChapterId,
+        status: sourceElement.status,
+        photoPaths: updatedSourcePhotos,
+      );
+      await _appendPhotoToUnassignedPool(photoPath: movedPhotoPath);
+      await _removePhotoMembers(
+        sourceElementId: sourceElement.elementId,
+        photoPath: movedPhotoPath,
+      );
+      await _refreshProjects();
+      return;
+    }
+
+    if (targetElement == null) {
+      return;
+    }
 
     if (sourceElementId == targetElementId) {
       final normalizedTargetIndex = targetPhotoIndex.clamp(
@@ -1275,6 +1426,73 @@ class _AppShellPageState extends State<AppShellPage> {
       photoPath: movedPhotoPath,
     );
     await _refreshProjects();
+  }
+
+  Future<void> _removePhotoMembers({
+    required String sourceElementId,
+    required String photoPath,
+  }) async {
+    final affectedGroupIds = _relationMembers
+        .where(
+          (member) =>
+              member.kind == ProjectRelationTargetKind.photo.name &&
+              member.linkedSourceElementId == sourceElementId &&
+              member.linkedPhotoPath == photoPath,
+        )
+        .map((member) => member.owningGroupId)
+        .toSet();
+
+    for (final groupId in affectedGroupIds) {
+      ProjectRelationGroup? relationGroup;
+      for (final group in _relationGroups) {
+        if (group.relationGroupId == groupId) {
+          relationGroup = group;
+          break;
+        }
+      }
+      if (relationGroup == null) {
+        continue;
+      }
+
+      final groupMembers =
+          _relationMembers
+              .where((member) => member.owningGroupId == groupId)
+              .toList()
+            ..sort(
+              (left, right) =>
+                  left.memberSortOrder.compareTo(right.memberSortOrder),
+            );
+      final draftMembers = <ProjectRelationDraftMember>[
+        for (final member in groupMembers)
+          if (!(member.kind == ProjectRelationTargetKind.photo.name &&
+              member.linkedSourceElementId == sourceElementId &&
+              member.linkedPhotoPath == photoPath))
+            if (member.kind == ProjectRelationTargetKind.element.name &&
+                member.linkedElementId != null)
+              ProjectRelationDraftMember.element(
+                elementId: member.linkedElementId!,
+              )
+            else if (member.kind == ProjectRelationTargetKind.photo.name &&
+                member.linkedPhotoPath != null &&
+                member.linkedSourceElementId != null)
+              ProjectRelationDraftMember.photo(
+                photoPath: member.linkedPhotoPath!,
+                sourceElementId: member.linkedSourceElementId!,
+              ),
+      ];
+
+      if (draftMembers.length < 2) {
+        await widget.projectRelationRepository.deleteRelationGroup(groupId);
+        continue;
+      }
+
+      await widget.projectRelationRepository.updateRelationGroup(
+        relationGroupId: relationGroup.relationGroupId,
+        title: relationGroup.title,
+        description: relationGroup.description,
+        members: draftMembers,
+      );
+    }
   }
 
   Future<void> _relinkPhotoMembers({
@@ -1374,13 +1592,12 @@ class _AppShellPageState extends State<AppShellPage> {
       for (final chapter in _structureChapters) chapter.chapterId: chapter,
     };
     final relationGroupsByPhotoKey = _pendingRelationGroupIdsByPhotoKey();
-    final relationGroupsByTextCardId = _pendingRelationGroupIdsByTextCardId();
 
     final chapters = [
       for (final chapter in _structureChapters)
         () {
-          final previewImageSources = _chapterPreviewImageSources(
-            _narrativeElements
+          final previewItems = _chapterPreviewItems(
+            elements: _narrativeElements
                 .where(
                   (element) => element.owningChapterId == chapter.chapterId,
                 )
@@ -1391,9 +1608,7 @@ class _AppShellPageState extends State<AppShellPage> {
             label:
                 'CH ${(chapter.sortOrder + 1).toString().padLeft(2, '0')} / ${chapter.title}',
             sortOrder: chapter.sortOrder,
-            coverImageSource: previewImageSources.isEmpty
-                ? null
-                : previewImageSources.first,
+            coverPreviewItem: previewItems.isEmpty ? null : previewItems.first,
           );
         }(),
     ];
@@ -1408,7 +1623,7 @@ class _AppShellPageState extends State<AppShellPage> {
           chapterLabel:
               chapterTitles[element.owningChapterId] ?? chapterTitles[null]!,
           sortOrder: element.sortOrder,
-          imageSources: element.photoPaths,
+          previewItems: _elementPreviewItems(element),
         ),
     ];
 
@@ -1448,25 +1663,8 @@ class _AppShellPageState extends State<AppShellPage> {
               photoPath: record.unorganizedPhotoPaths[index],
               sourceRecordId: record.recordId,
               sourceChapterId: null,
-              title: TextCard.hasMeaningfulBody(record.rawText)
-                  ? TextCard.deriveTitle(record.rawText)
-                  : '未归属照片',
+              title: _deriveRecordPreviewTitle(record.rawText),
               description: record.rawText.trim(),
-            ),
-          ),
-      for (final textCard in _textCards)
-        if (textCard.owningChapterId == null)
-          _PendingOrganizeEntrySeed(
-            createdAt: textCard.updatedAt,
-            entry: PendingOrganizeEntryData.text(
-              entryId: textCard.textCardId,
-              textCardId: textCard.textCardId,
-              body: textCard.body,
-              sourceChapterId: textCard.owningChapterId,
-              sourceElementId: textCard.owningElementId,
-              sourceRelationGroupIds:
-                  relationGroupsByTextCardId[textCard.textCardId]?.toList() ??
-                  const <String>[],
             ),
           ),
     ];
@@ -1487,7 +1685,7 @@ class _AppShellPageState extends State<AppShellPage> {
                     relationGroup: group,
                     chapterById: chapterById,
                   ),
-                  imageSources: _buildRelationGroupImageSources(
+                  previewItems: _buildRelationGroupPreviewItems(
                     group.relationGroupId,
                   ),
                 ),
@@ -1501,6 +1699,18 @@ class _AppShellPageState extends State<AppShellPage> {
       elements: elements,
       relationTypes: relationTypes,
     );
+  }
+
+  String _deriveRecordPreviewTitle(String rawText) {
+    final lines = rawText
+        .split('\n')
+        .map((line) => line.trim())
+        .where((line) => line.isNotEmpty)
+        .toList(growable: false);
+    if (lines.isEmpty) {
+      return '未归属照片';
+    }
+    return lines.first;
   }
 
   Map<String, Set<String>> _pendingRelationGroupIdsByPhotoKey() {
@@ -1518,24 +1728,10 @@ class _AppShellPageState extends State<AppShellPage> {
     return groupsByPhotoKey;
   }
 
-  Map<String, Set<String>> _pendingRelationGroupIdsByTextCardId() {
-    final groupsByTextCardId = <String, Set<String>>{};
-    for (final member in _relationMembers) {
-      if (member.kind != ProjectRelationTargetKind.textCard.name ||
-          member.linkedTextCardId == null) {
-        continue;
-      }
-      groupsByTextCardId.putIfAbsent(
-        member.linkedTextCardId!,
-        () => <String>{},
-      );
-      groupsByTextCardId[member.linkedTextCardId!]!.add(member.owningGroupId);
-    }
-    return groupsByTextCardId;
-  }
-
-  List<String> _buildRelationGroupImageSources(String relationGroupId) {
-    final imageSources = <String>[];
+  List<ContentPreviewItem> _buildRelationGroupPreviewItems(
+    String relationGroupId,
+  ) {
+    final previewItems = <ContentPreviewItem>[];
     final members =
         _relationMembers
             .where((member) => member.owningGroupId == relationGroupId)
@@ -1547,10 +1743,15 @@ class _AppShellPageState extends State<AppShellPage> {
     for (final member in members) {
       if (member.kind == ProjectRelationTargetKind.photo.name &&
           member.linkedPhotoPath != null) {
-        imageSources.add(member.linkedPhotoPath!);
+        previewItems.add(
+          ContentPreviewItem.photo(
+            stableId: member.linkedPhotoPath!,
+            imageSource: member.linkedPhotoPath!,
+          ),
+        );
       }
     }
-    return imageSources;
+    return previewItems;
   }
 
   String _buildRelationGroupDisplayTitle({
@@ -1613,12 +1814,7 @@ class _AppShellPageState extends State<AppShellPage> {
   Future<PendingOrganizePageData> _savePendingOrganizeEntry(
     PendingOrganizeSaveRequest request,
   ) async {
-    switch (request.type) {
-      case PendingOrganizeEntryType.photo:
-        await _savePendingPhotoEntry(request);
-      case PendingOrganizeEntryType.text:
-        await _savePendingTextEntry(request);
-    }
+    await _savePendingPhotoEntry(request);
     await _refreshProjects();
     return _buildPendingOrganizePageData();
   }
@@ -1689,33 +1885,6 @@ class _AppShellPageState extends State<AppShellPage> {
     await _syncPendingPhotoRelationGroups(
       sourceElementId: targetElementId,
       photoPath: photoPath,
-      desiredGroupIds: request.relationGroupIds.toSet(),
-    );
-  }
-
-  Future<void> _savePendingTextEntry(PendingOrganizeSaveRequest request) async {
-    final textCardId = request.textCardId;
-    final targetChapterId = request.targetChapterId;
-    final targetElementId = request.targetElementId;
-    if (textCardId == null ||
-        targetChapterId == null ||
-        targetElementId == null) {
-      return;
-    }
-    final textCard = _textCards.firstWhere(
-      (card) => card.textCardId == textCardId,
-    );
-    await widget.textCardRepository.updateTextCard(
-      textCardId: textCard.textCardId,
-      title: textCard.title,
-      body: textCard.body,
-      chapterId: targetChapterId,
-      elementId: targetElementId,
-      sourceRecordId: textCard.sourceRecordId,
-      sortOrder: textCard.sortOrder,
-    );
-    await _syncPendingTextCardRelationGroups(
-      textCardId: textCardId,
       desiredGroupIds: request.relationGroupIds.toSet(),
     );
   }
@@ -1817,103 +1986,6 @@ class _AppShellPageState extends State<AppShellPage> {
     }
   }
 
-  Future<void> _syncPendingTextCardRelationGroups({
-    required String textCardId,
-    required Set<String> desiredGroupIds,
-  }) async {
-    final currentGroupIds = _relationMembers
-        .where(
-          (member) =>
-              member.kind == ProjectRelationTargetKind.textCard.name &&
-              member.linkedTextCardId == textCardId,
-        )
-        .map((member) => member.owningGroupId)
-        .toSet();
-    final impactedGroupIds = <String>{...currentGroupIds, ...desiredGroupIds};
-
-    for (final groupId in impactedGroupIds) {
-      final relationGroup = _relationGroups.firstWhere(
-        (group) => group.relationGroupId == groupId,
-      );
-      final currentMembers =
-          _relationMembers
-              .where((member) => member.owningGroupId == groupId)
-              .toList()
-            ..sort(
-              (left, right) =>
-                  left.memberSortOrder.compareTo(right.memberSortOrder),
-            );
-
-      final nextMembers = <ProjectRelationDraftMember>[];
-      var hasCurrentTextCardMember = false;
-      for (final member in currentMembers) {
-        final isCurrentTextCardMember =
-            member.kind == ProjectRelationTargetKind.textCard.name &&
-            member.linkedTextCardId == textCardId;
-        if (isCurrentTextCardMember) {
-          hasCurrentTextCardMember = true;
-          if (desiredGroupIds.contains(groupId)) {
-            nextMembers.add(
-              ProjectRelationDraftMember.textCard(textCardId: textCardId),
-            );
-          }
-          continue;
-        }
-        if (member.kind == ProjectRelationTargetKind.element.name &&
-            member.linkedElementId != null) {
-          nextMembers.add(
-            ProjectRelationDraftMember.element(
-              elementId: member.linkedElementId!,
-            ),
-          );
-          continue;
-        }
-        if (member.kind == ProjectRelationTargetKind.textCard.name &&
-            member.linkedTextCardId != null) {
-          nextMembers.add(
-            ProjectRelationDraftMember.textCard(
-              textCardId: member.linkedTextCardId!,
-            ),
-          );
-          continue;
-        }
-        if (member.kind == ProjectRelationTargetKind.photo.name &&
-            member.linkedPhotoPath != null &&
-            member.linkedSourceElementId != null) {
-          nextMembers.add(
-            ProjectRelationDraftMember.photo(
-              photoPath: member.linkedPhotoPath!,
-              sourceElementId: member.linkedSourceElementId!,
-            ),
-          );
-        }
-      }
-
-      if (!hasCurrentTextCardMember && desiredGroupIds.contains(groupId)) {
-        nextMembers.add(
-          ProjectRelationDraftMember.textCard(textCardId: textCardId),
-        );
-      }
-
-      if (nextMembers.length < 2) {
-        await widget.projectRelationRepository.deleteRelationGroup(groupId);
-        continue;
-      }
-
-      final currentDraftMembers = _buildDraftMembersForGroup(groupId);
-      if (_sameDraftMembers(currentDraftMembers, nextMembers)) {
-        continue;
-      }
-
-      await widget.projectRelationRepository.updateRelationGroup(
-        relationGroupId: groupId,
-        title: relationGroup.title,
-        description: relationGroup.description,
-        members: nextMembers,
-      );
-    }
-  }
-
   List<ProjectRelationDraftMember> _buildDraftMembersForGroup(String groupId) {
     final members =
         _relationMembers
@@ -1928,11 +2000,6 @@ class _AppShellPageState extends State<AppShellPage> {
         if (member.kind == ProjectRelationTargetKind.element.name &&
             member.linkedElementId != null)
           ProjectRelationDraftMember.element(elementId: member.linkedElementId!)
-        else if (member.kind == ProjectRelationTargetKind.textCard.name &&
-            member.linkedTextCardId != null)
-          ProjectRelationDraftMember.textCard(
-            textCardId: member.linkedTextCardId!,
-          )
         else if (member.kind == ProjectRelationTargetKind.photo.name &&
             member.linkedPhotoPath != null &&
             member.linkedSourceElementId != null)
@@ -1962,8 +2029,6 @@ class _AppShellPageState extends State<AppShellPage> {
     switch (member.kind) {
       case ProjectRelationTargetKind.element:
         return 'element:${member.elementId}';
-      case ProjectRelationTargetKind.textCard:
-        return 'text-card:${member.textCardId}';
       case ProjectRelationTargetKind.photo:
         return 'photo:${member.sourceElementId}:${member.photoPath}';
     }
@@ -2015,16 +2080,16 @@ class _AppShellPageState extends State<AppShellPage> {
   }
 }
 
-class _ChapterPreviewPhoto {
-  const _ChapterPreviewPhoto({
-    required this.source,
+class _ChronologicalPreviewItem {
+  const _ChronologicalPreviewItem({
+    required this.item,
     required this.sortTime,
-    required this.photoOrder,
+    required this.order,
   });
 
-  final String source;
+  final ContentPreviewItem item;
   final DateTime sortTime;
-  final int photoOrder;
+  final int order;
 }
 
 class _PendingOrganizeEntrySeed {

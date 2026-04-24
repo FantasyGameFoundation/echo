@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:echo/app/app.dart';
+import 'package:echo/features/capture/domain/repositories/capture_record_repository.dart';
 import 'package:echo/features/project/domain/entities/project.dart';
 import 'package:echo/features/project/domain/repositories/project_repository.dart';
 import 'package:echo/features/structure_elements_relations/domain/entities/narrative_element.dart';
@@ -604,6 +605,8 @@ EchoApp _buildTestApp({
   required _MutableStructureChapterRepository chapterRepository,
   required _MutableNarrativeElementRepository narrativeRepository,
   required _MutableProjectRelationRepository relationRepository,
+  CaptureRecordRepository? captureRecordRepository,
+  SaveCaptureRecordRunner? saveCaptureRecord,
   Future<List<String>> Function()? photoPicker,
   Future<String> Function(String sourcePath)? photoImporter,
 }) {
@@ -612,6 +615,8 @@ EchoApp _buildTestApp({
     structureChapterRepository: chapterRepository,
     narrativeElementRepository: narrativeRepository,
     projectRelationRepository: relationRepository,
+    captureRecordRepository: captureRecordRepository,
+    saveCaptureRecord: saveCaptureRecord,
     narrativeElementPhotoPicker: photoPicker,
     narrativeElementPhotoImporter: photoImporter,
   );

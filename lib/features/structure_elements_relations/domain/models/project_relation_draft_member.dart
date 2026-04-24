@@ -1,4 +1,4 @@
-enum ProjectRelationTargetKind { element, photo, textCard }
+enum ProjectRelationTargetKind { element, photo }
 
 class ProjectRelationDraftMember {
   const ProjectRelationDraftMember._({
@@ -6,7 +6,6 @@ class ProjectRelationDraftMember {
     this.elementId,
     this.photoPath,
     this.sourceElementId,
-    this.textCardId,
   });
 
   const ProjectRelationDraftMember.element({required String elementId})
@@ -21,12 +20,8 @@ class ProjectRelationDraftMember {
          sourceElementId: sourceElementId,
        );
 
-  const ProjectRelationDraftMember.textCard({required String textCardId})
-    : this._(kind: ProjectRelationTargetKind.textCard, textCardId: textCardId);
-
   final ProjectRelationTargetKind kind;
   final String? elementId;
   final String? photoPath;
   final String? sourceElementId;
-  final String? textCardId;
 }

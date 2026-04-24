@@ -1,14 +1,11 @@
-import 'package:echo/app/theme/app_theme.dart';
 import 'package:echo/app/shell/app_shell_page.dart';
+import 'package:echo/app/theme/app_theme.dart';
 import 'package:echo/features/capture/domain/entities/capture_record.dart';
 import 'package:echo/features/capture/domain/models/save_capture_request.dart';
 import 'package:echo/features/capture/domain/models/save_capture_result.dart';
 import 'package:echo/features/capture/domain/repositories/capture_record_repository.dart';
 import 'package:echo/features/capture/domain/services/save_capture_record.dart';
 import 'package:echo/features/capture/infrastructure/repositories/local_capture_record_repository.dart';
-import 'package:echo/features/content_cards/domain/entities/text_card.dart';
-import 'package:echo/features/content_cards/domain/repositories/text_card_repository.dart';
-import 'package:echo/features/content_cards/infrastructure/repositories/local_text_card_repository.dart';
 import 'package:echo/features/project/domain/repositories/project_repository.dart';
 import 'package:echo/features/project/infrastructure/database/project_isar.dart';
 import 'package:echo/features/project/infrastructure/repositories/local_project_repository.dart';
@@ -38,7 +35,6 @@ class EchoApp extends StatelessWidget {
     this.capturePhotoPicker,
     this.saveCaptureRecord,
     this.captureRecordRepository,
-    this.textCardRepository,
   });
 
   static final Future<Isar> _sharedIsarFuture = openProjectIsar();
@@ -55,8 +51,6 @@ class EchoApp extends StatelessWidget {
       LocalProjectRelationRepository(openIsar: _sharedOpenIsar);
   static final CaptureRecordRepository _defaultCaptureRecordRepository =
       _buildDefaultCaptureRecordRepository();
-  static final TextCardRepository _defaultTextCardRepository =
-      _buildDefaultTextCardRepository();
   static final SaveCaptureRecord _defaultSaveCaptureRecord = SaveCaptureRecord(
     openIsar: _sharedOpenIsar,
   );
@@ -66,13 +60,6 @@ class EchoApp extends StatelessWidget {
       return _NoopCaptureRecordRepository();
     }
     return LocalCaptureRecordRepository(openIsar: _sharedOpenIsar);
-  }
-
-  static TextCardRepository _buildDefaultTextCardRepository() {
-    if (_isUnderWidgetTestRuntime) {
-      return _NoopTextCardRepository();
-    }
-    return LocalTextCardRepository(openIsar: _sharedOpenIsar);
   }
 
   static bool get _isUnderWidgetTestRuntime {
@@ -89,7 +76,6 @@ class EchoApp extends StatelessWidget {
   final PickCapturedPhoto? capturePhotoPicker;
   final SaveCaptureRecordRunner? saveCaptureRecord;
   final CaptureRecordRepository? captureRecordRepository;
-  final TextCardRepository? textCardRepository;
 
   @override
   Widget build(BuildContext context) {
@@ -107,7 +93,6 @@ class EchoApp extends StatelessWidget {
             projectRelationRepository ?? _defaultProjectRelationRepository,
         captureRecordRepository:
             captureRecordRepository ?? _defaultCaptureRecordRepository,
-        textCardRepository: textCardRepository ?? _defaultTextCardRepository,
         narrativeElementPhotoPicker: narrativeElementPhotoPicker,
         narrativeElementPhotoImporter: narrativeElementPhotoImporter,
         capturePhotoPicker: capturePhotoPicker,
@@ -165,120 +150,6 @@ class _NoopCaptureRecordRepository implements CaptureRecordRepository {
       if (record.recordId == recordId) {
         record.unorganizedPhotoPaths = List<String>.from(pendingPhotoPaths);
         return record;
-      }
-    }
-    return null;
-  }
-}
-
-class _NoopTextCardRepository implements TextCardRepository {
-  final List<TextCard> _cards = <TextCard>[];
-
-  @override
-  Future<TextCard> createTextCard({
-    required String projectId,
-    String? chapterId,
-    String? elementId,
-    String? sourceRecordId,
-    required String title,
-    required String body,
-    int? sortOrder,
-  }) async {
-    final card = TextCard.create(
-      projectId: projectId,
-      chapterId: chapterId,
-      elementId: elementId,
-      sourceRecordId: sourceRecordId,
-      title: title,
-      body: body,
-      cardSortOrder: sortOrder ?? _cards.length,
-    );
-    _cards.add(card);
-    return card;
-  }
-
-  @override
-  Future<TextCard> createCard({
-    required String projectId,
-    String? chapterId,
-    String? elementId,
-    String? sourceRecordId,
-    required String rawText,
-    int? sortOrder,
-  }) {
-    return createTextCard(
-      projectId: projectId,
-      chapterId: chapterId,
-      elementId: elementId,
-      sourceRecordId: sourceRecordId,
-      title: TextCard.deriveTitle(rawText),
-      body: TextCard.normalizeBody(rawText),
-      sortOrder: sortOrder,
-    );
-  }
-
-  @override
-  Future<TextCard?> getTextCardById(String textCardId) async {
-    for (final card in _cards) {
-      if (card.textCardId == textCardId) {
-        return card;
-      }
-    }
-    return null;
-  }
-
-  @override
-  Future<TextCard?> getCardById(String textCardId) {
-    return getTextCardById(textCardId);
-  }
-
-  @override
-  Future<List<TextCard>> listTextCardsForProject(String projectId) async {
-    return _cards
-        .where((card) => card.owningProjectId == projectId)
-        .toList(growable: false);
-  }
-
-  @override
-  Future<List<TextCard>> listCardsForProject(String projectId) {
-    return listTextCardsForProject(projectId);
-  }
-
-  @override
-  Future<List<TextCard>> listTextCardsForSourceRecord(
-    String sourceRecordId,
-  ) async {
-    return _cards
-        .where((card) => card.sourceRecordId == sourceRecordId)
-        .toList(growable: false);
-  }
-
-  @override
-  Future<List<TextCard>> listCardsForSourceRecord(String sourceRecordId) {
-    return listTextCardsForSourceRecord(sourceRecordId);
-  }
-
-  @override
-  Future<TextCard?> updateTextCard({
-    required String textCardId,
-    required String title,
-    required String body,
-    String? chapterId,
-    String? elementId,
-    String? sourceRecordId,
-    int? sortOrder,
-  }) async {
-    for (final card in _cards) {
-      if (card.textCardId == textCardId) {
-        card.title = title;
-        card.body = body;
-        card.owningChapterId = chapterId;
-        card.owningElementId = elementId;
-        card.sourceRecordId = sourceRecordId;
-        if (sortOrder != null) {
-          card.sortOrder = sortOrder;
-        }
-        return card;
       }
     }
     return null;

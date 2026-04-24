@@ -1,8 +1,6 @@
-import 'dart:ui';
-
 import 'package:echo/features/structure_elements_relations/domain/element_status.dart';
-import 'package:echo/features/structure_elements_relations/presentation/widgets/photo_fallback_tile.dart';
-import 'package:echo/features/structure_elements_relations/presentation/widgets/narrative_thumbnail_provider.dart';
+import 'package:echo/shared/models/content_preview_item.dart';
+import 'package:echo/shared/widgets/content_preview_card.dart';
 import 'package:flutter/material.dart';
 
 class NarrativeListTile extends StatelessWidget {
@@ -11,14 +9,14 @@ class NarrativeListTile extends StatelessWidget {
     required this.title,
     required this.description,
     required this.status,
-    this.images = const <String>[],
+    this.previewItems = const <ContentPreviewItem>[],
     this.onTap,
   });
 
   final String title;
   final String description;
   final ElementStatus status;
-  final List<String> images;
+  final List<ContentPreviewItem> previewItems;
   final VoidCallback? onTap;
 
   @override
@@ -91,113 +89,78 @@ class NarrativeListTile extends StatelessWidget {
   }
 
   Widget _buildAssociatedThumbnails() {
-    if (images.isEmpty) return const SizedBox.shrink();
+    if (previewItems.isEmpty) {
+      return const SizedBox.shrink();
+    }
 
     const thumbSize = 44.0;
     const thinSpacing = 2.0;
-    final hasMore = images.length > 1;
-    final previewImage = images.first;
+    final totalCount = previewItems.length;
+    final hasDirectSecondary = totalCount == 2;
+    final hasOverflow = totalCount > 2;
 
     return SizedBox(
-      width: hasMore ? 90 : 44,
+      width: totalCount > 1 ? 90 : 44,
       height: thumbSize,
       child: Row(
         children: [
-          _buildThumbnail(previewImage, size: thumbSize),
-          if (hasMore)
-            _buildOverflowThumbnail(
-              source: images[1],
-              text: '+${images.length - 1}',
-              width: thumbSize,
-              margin: const EdgeInsets.only(left: thinSpacing),
+          _buildPreviewTile(
+            previewItems.first,
+            key: ValueKey(
+              'narrativeListTilePreview-${previewItems.first.stableId}',
             ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildThumbnail(String source, {required double size}) {
-    final provider = narrativeThumbnailProvider(source);
-
-    return SizedBox(
-      width: size,
-      height: size,
-      child: Image(
-        image: ResizeImage.resizeIfNeeded(120, null, provider),
-        fit: BoxFit.cover,
-        filterQuality: FilterQuality.low,
-        loadingBuilder: (context, child, progress) {
-          if (progress == null) return child;
-          return const PhotoFallbackTile(size: 44);
-        },
-        errorBuilder: (context, error, stackTrace) => Container(
-          color: Colors.grey.shade200,
-          child: const PhotoFallbackTile(size: 44),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildOverflowThumbnail({
-    required String source,
-    required String text,
-    required double width,
-    required EdgeInsets margin,
-  }) {
-    return Container(
-      width: width,
-      height: width,
-      margin: margin,
-      clipBehavior: Clip.hardEdge,
-      decoration: BoxDecoration(color: Colors.grey.shade200),
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          Image(
-            image: ResizeImage.resizeIfNeeded(
-              120,
-              null,
-              narrativeThumbnailProvider(source),
-            ),
-            fit: BoxFit.cover,
-            filterQuality: FilterQuality.low,
-            loadingBuilder: (context, child, progress) {
-              if (progress == null) {
-                return child;
-              }
-              return const PhotoFallbackTile(size: 44);
-            },
-            errorBuilder: (context, error, stackTrace) => Container(
-              color: Colors.grey.shade200,
-              child: const PhotoFallbackTile(size: 44),
-            ),
+            size: thumbSize,
           ),
-          ClipRect(
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 3.5, sigmaY: 3.5),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.18),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.16),
-                    width: 0.8,
-                  ),
+          if (hasDirectSecondary)
+            Padding(
+              padding: const EdgeInsets.only(left: thinSpacing),
+              child: _buildPreviewTile(
+                previewItems[1],
+                key: ValueKey(
+                  'narrativeListTilePreview-${previewItems[1].stableId}',
                 ),
-                alignment: Alignment.center,
-                child: Text(
-                  text,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w300,
-                    color: Colors.black87,
-                    letterSpacing: 0.2,
-                    fontFeatures: <FontFeature>[FontFeature.tabularFigures()],
-                  ),
-                ),
+                size: thumbSize,
               ),
             ),
-          ),
+          if (hasOverflow)
+            Container(
+              key: const ValueKey('narrativeListTilePreview-overflow'),
+              width: thumbSize,
+              height: thumbSize,
+              margin: const EdgeInsets.only(left: thinSpacing),
+              child: ContentPreviewOverflowCard(
+                item: previewItems[1],
+                label: '+${totalCount - 1}',
+                width: thumbSize,
+                height: thumbSize,
+              ),
+            ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildPreviewTile(
+    ContentPreviewItem item, {
+    required Key key,
+    required double size,
+  }) {
+    return SizedBox(
+      key: key,
+      width: size,
+      height: size,
+      child: ContentPreviewCard(
+        item: item,
+        width: size,
+        height: size,
+        decoration: BoxDecoration(color: Colors.grey.shade200),
+        textStyle: const TextStyle(
+          fontSize: 8.5,
+          fontWeight: FontWeight.w500,
+          color: Colors.black87,
+          height: 1.1,
+        ),
+        maxLines: 3,
       ),
     );
   }

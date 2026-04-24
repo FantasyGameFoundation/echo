@@ -1,3 +1,5 @@
+import 'package:echo/shared/models/content_preview_item.dart';
+
 class StructureChapterCardData {
   const StructureChapterCardData({
     required this.chapterNumber,
@@ -5,7 +7,7 @@ class StructureChapterCardData {
     required this.description,
     required this.statusLabel,
     required this.elementCount,
-    this.previewImageSources = const <String>[],
+    this.previewItems = const <ContentPreviewItem>[],
   });
 
   final String chapterNumber;
@@ -13,5 +15,5 @@ class StructureChapterCardData {
   final String description;
   final String statusLabel;
   final int elementCount;
-  final List<String> previewImageSources;
+  final List<ContentPreviewItem> previewItems;
 }

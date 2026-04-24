@@ -152,8 +152,6 @@ class _ProjectRelationGroupSelectionPageState
     switch (member.kind) {
       case ProjectRelationTargetKind.element:
         return 'element:${member.elementId}';
-      case ProjectRelationTargetKind.textCard:
-        return 'text-card:${member.textCardId}';
       case ProjectRelationTargetKind.photo:
         return 'photo:${member.sourceElementId}:${member.photoPath}';
     }

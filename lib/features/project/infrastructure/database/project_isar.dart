@@ -1,5 +1,4 @@
 import 'package:echo/features/capture/domain/entities/capture_record.dart';
-import 'package:echo/features/content_cards/domain/entities/text_card.dart';
 import 'package:echo/core/platform/app_storage_directory.dart';
 import 'package:echo/features/project/domain/entities/project.dart';
 import 'package:echo/features/project/infrastructure/models/project_session.dart';
@@ -38,7 +37,6 @@ Future<Isar> openProjectIsar({
       ProjectSessionSchema,
       CaptureRecordSchema,
       NarrativeElementSchema,
-      TextCardSchema,
       ProjectRelationTypeSchema,
       ProjectRelationGroupSchema,
       ProjectRelationMemberSchema,

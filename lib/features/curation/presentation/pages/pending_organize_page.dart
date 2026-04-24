@@ -1,6 +1,8 @@
 import 'package:echo/features/curation/presentation/models/pending_organize_models.dart';
 import 'package:echo/features/curation/presentation/pages/pending_relation_group_selection_page.dart';
 import 'package:echo/features/structure_elements_relations/presentation/widgets/narrative_thumbnail_provider.dart';
+import 'package:echo/shared/models/content_preview_item.dart';
+import 'package:echo/shared/widgets/content_preview_card.dart';
 import 'package:flutter/material.dart';
 
 class PendingOrganizePage extends StatefulWidget {
@@ -100,8 +102,6 @@ class _PendingOrganizePageState extends State<PendingOrganizePage> {
     final draft = _draftFor(currentEntry);
     switch (currentEntry.type) {
       case PendingOrganizeEntryType.photo:
-        return draft.selectedElementId != null && _isEntryDirty(currentEntry);
-      case PendingOrganizeEntryType.text:
         return draft.selectedElementId != null && _isEntryDirty(currentEntry);
     }
   }
@@ -271,10 +271,6 @@ class _PendingOrganizePageState extends State<PendingOrganizePage> {
         draft.selectedElementId == null) {
       return true;
     }
-    if (entry.type == PendingOrganizeEntryType.text &&
-        draft.selectedElementId == null) {
-      return true;
-    }
 
     if (manageSavingState) {
       setState(() {
@@ -284,23 +280,15 @@ class _PendingOrganizePageState extends State<PendingOrganizePage> {
 
     final previousIndex = _currentIndex;
     final updatedData = await widget.onSavePhoto(
-      entry.type == PendingOrganizeEntryType.photo
-          ? PendingOrganizeSaveRequest.photo(
-              entryId: entry.entryId,
-              photoPath: entry.photoPath!,
-              sourceElementId: entry.sourceElementId,
-              sourceRecordId: entry.sourceRecordId,
-              targetChapterId: draft.selectedChapterId,
-              targetElementId: draft.selectedElementId!,
-              relationGroupIds: draft.selectedRelationGroupIds.toList(),
-            )
-          : PendingOrganizeSaveRequest.text(
-              entryId: entry.entryId,
-              textCardId: entry.textCardId!,
-              targetChapterId: draft.selectedChapterId!,
-              targetElementId: draft.selectedElementId!,
-              relationGroupIds: draft.selectedRelationGroupIds.toList(),
-            ),
+      PendingOrganizeSaveRequest.photo(
+        entryId: entry.entryId,
+        photoPath: entry.photoPath!,
+        sourceElementId: entry.sourceElementId,
+        sourceRecordId: entry.sourceRecordId,
+        targetChapterId: draft.selectedChapterId,
+        targetElementId: draft.selectedElementId!,
+        relationGroupIds: draft.selectedRelationGroupIds.toList(),
+      ),
     );
 
     if (!mounted) {
@@ -360,10 +348,8 @@ class _PendingOrganizePageState extends State<PendingOrganizePage> {
     final currentEntry = _currentEntry;
     final savableEntries = [
       for (final entry in dirtyEntries)
-        if ((entry.type == PendingOrganizeEntryType.photo &&
-                _draftFor(entry).selectedElementId != null) ||
-            (entry.type == PendingOrganizeEntryType.text &&
-                _draftFor(entry).selectedChapterId != null))
+        if (entry.type == PendingOrganizeEntryType.photo &&
+            _draftFor(entry).selectedElementId != null)
           entry,
     ];
     if (savableEntries.isEmpty) {
@@ -652,44 +638,27 @@ class _PendingOrganizePageState extends State<PendingOrganizePage> {
             onPageChanged: _handlePageChanged,
             itemBuilder: (context, index) {
               final entry = _data.entries[index];
-              return entry.type == PendingOrganizeEntryType.photo
-                  ? Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 8.0),
-                      color: Colors.black,
-                      child: Image(
-                        key: ValueKey('pendingPhoto-${entry.entryId}'),
-                        image: narrativeThumbnailProvider(entry.imageSource!),
-                        fit: BoxFit.contain,
-                        errorBuilder: (context, error, stackTrace) {
-                          return Center(
-                            child: Text(
-                              'PHOTO',
-                              style: TextStyle(
-                                fontSize: 12,
-                                letterSpacing: 3.0,
-                                color: Colors.white.withValues(alpha: 0.4),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    )
-                  : Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 8.0),
-                      color: const Color(0xFF1F1F1F),
-                      padding: const EdgeInsets.all(28),
+              return Container(
+                margin: const EdgeInsets.symmetric(horizontal: 8.0),
+                color: Colors.black,
+                child: Image(
+                  key: ValueKey('pendingPhoto-${entry.entryId}'),
+                  image: narrativeThumbnailProvider(entry.imageSource!),
+                  fit: BoxFit.contain,
+                  errorBuilder: (context, error, stackTrace) {
+                    return Center(
                       child: Text(
-                        entry.body ?? '',
-                        key: ValueKey('pendingTextCard-${entry.entryId}'),
-                        maxLines: 10,
-                        overflow: TextOverflow.ellipsis,
+                        'PHOTO',
                         style: TextStyle(
-                          fontSize: 18,
-                          height: 1.8,
-                          color: Colors.white.withValues(alpha: 0.86),
+                          fontSize: 12,
+                          letterSpacing: 3.0,
+                          color: Colors.white.withValues(alpha: 0.4),
                         ),
                       ),
                     );
+                  },
+                ),
+              );
             },
           ),
         ),
@@ -775,7 +744,7 @@ class _PendingOrganizePageState extends State<PendingOrganizePage> {
               child: Row(
                 children: [
                   _buildChapterThumb(
-                    chapter.coverImageSource,
+                    chapter.coverPreviewItem,
                     isActive: isActive,
                   ),
                   const SizedBox(width: 10),
@@ -801,7 +770,10 @@ class _PendingOrganizePageState extends State<PendingOrganizePage> {
     );
   }
 
-  Widget _buildChapterThumb(String? imageSource, {required bool isActive}) {
+  Widget _buildChapterThumb(
+    ContentPreviewItem? previewItem, {
+    required bool isActive,
+  }) {
     final placeholder = Container(
       width: 64,
       height: 72,
@@ -817,26 +789,29 @@ class _PendingOrganizePageState extends State<PendingOrganizePage> {
       ),
     );
 
-    if (imageSource == null || imageSource.trim().isEmpty) {
+    if (previewItem == null) {
       return placeholder;
     }
 
-    return Container(
+    return SizedBox(
       width: 64,
       height: 72,
-      clipBehavior: Clip.hardEdge,
-      decoration: BoxDecoration(
-        color: isActive ? Colors.white10 : Colors.white,
-      ),
-      child: Image(
-        image: ResizeImage.resizeIfNeeded(
-          180,
-          null,
-          narrativeThumbnailProvider(imageSource),
+      child: ContentPreviewCard(
+        item: previewItem,
+        width: 64,
+        height: 72,
+        decoration: BoxDecoration(
+          color: isActive ? Colors.white10 : Colors.white,
         ),
-        fit: BoxFit.cover,
-        filterQuality: FilterQuality.low,
-        errorBuilder: (context, error, stackTrace) => placeholder,
+        textStyle: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w500,
+          color: isActive ? Colors.white : Colors.black87,
+          height: 1.15,
+        ),
+        maxLines: 5,
+        errorFallback: placeholder,
+        loadingFallback: placeholder,
       ),
     );
   }
@@ -945,15 +920,15 @@ class _PendingOrganizePageState extends State<PendingOrganizePage> {
               ),
             ),
             const SizedBox(width: 12),
-            _buildElementThumbs(element.imageSources),
+            _buildElementThumbs(element.previewItems),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildElementThumbs(List<String> imageSources) {
-    if (imageSources.isEmpty) {
+  Widget _buildElementThumbs(List<ContentPreviewItem> previewItems) {
+    if (previewItems.isEmpty) {
       return Container(
         width: 44,
         height: 44,
@@ -967,37 +942,39 @@ class _PendingOrganizePageState extends State<PendingOrganizePage> {
       );
     }
 
-    final hasMore = imageSources.length > 1;
+    final hasDirectSecondary = previewItems.length == 2;
+    final hasOverflow = previewItems.length > 2;
     return SizedBox(
-      width: hasMore ? 90 : 44,
+      width: previewItems.length > 1 ? 90 : 44,
       height: 44,
       child: Row(
         children: [
-          _buildElementThumb(imageSources.first),
-          if (hasMore)
+          _buildElementThumb(previewItems.first),
+          if (hasDirectSecondary)
+            Padding(
+              padding: const EdgeInsets.only(left: 2),
+              child: _buildElementThumb(previewItems[1]),
+            ),
+          if (hasOverflow)
             Container(
               width: 44,
               height: 44,
               margin: const EdgeInsets.only(left: 2),
               clipBehavior: Clip.hardEdge,
               decoration: const BoxDecoration(color: Color(0xFFF1F1F3)),
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  _buildElementThumb(imageSources[1]),
-                  Container(
-                    alignment: Alignment.center,
-                    color: Colors.white.withValues(alpha: 0.62),
-                    child: Text(
-                      '+${imageSources.length - 1}',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.black87,
-                      ),
-                    ),
-                  ),
-                ],
+              child: ContentPreviewOverflowCard(
+                item: previewItems[1],
+                label: '+${previewItems.length - 1}',
+                width: 44,
+                height: 44,
+                decoration: const BoxDecoration(color: Color(0xFFF1F1F3)),
+                textStyle: const TextStyle(
+                  fontSize: 8.5,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.black87,
+                  height: 1.1,
+                ),
+                maxLines: 3,
               ),
             ),
         ],
@@ -1005,29 +982,22 @@ class _PendingOrganizePageState extends State<PendingOrganizePage> {
     );
   }
 
-  Widget _buildElementThumb(String imageSource) {
+  Widget _buildElementThumb(ContentPreviewItem item) {
     return SizedBox(
       width: 44,
       height: 44,
-      child: Image(
-        image: ResizeImage.resizeIfNeeded(
-          120,
-          null,
-          narrativeThumbnailProvider(imageSource),
+      child: ContentPreviewCard(
+        item: item,
+        width: 44,
+        height: 44,
+        decoration: const BoxDecoration(color: Color(0xFFF1F1F3)),
+        textStyle: const TextStyle(
+          fontSize: 8.5,
+          fontWeight: FontWeight.w500,
+          color: Colors.black87,
+          height: 1.1,
         ),
-        fit: BoxFit.cover,
-        filterQuality: FilterQuality.low,
-        errorBuilder: (context, error, stackTrace) {
-          return Container(
-            color: const Color(0xFFF1F1F3),
-            alignment: Alignment.center,
-            child: const Icon(
-              Icons.broken_image_outlined,
-              color: Colors.black26,
-              size: 16,
-            ),
-          );
-        },
+        maxLines: 3,
       ),
     );
   }

@@ -1,15 +1,14 @@
-import 'dart:ui';
-
 import 'package:echo/features/structure_elements_relations/domain/element_status.dart';
 import 'package:echo/features/structure_elements_relations/presentation/models/structure_chapter_card_data.dart';
 import 'package:echo/features/structure_elements_relations/presentation/models/structure_relation_card_data.dart';
 import 'package:echo/features/structure_elements_relations/presentation/widgets/chapter_card.dart';
-import 'package:echo/features/structure_elements_relations/presentation/widgets/narrative_thumbnail_provider.dart';
 import 'package:echo/features/structure_elements_relations/presentation/widgets/narrative_list_tile.dart';
 import 'package:echo/features/structure_elements_relations/presentation/widgets/relation_card.dart';
 import 'package:echo/features/structure_elements_relations/presentation/widgets/section_tab_bar.dart';
 import 'package:echo/features/structure_elements_relations/presentation/widgets/sticky_chapter_header_delegate.dart';
+import 'package:echo/shared/models/content_preview_item.dart';
 import 'package:echo/shared/models/prototype_tab.dart';
+import 'package:echo/shared/widgets/content_preview_card.dart';
 import 'package:echo/shared/widgets/custom_bottom_nav_bar.dart';
 import 'package:flutter/material.dart';
 
@@ -206,11 +205,10 @@ class _StructurePagePrototypeState extends State<StructurePagePrototype> {
             extraTopRightWidget: _buildStatusIndicator(
               widget.chapterCards[index].statusLabel,
             ),
-            customContent:
-                widget.chapterCards[index].previewImageSources.isEmpty
+            customContent: widget.chapterCards[index].previewItems.isEmpty
                 ? _buildDescriptionText(widget.chapterCards[index].description)
                 : _buildChapterPhotoStrip(
-                    widget.chapterCards[index].previewImageSources,
+                    widget.chapterCards[index].previewItems,
                   ),
           ),
         _buildAddChapterButton(),
@@ -264,7 +262,11 @@ class _StructurePagePrototypeState extends State<StructurePagePrototype> {
                       title: item['title'],
                       description: item['desc'],
                       status: item['status'],
-                      images: item['images'],
+                      previewItems: item['previewItems'] is List
+                          ? List<ContentPreviewItem>.from(
+                              item['previewItems'] as List,
+                            )
+                          : const <ContentPreviewItem>[],
                       onTap: widget.onOpenElement == null
                           ? null
                           : () => widget.onOpenElement!(item['id'] as String),
@@ -395,26 +397,31 @@ class _StructurePagePrototypeState extends State<StructurePagePrototype> {
   }
 
   Widget _buildDescriptionText(String text, {bool isItalic = false}) {
-    return Text(
-      text,
-      maxLines: 2,
-      overflow: TextOverflow.ellipsis,
-      style: TextStyle(
-        fontSize: 14,
-        color: Colors.grey.shade600,
-        height: 1.6,
-        fontStyle: isItalic ? FontStyle.italic : FontStyle.normal,
-      ),
+    final style = TextStyle(
+      fontSize: 14,
+      color: Colors.grey.shade600,
+      height: 1.6,
+      fontStyle: isItalic ? FontStyle.italic : FontStyle.normal,
     );
+    final trimmedText = text.trim();
+    if (trimmedText.isNotEmpty) {
+      return Text(
+        trimmedText,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: style,
+      );
+    }
+
+    final lineHeight = (style.fontSize ?? 14) * (style.height ?? 1);
+    return SizedBox(height: lineHeight * 2);
   }
 
-  Widget _buildChapterPhotoStrip(List<String> previewImageSources) {
-    final totalCount = previewImageSources.length;
-    final visibleImages = totalCount > 2
-        ? previewImageSources.take(2).toList()
-        : previewImageSources.take(2).toList();
+  Widget _buildChapterPhotoStrip(List<ContentPreviewItem> previewItems) {
+    final totalCount = previewItems.length;
+    final visibleItems = previewItems.take(2).toList(growable: false);
     final overflowCount = totalCount > 2 ? totalCount - 2 : 0;
-    final tileCount = visibleImages.length + (overflowCount > 0 ? 1 : 0);
+    final tileCount = visibleItems.length + (overflowCount > 0 ? 1 : 0);
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -428,18 +435,18 @@ class _StructurePagePrototypeState extends State<StructurePagePrototype> {
 
         return Row(
           children: [
-            for (var index = 0; index < visibleImages.length; index++)
+            for (var index = 0; index < visibleItems.length; index++)
               _buildChapterPreviewImage(
-                visibleImages[index],
+                visibleItems[index],
                 size: tileSize,
                 addLeftSpacing: index > 0,
               ),
             if (overflowCount > 0)
               _buildChapterOverflowBox(
                 '+$overflowCount',
-                source: previewImageSources[visibleImages.length],
+                item: previewItems[visibleItems.length],
                 size: tileSize,
-                addLeftSpacing: visibleImages.isNotEmpty,
+                addLeftSpacing: visibleItems.isNotEmpty,
               ),
           ],
         );
@@ -448,32 +455,34 @@ class _StructurePagePrototypeState extends State<StructurePagePrototype> {
   }
 
   Widget _buildChapterPreviewImage(
-    String source, {
+    ContentPreviewItem item, {
     required double size,
     required bool addLeftSpacing,
   }) {
     return Container(
-      key: ValueKey('chapterPreviewImage-$source'),
+      key: ValueKey('chapterPreviewImage-${item.stableId}'),
       width: size,
       height: size,
       margin: EdgeInsets.only(left: addLeftSpacing ? 2 : 0),
-      child: Image(
-        image: ResizeImage.resizeIfNeeded(
-          160,
-          null,
-          narrativeThumbnailProvider(source),
+      child: ContentPreviewCard(
+        item: item,
+        width: size,
+        height: size,
+        decoration: BoxDecoration(color: Colors.grey.shade300),
+        textStyle: TextStyle(
+          fontSize: size < 64 ? 9 : 10,
+          fontWeight: FontWeight.w500,
+          color: Colors.black87,
+          height: 1.15,
         ),
-        fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) {
-          return Container(color: Colors.grey.shade300);
-        },
+        maxLines: 4,
       ),
     );
   }
 
   Widget _buildChapterOverflowBox(
     String text, {
-    required String source,
+    required ContentPreviewItem item,
     required double size,
     required bool addLeftSpacing,
   }) {
@@ -482,48 +491,19 @@ class _StructurePagePrototypeState extends State<StructurePagePrototype> {
       width: size,
       height: size,
       margin: EdgeInsets.only(left: addLeftSpacing ? 2 : 0),
-      clipBehavior: Clip.hardEdge,
-      decoration: BoxDecoration(color: Colors.grey.shade300),
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          Image(
-            image: ResizeImage.resizeIfNeeded(
-              160,
-              null,
-              narrativeThumbnailProvider(source),
-            ),
-            fit: BoxFit.cover,
-            errorBuilder: (context, error, stackTrace) {
-              return Container(color: Colors.grey.shade300);
-            },
-          ),
-          ClipRect(
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 3.5, sigmaY: 3.5),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.18),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.16),
-                    width: 0.8,
-                  ),
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  text,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w300,
-                    fontSize: 13,
-                    color: Colors.black87,
-                    letterSpacing: 0.2,
-                    fontFeatures: <FontFeature>[FontFeature.tabularFigures()],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
+      child: ContentPreviewOverflowCard(
+        item: item,
+        label: text,
+        width: size,
+        height: size,
+        decoration: BoxDecoration(color: Colors.grey.shade300),
+        textStyle: TextStyle(
+          fontSize: size < 64 ? 9 : 10,
+          fontWeight: FontWeight.w500,
+          color: Colors.black87,
+          height: 1.15,
+        ),
+        maxLines: 4,
       ),
     );
   }

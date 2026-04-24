@@ -1,7 +1,8 @@
 import 'dart:ui';
 
 import 'package:echo/features/curation/presentation/models/pending_organize_models.dart';
-import 'package:echo/features/structure_elements_relations/presentation/widgets/narrative_thumbnail_provider.dart';
+import 'package:echo/shared/models/content_preview_item.dart';
+import 'package:echo/shared/widgets/content_preview_card.dart';
 import 'package:flutter/material.dart';
 
 class PendingRelationGroupSelectionPage extends StatefulWidget {
@@ -217,7 +218,7 @@ class _PendingRelationGroupSelectionPageState
               ],
             ),
             const SizedBox(height: 12),
-            if (group.imageSources.isEmpty)
+            if (group.previewItems.isEmpty)
               Container(
                 width: 64,
                 height: 64,
@@ -243,14 +244,14 @@ class _PendingRelationGroupSelectionPageState
                   children: [
                     for (
                       var index = 0;
-                      index < group.imageSources.length;
+                      index < group.previewItems.length;
                       index++
                     )
                       Padding(
                         padding: EdgeInsets.only(
-                          right: index == group.imageSources.length - 1 ? 0 : 8,
+                          right: index == group.previewItems.length - 1 ? 0 : 8,
                         ),
-                        child: _buildPhotoThumb(group.imageSources[index]),
+                        child: _buildPreviewThumb(group.previewItems[index]),
                       ),
                   ],
                 ),
@@ -261,32 +262,25 @@ class _PendingRelationGroupSelectionPageState
     );
   }
 
-  Widget _buildPhotoThumb(String imageSource) {
-    return Container(
+  Widget _buildPreviewThumb(ContentPreviewItem previewItem) {
+    return SizedBox(
       width: 64,
       height: 64,
-      clipBehavior: Clip.hardEdge,
-      decoration: BoxDecoration(
-        color: const Color(0xFFF7F7F9),
-        border: Border.all(color: Colors.black12, width: 0.8),
-      ),
-      child: Image(
-        image: ResizeImage.resizeIfNeeded(
-          180,
-          null,
-          narrativeThumbnailProvider(imageSource),
+      child: ContentPreviewCard(
+        item: previewItem,
+        width: 64,
+        height: 64,
+        decoration: BoxDecoration(
+          color: const Color(0xFFF7F7F9),
+          border: Border.all(color: Colors.black12, width: 0.8),
         ),
-        fit: BoxFit.cover,
-        filterQuality: FilterQuality.low,
-        errorBuilder: (context, error, stackTrace) {
-          return const Center(
-            child: Icon(
-              Icons.broken_image_outlined,
-              color: Colors.black26,
-              size: 18,
-            ),
-          );
-        },
+        textStyle: const TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w500,
+          color: Colors.black87,
+          height: 1.15,
+        ),
+        maxLines: 4,
       ),
     );
   }

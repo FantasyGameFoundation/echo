@@ -156,6 +156,48 @@ void main() {
   });
 
   testWidgets(
+    'chapter drag downward can move the first chapter after the next chapter',
+    (tester) async {
+      _setLargeSurface(tester);
+
+      final harnessKey = GlobalKey<_ArrangeHarnessState>();
+      await tester.pumpWidget(
+        MaterialApp(home: _ArrangeHarness(key: harnessKey)),
+      );
+      await tester.pumpAndSettle();
+
+      final chapterOneStart = tester.getCenter(
+        find.byKey(const ValueKey('globalArrangeChapterHeader-chapter-1')),
+      );
+      final chapterTwoRect = tester.getRect(
+        find.byKey(const ValueKey('globalArrangeChapterHeader-chapter-2')),
+      );
+      final dragGesture = await _startLongPressDrag(
+        tester,
+        find.byKey(const ValueKey('globalArrangeChapterHeader-chapter-1')),
+      );
+
+      await _dragSmoothly(
+        tester,
+        gesture: dragGesture,
+        start: chapterOneStart,
+        end: Offset(chapterTwoRect.center.dx, chapterTwoRect.bottom + 72),
+      );
+      await dragGesture.up();
+      await tester.pumpAndSettle();
+
+      expect(harnessKey.currentState!.lastMovedChapterId, 'chapter-1');
+      expect(harnessKey.currentState!.lastChapterTargetIndex, isNotNull);
+      expect(
+        harnessKey.currentState!.boardData.chapters
+            .map((chapter) => chapter.chapterId)
+            .toList(),
+        <String>['chapter-2', 'chapter-1'],
+      );
+    },
+  );
+
+  testWidgets(
     'element drag keeps the source placeholder and impacted element visible',
     (tester) async {
       _setLargeSurface(tester);
@@ -513,6 +555,107 @@ void main() {
 
     expect(movedElementY, greaterThan(unassignedElementY));
   });
+
+  testWidgets('unassigned chapter keeps chapter styling but is not draggable', (
+    tester,
+  ) async {
+    _setLargeSurface(tester);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: _ArrangeHarness(initialBoardData: _seedBoardDataWithUnassigned()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('globalArrangeChapterHeader-unassigned')),
+      findsOneWidget,
+    );
+
+    final dragGesture = await _startLongPressDrag(
+      tester,
+      find.byKey(const ValueKey('globalArrangeChapterHeader-unassigned')),
+    );
+    await tester.pump(const Duration(milliseconds: 32));
+    await dragGesture.up();
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(
+        const ValueKey('globalArrangeChapterPlaceholder-chapter-unassigned'),
+      ),
+      findsNothing,
+    );
+  });
+
+  testWidgets('photo can move from element into loose photo pool', (
+    tester,
+  ) async {
+    _setLargeSurface(tester);
+    final harnessKey = GlobalKey<_ArrangeHarnessState>();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: _ArrangeHarness(
+          key: harnessKey,
+          initialBoardData: _seedBoardDataWithUnassigned(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('globalArrangePhotoCard-loose-photo-1')),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
+    final sourcePhoto = tester.getCenter(
+      find.byKey(const ValueKey('globalArrangePhotoCard-photo-3')),
+    );
+    final dragGesture = await _startLongPressDrag(
+      tester,
+      find.byKey(const ValueKey('globalArrangePhotoCard-photo-3')),
+    );
+    final loosePoolTarget = tester.getCenter(
+      find.byKey(const ValueKey('globalArrangePhotoCard-loose-photo-1')),
+    );
+    await _dragSmoothly(
+      tester,
+      gesture: dragGesture,
+      start: sourcePhoto,
+      end: loosePoolTarget + const Offset(0, 40),
+    );
+    await dragGesture.up();
+    await tester.pumpAndSettle();
+
+    expect(
+      harnessKey.currentState!.boardData.unassignedPhotos.map(
+        (photo) => photo.photoId,
+      ),
+      contains('photo-3'),
+    );
+  });
+
+  test('loose photo model move can place a pool photo under an element', () {
+    final updated = _movePhoto(
+      boardData: _seedBoardDataWithUnassigned(),
+      sourceElementId: globalArrangeLoosePhotoBucketId,
+      sourcePhotoIndex: 0,
+      targetElementId: 'element-unassigned',
+      targetPhotoIndex: 1,
+    );
+
+    expect(
+      updated.unassignedPhotos.map((photo) => photo.photoId),
+      isNot(contains('loose-photo-1')),
+    );
+    expect(
+      updated.unassignedElements.first.photos.map((photo) => photo.photoId),
+      contains('loose-photo-1'),
+    );
+  });
 }
 
 void _setLargeSurface(WidgetTester tester) {
@@ -563,6 +706,7 @@ Future<void> _dragSmoothly(
 
 class _ArrangeHarness extends StatefulWidget {
   const _ArrangeHarness({
+    super.key,
     this.initialBoardData,
     this.elementMoveDelay = Duration.zero,
   });
@@ -577,6 +721,8 @@ class _ArrangeHarness extends StatefulWidget {
 class _ArrangeHarnessState extends State<_ArrangeHarness> {
   late GlobalArrangeBoardData boardData =
       widget.initialBoardData ?? _seedBoardData();
+  int? lastChapterTargetIndex;
+  String? lastMovedChapterId;
 
   @override
   Widget build(BuildContext context) {
@@ -588,6 +734,8 @@ class _ArrangeHarnessState extends State<_ArrangeHarness> {
       onOpenPendingOrganize: () async {},
       onMoveChapter: ({required chapterId, required targetIndex}) async {
         setState(() {
+          lastMovedChapterId = chapterId;
+          lastChapterTargetIndex = targetIndex;
           boardData = _moveChapter(
             boardData: boardData,
             chapterId: chapterId,
@@ -737,6 +885,14 @@ GlobalArrangeBoardData _seedBoardDataWithUnassigned() {
         ],
       ),
     ],
+    unassignedPhotos: const <GlobalArrangePhotoData>[
+      GlobalArrangePhotoData(
+        photoId: 'loose-photo-1',
+        imageSource: '/tmp/loose-photo-1.jpg',
+        relationTags: <String>[],
+        sourceRecordId: 'record-1',
+      ),
+    ],
   );
 }
 
@@ -757,6 +913,7 @@ GlobalArrangeBoardData _moveChapter({
   return GlobalArrangeBoardData(
     chapters: chapters,
     unassignedElements: boardData.unassignedElements.map(_copyElement).toList(),
+    unassignedPhotos: boardData.unassignedPhotos.map(_copyPhoto).toList(),
   );
 }
 
@@ -804,6 +961,7 @@ GlobalArrangeBoardData _moveElement({
   return GlobalArrangeBoardData(
     chapters: chapters,
     unassignedElements: unassigned,
+    unassignedPhotos: boardData.unassignedPhotos.map(_copyPhoto).toList(),
   );
 }
 
@@ -818,9 +976,20 @@ GlobalArrangeBoardData _movePhoto({
   final unassigned = boardData.unassignedElements
       .map(_copyElement)
       .toList(growable: true);
+  final loosePhotos = boardData.unassignedPhotos
+      .map(_copyPhoto)
+      .toList(growable: true);
 
   GlobalArrangeElementData? sourceElement;
   GlobalArrangeElementData? targetElement;
+  List<GlobalArrangePhotoData>? sourceBucket;
+  List<GlobalArrangePhotoData>? targetBucket;
+  if (sourceElementId == globalArrangeLoosePhotoBucketId) {
+    sourceBucket = loosePhotos;
+  }
+  if (targetElementId == globalArrangeLoosePhotoBucketId) {
+    targetBucket = loosePhotos;
+  }
   for (final chapter in chapters) {
     for (final element in chapter.elements) {
       if (element.elementId == sourceElementId) {
@@ -839,22 +1008,37 @@ GlobalArrangeBoardData _movePhoto({
       targetElement = element;
     }
   }
-  if (sourceElement == null ||
-      targetElement == null ||
-      sourcePhotoIndex < 0 ||
-      sourcePhotoIndex >= sourceElement.photos.length) {
+  if (sourceBucket == null && sourceElement == null) {
+    return boardData;
+  }
+  if (targetBucket == null && targetElement == null) {
     return boardData;
   }
 
-  final movedPhoto = sourceElement.photos.removeAt(sourcePhotoIndex);
-  targetElement.photos.insert(
-    targetPhotoIndex.clamp(0, targetElement.photos.length),
+  GlobalArrangePhotoData? movedPhoto;
+  if (sourceBucket != null) {
+    if (sourcePhotoIndex < 0 || sourcePhotoIndex >= sourceBucket.length) {
+      return boardData;
+    }
+    movedPhoto = sourceBucket.removeAt(sourcePhotoIndex);
+  } else {
+    if (sourcePhotoIndex < 0 ||
+        sourcePhotoIndex >= sourceElement!.photos.length) {
+      return boardData;
+    }
+    movedPhoto = sourceElement.photos.removeAt(sourcePhotoIndex);
+  }
+
+  final targetPhotos = targetBucket ?? targetElement!.photos;
+  targetPhotos.insert(
+    targetPhotoIndex.clamp(0, targetPhotos.length),
     movedPhoto,
   );
 
   return GlobalArrangeBoardData(
     chapters: chapters,
     unassignedElements: unassigned,
+    unassignedPhotos: loosePhotos,
   );
 }
 
@@ -880,5 +1064,6 @@ GlobalArrangePhotoData _copyPhoto(GlobalArrangePhotoData photo) {
     photoId: photo.photoId,
     imageSource: photo.imageSource,
     relationTags: List<String>.from(photo.relationTags),
+    sourceRecordId: photo.sourceRecordId,
   );
 }

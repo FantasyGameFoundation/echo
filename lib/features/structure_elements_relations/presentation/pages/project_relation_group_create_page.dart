@@ -2,12 +2,12 @@ import 'package:echo/features/structure_elements_relations/domain/entities/narra
 import 'package:echo/features/structure_elements_relations/domain/entities/project_relation_type.dart';
 import 'package:echo/features/structure_elements_relations/domain/entities/structure_chapter.dart';
 import 'package:echo/features/structure_elements_relations/domain/models/project_relation_draft_member.dart';
-import 'package:echo/features/content_cards/domain/entities/text_card.dart';
 import 'package:echo/features/structure_elements_relations/presentation/pages/project_relation_group_selection_page.dart';
 import 'package:echo/features/structure_elements_relations/presentation/widgets/compact_remove_button.dart';
 import 'package:echo/features/structure_elements_relations/presentation/widgets/editor_bottom_action_bar.dart';
 import 'package:echo/features/structure_elements_relations/presentation/widgets/editor_confirmation_dialog.dart';
-import 'package:echo/features/structure_elements_relations/presentation/widgets/narrative_thumbnail_provider.dart';
+import 'package:echo/shared/models/content_preview_item.dart';
+import 'package:echo/shared/widgets/content_preview_card.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -28,7 +28,6 @@ class ProjectRelationGroupCreatePage extends StatefulWidget {
     super.key,
     required this.relationType,
     required this.narrativeElements,
-    required this.textCards,
     required this.chapters,
     required this.onCreateRelationGroup,
     this.onUpdateRelationGroup,
@@ -40,7 +39,6 @@ class ProjectRelationGroupCreatePage extends StatefulWidget {
 
   final ProjectRelationType relationType;
   final List<NarrativeElement> narrativeElements;
-  final List<TextCard> textCards;
   final List<StructureChapter> chapters;
   final CreateProjectRelationGroup onCreateRelationGroup;
   final UpdateProjectRelationGroup? onUpdateRelationGroup;
@@ -157,8 +155,6 @@ class _ProjectRelationGroupCreatePageState
     switch (member.kind) {
       case ProjectRelationTargetKind.element:
         return 'element:${member.elementId}';
-      case ProjectRelationTargetKind.textCard:
-        return 'text-card:${member.textCardId}';
       case ProjectRelationTargetKind.photo:
         return 'photo:${member.sourceElementId}:${member.photoPath}';
     }
@@ -181,9 +177,6 @@ class _ProjectRelationGroupCreatePageState
       for (final element in widget.narrativeElements)
         element.elementId: element,
     };
-    final textCardsById = <String, TextCard>{
-      for (final textCard in widget.textCards) textCard.textCardId: textCard,
-    };
 
     final nodes = <_AssemblyNode>[];
     for (final member in members) {
@@ -203,27 +196,11 @@ class _ProjectRelationGroupCreatePageState
             ),
           );
         case ProjectRelationTargetKind.photo:
-          final sourceElement = elementsById[member.sourceElementId];
           nodes.add(
             _AssemblyNode.photo(
-              title: sourceElement?.title ?? '未命名照片',
-              chapterSeq: _chapterSequence(
-                chaptersById[sourceElement?.owningChapterId]?.sortOrder,
-              ),
-              imageSource: member.photoPath,
-              draftMember: member,
-            ),
-          );
-        case ProjectRelationTargetKind.textCard:
-          final textCard = textCardsById[member.textCardId];
-          if (textCard == null) {
-            continue;
-          }
-          nodes.add(
-            _AssemblyNode.element(
-              title: textCard.title,
-              chapterSeq: _chapterSequence(
-                chaptersById[textCard.owningChapterId]?.sortOrder,
+              previewItem: ContentPreviewItem.photo(
+                stableId: member.photoPath ?? 'missing-photo',
+                imageSource: member.photoPath ?? '',
               ),
               draftMember: member,
             ),
@@ -664,15 +641,18 @@ class _ProjectRelationGroupCreatePageState
                       ),
                     ),
                     const SizedBox(height: 4),
-                    Text(
-                      node.title,
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      style: const TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.black87,
-                        height: 1.2,
+                    Expanded(
+                      child: Text(
+                        node.title,
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black87,
+                          height: 1.2,
+                        ),
                       ),
                     ),
                   ],
@@ -691,37 +671,18 @@ class _ProjectRelationGroupCreatePageState
         Stack(
           clipBehavior: Clip.none,
           children: [
-            Container(
+            SizedBox(
               width: size,
               height: size,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                boxShadow: subtleShadow,
+              child: ContentPreviewCard(
+                item: node.previewItem!,
+                width: size,
+                height: size,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  boxShadow: subtleShadow,
+                ),
               ),
-              child: node.imageSource != null
-                  ? Image(
-                      image: narrativeThumbnailProvider(node.imageSource!),
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return const Center(
-                          child: Icon(
-                            Icons.broken_image_outlined,
-                            color: Colors.black12,
-                            size: 18,
-                          ),
-                        );
-                      },
-                    )
-                  : Center(
-                      child: Text(
-                        'WAITING',
-                        style: TextStyle(
-                          fontSize: 8,
-                          letterSpacing: 1.0,
-                          color: Colors.black.withValues(alpha: 0.15),
-                        ),
-                      ),
-                    ),
             ),
             _buildNodeRemoveButton(node, index),
           ],
@@ -751,22 +712,18 @@ class _ProjectRelationGroupCreatePageState
 class _AssemblyNode {
   const _AssemblyNode({
     required this.type,
-    required this.title,
-    required this.chapterSeq,
-    required this.imageSource,
+    this.title = '',
+    this.chapterSeq = '--',
+    this.previewItem,
     required this.draftMember,
   });
 
   const _AssemblyNode.photo({
-    required String title,
-    required String chapterSeq,
-    required String? imageSource,
+    required ContentPreviewItem previewItem,
     required ProjectRelationDraftMember draftMember,
   }) : this(
          type: _AssemblyNodeType.photo,
-         title: title,
-         chapterSeq: chapterSeq,
-         imageSource: imageSource,
+         previewItem: previewItem,
          draftMember: draftMember,
        );
 
@@ -778,7 +735,7 @@ class _AssemblyNode {
          type: _AssemblyNodeType.element,
          title: title,
          chapterSeq: chapterSeq,
-         imageSource: null,
+         previewItem: null,
          draftMember: draftMember,
        );
 
@@ -787,13 +744,13 @@ class _AssemblyNode {
         type: _AssemblyNodeType.addPlaceholder,
         title: '',
         chapterSeq: '--',
-        imageSource: null,
+        previewItem: null,
         draftMember: null,
       );
 
   final _AssemblyNodeType type;
   final String title;
   final String chapterSeq;
-  final String? imageSource;
+  final ContentPreviewItem? previewItem;
   final ProjectRelationDraftMember? draftMember;
 }

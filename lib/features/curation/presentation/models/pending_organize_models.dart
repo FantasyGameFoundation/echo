@@ -1,3 +1,5 @@
+import 'package:echo/shared/models/content_preview_item.dart';
+
 class PendingOrganizePageData {
   const PendingOrganizePageData({
     this.entries = const <PendingOrganizeEntryData>[],
@@ -12,7 +14,7 @@ class PendingOrganizePageData {
   final List<PendingOrganizeRelationTypeOption> relationTypes;
 }
 
-enum PendingOrganizeEntryType { photo, text }
+enum PendingOrganizeEntryType { photo }
 
 class PendingOrganizeEntryData {
   const PendingOrganizeEntryData.photo({
@@ -25,23 +27,7 @@ class PendingOrganizeEntryData {
     this.title = '',
     this.description = '',
     this.sourceRelationGroupIds = const <String>[],
-  }) : type = PendingOrganizeEntryType.photo,
-       textCardId = null,
-       body = null;
-
-  const PendingOrganizeEntryData.text({
-    required this.entryId,
-    required this.textCardId,
-    required this.body,
-    this.sourceChapterId,
-    this.sourceElementId,
-    this.sourceRelationGroupIds = const <String>[],
-  }) : type = PendingOrganizeEntryType.text,
-       imageSource = null,
-       photoPath = null,
-       sourceRecordId = null,
-       title = '',
-       description = '';
+  }) : type = PendingOrganizeEntryType.photo;
 
   final String entryId;
   final PendingOrganizeEntryType type;
@@ -50,10 +36,8 @@ class PendingOrganizeEntryData {
   final String? sourceElementId;
   final String? sourceChapterId;
   final String? sourceRecordId;
-  final String? textCardId;
   final String title;
   final String description;
-  final String? body;
   final List<String> sourceRelationGroupIds;
 }
 
@@ -62,13 +46,13 @@ class PendingOrganizeChapterOption {
     required this.label,
     required this.sortOrder,
     this.chapterId,
-    this.coverImageSource,
+    this.coverPreviewItem,
   });
 
   final String? chapterId;
   final String label;
   final int sortOrder;
-  final String? coverImageSource;
+  final ContentPreviewItem? coverPreviewItem;
 }
 
 class PendingOrganizeElementOption {
@@ -79,7 +63,7 @@ class PendingOrganizeElementOption {
     required this.chapterId,
     required this.chapterLabel,
     required this.sortOrder,
-    this.imageSources = const <String>[],
+    this.previewItems = const <ContentPreviewItem>[],
   });
 
   final String elementId;
@@ -88,7 +72,7 @@ class PendingOrganizeElementOption {
   final String? chapterId;
   final String chapterLabel;
   final int sortOrder;
-  final List<String> imageSources;
+  final List<ContentPreviewItem> previewItems;
 }
 
 class PendingOrganizeRelationTypeOption {
@@ -108,13 +92,13 @@ class PendingOrganizeRelationGroupOption {
     required this.groupId,
     required this.relationTypeId,
     required this.title,
-    required this.imageSources,
+    required this.previewItems,
   });
 
   final String groupId;
   final String relationTypeId;
   final String title;
-  final List<String> imageSources;
+  final List<ContentPreviewItem> previewItems;
 }
 
 class PendingOrganizeSaveRequest {
@@ -126,26 +110,13 @@ class PendingOrganizeSaveRequest {
     required this.targetChapterId,
     required this.targetElementId,
     required this.relationGroupIds,
-  }) : type = PendingOrganizeEntryType.photo,
-       textCardId = null;
-
-  const PendingOrganizeSaveRequest.text({
-    required this.entryId,
-    required this.textCardId,
-    required this.targetChapterId,
-    required this.targetElementId,
-    required this.relationGroupIds,
-  }) : type = PendingOrganizeEntryType.text,
-       photoPath = null,
-       sourceElementId = null,
-       sourceRecordId = null;
+  }) : type = PendingOrganizeEntryType.photo;
 
   final String entryId;
   final PendingOrganizeEntryType type;
   final String? photoPath;
   final String? sourceElementId;
   final String? sourceRecordId;
-  final String? textCardId;
   final String? targetChapterId;
   final String? targetElementId;
   final List<String> relationGroupIds;

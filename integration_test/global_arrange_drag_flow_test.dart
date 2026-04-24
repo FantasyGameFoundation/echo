@@ -7,6 +7,45 @@ import 'package:integration_test/integration_test.dart';
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
+  testWidgets('live chapter downward drag reorders chapters', (tester) async {
+    final harnessKey = GlobalKey<_ArrangeHarnessState>();
+
+    await binding.setSurfaceSize(const Size(430, 2400));
+    await tester.pumpWidget(
+      MaterialApp(home: _ArrangeHarness(key: harnessKey)),
+    );
+    await tester.pumpAndSettle();
+
+    final chapterOneStart = tester.getCenter(
+      find.byKey(const ValueKey('globalArrangeChapterHeader-chapter-1')),
+    );
+    final chapterTwoRect = tester.getRect(
+      find.byKey(const ValueKey('globalArrangeChapterHeader-chapter-2')),
+    );
+    final chapterGesture = await _startLongPressDrag(
+      tester,
+      find.byKey(const ValueKey('globalArrangeChapterHeader-chapter-1')),
+    );
+
+    await _dragSmoothly(
+      tester,
+      gesture: chapterGesture,
+      start: chapterOneStart,
+      end: Offset(chapterTwoRect.center.dx, chapterTwoRect.bottom + 72),
+    );
+    await chapterGesture.up();
+    await tester.pumpAndSettle();
+
+    expect(
+      harnessKey.currentState!.boardData.chapters
+          .map((chapter) => chapter.chapterId)
+          .toList(),
+      <String>['chapter-2', 'chapter-1'],
+    );
+
+    await binding.takeScreenshot('global-arrange-chapter-downward-drag');
+  });
+
   testWidgets(
     'live drag flow keeps placeholders visible and preserves chapter element photo order',
     (tester) async {
@@ -24,22 +63,12 @@ void main() {
         tester,
         find.byKey(const ValueKey('globalArrangeChapterHeader-chapter-1')),
       );
+      final chapterTwoRect = tester.getRect(
+        find.byKey(const ValueKey('globalArrangeChapterHeader-chapter-2')),
+      );
       final chapterTwoTarget = Offset(
-        tester
-            .getCenter(
-              find.byKey(
-                const ValueKey('globalArrangeChapterHeader-chapter-2'),
-              ),
-            )
-            .dx,
-        tester
-                .getCenter(
-                  find.byKey(
-                    const ValueKey('globalArrangeChapterHeader-chapter-2'),
-                  ),
-                )
-                .dy +
-            52,
+        chapterTwoRect.center.dx,
+        chapterTwoRect.bottom + 132,
       );
       expect(
         find.byKey(const ValueKey('globalArrangeChapterPlaceholder-chapter-1')),
@@ -61,22 +90,12 @@ void main() {
         tester,
         find.byKey(const ValueKey('globalArrangeElementHeader-element-1')),
       );
+      final elementThreeRect = tester.getRect(
+        find.byKey(const ValueKey('globalArrangeElementHeader-element-3')),
+      );
       final elementThreeTarget = Offset(
-        tester
-            .getCenter(
-              find.byKey(
-                const ValueKey('globalArrangeElementHeader-element-3'),
-              ),
-            )
-            .dx,
-        tester
-                .getCenter(
-                  find.byKey(
-                    const ValueKey('globalArrangeElementHeader-element-3'),
-                  ),
-                )
-                .dy +
-            44,
+        elementThreeRect.center.dx,
+        elementThreeRect.bottom + 96,
       );
       expect(
         find.byKey(const ValueKey('globalArrangeElementPlaceholder-element-1')),
@@ -102,7 +121,7 @@ void main() {
           tester.getCenter(
             find.byKey(const ValueKey('globalArrangePhotoCard-photo-4')),
           ) +
-          const Offset(140, 0);
+          const Offset(196, 0);
       expect(
         find.byKey(const ValueKey('globalArrangePhotoPlaceholder-photo-2')),
         findsOneWidget,
@@ -157,7 +176,7 @@ Future<void> _dragSmoothly(
   required TestGesture gesture,
   required Offset start,
   required Offset end,
-  int steps = 8,
+  int steps = 12,
 }) async {
   for (var step = 1; step <= steps; step++) {
     final t = step / steps;

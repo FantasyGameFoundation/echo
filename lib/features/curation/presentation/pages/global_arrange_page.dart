@@ -8,15 +8,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
 const Object _retainHoverChapterId = Object();
+const String globalArrangeLoosePhotoBucketId =
+    '__global_arrange_loose_photo_bucket__';
 
 class GlobalArrangeBoardData {
   const GlobalArrangeBoardData({
     required this.chapters,
     this.unassignedElements = const <GlobalArrangeElementData>[],
+    this.unassignedPhotos = const <GlobalArrangePhotoData>[],
   });
 
   final List<GlobalArrangeChapterData> chapters;
   final List<GlobalArrangeElementData> unassignedElements;
+  final List<GlobalArrangePhotoData> unassignedPhotos;
 }
 
 class GlobalArrangeChapterData {
@@ -50,11 +54,13 @@ class GlobalArrangePhotoData {
     required this.photoId,
     required this.imageSource,
     required this.relationTags,
+    this.sourceRecordId,
   });
 
   final String photoId;
   final String imageSource;
   final List<String> relationTags;
+  final String? sourceRecordId;
 }
 
 class GlobalArrangePage extends StatefulWidget {
@@ -115,6 +121,7 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
   static const double _autoScrollMinStep = 2.0;
   static const double _autoScrollMaxStep = 14.0;
   static const double _chapterDragExtent = 54.0;
+  static const double _chapterTailGapExtent = 96.0;
   static const double _elementDragExtent = 42.0;
   static const double _elementAfterThresholdCap = 72.0;
   static const double _elementInactiveGapExtent = 20.0;
@@ -155,13 +162,16 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
 
   late List<_ArrangeChapterVm> _chapters;
   late List<_ArrangeElementVm> _unassignedElements;
+  late List<_ArrangePhotoVm> _unassignedPhotos;
   String? _activeTag;
   _ActiveTagSource? _activeTagSource;
   _DragKind? _activeDragKind;
   _ChapterDragState? _chapterDragState;
   Offset? _latestDragGlobalPosition;
   Duration? _lastAutoScrollElapsed;
+  bool _chapterDragFinalizing = false;
   bool _elementDragFinalizing = false;
+  bool _isUnassignedChapterExpanded = true;
 
   _ElementDragState? get _elementDragState => _elementDragStateListenable.value;
   set _elementDragState(_ElementDragState? value) {
@@ -209,6 +219,9 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
         .toList(growable: true);
     _unassignedElements = widget.boardData.unassignedElements
         .map(_ArrangeElementVm.fromData)
+        .toList(growable: true);
+    _unassignedPhotos = widget.boardData.unassignedPhotos
+        .map(_ArrangePhotoVm.fromData)
         .toList(growable: true);
 
     _expandedChapterIds
@@ -262,6 +275,12 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
       } else {
         _expandedChapterIds.add(chapterId);
       }
+    });
+  }
+
+  void _toggleUnassignedChapter() {
+    setState(() {
+      _isUnassignedChapterExpanded = !_isUnassignedChapterExpanded;
     });
   }
 
@@ -583,6 +602,22 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
     return _chapters[_chapterIndexById(chapterId)].elements;
   }
 
+  _ArrangeElementVm _unassignedPhotoBucket() {
+    return _ArrangeElementVm(
+      elementId: globalArrangeLoosePhotoBucketId,
+      title: '未关联照片',
+      relationTags: const <String>[],
+      photos: _unassignedPhotos,
+    );
+  }
+
+  List<_ArrangePhotoVm>? _photosForContainer(String containerId) {
+    if (containerId == globalArrangeLoosePhotoBucketId) {
+      return _unassignedPhotos;
+    }
+    return _findElement(containerId).element?.photos;
+  }
+
   Future<void> _handleChapterDrop(
     _ChapterDragPayload payload,
     int targetIndex,
@@ -591,10 +626,7 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
     if (sourceIndex == -1) {
       return;
     }
-    var normalizedTargetIndex = targetIndex;
-    if (sourceIndex < normalizedTargetIndex) {
-      normalizedTargetIndex -= 1;
-    }
+    final normalizedTargetIndex = targetIndex.clamp(0, _chapters.length - 1);
     if (normalizedTargetIndex == sourceIndex) {
       return;
     }
@@ -637,6 +669,7 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
         _expandedChapterIds.remove(chapterId);
       }
     });
+    _chapterDragFinalizing = false;
     _ensureAutoScrollRunning();
   }
 
@@ -654,7 +687,31 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
         _activeDragKind = null;
       }
     });
+    _chapterDragFinalizing = false;
     _releaseDragMotion();
+  }
+
+  Future<void> _finishChapterDrag(_ChapterDragPayload payload) async {
+    if (_chapterDragFinalizing) {
+      return;
+    }
+    _chapterDragFinalizing = true;
+    final latestDragGlobalPosition = _latestDragGlobalPosition;
+    _releaseDragMotion();
+    final dragState = _chapterDragState;
+    if (dragState != null) {
+      final targetIndex = latestDragGlobalPosition == null
+          ? dragState.hoverIndex
+          : _resolveChapterDropTarget(latestDragGlobalPosition) ??
+                dragState.hoverIndex;
+      final currentIndex = _chapterIndexById(payload.chapterId);
+      if (currentIndex != targetIndex) {
+        await _handleChapterDrop(payload, targetIndex);
+      }
+    }
+    if (mounted) {
+      _clearChapterDrag();
+    }
   }
 
   void _updateChapterHover({
@@ -675,9 +732,17 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
     if (chapterIndex == -1) {
       return;
     }
-    final nextHoverIndex = localPosition.dy > renderObject.size.height / 2
-        ? chapterIndex + 1
-        : chapterIndex;
+    final sourceIndex = _chapterIndexById(dragState.sourceChapterId);
+    int nextHoverIndex;
+    if (sourceIndex < chapterIndex) {
+      nextHoverIndex = chapterIndex + 1;
+    } else if (sourceIndex > chapterIndex) {
+      nextHoverIndex = chapterIndex;
+    } else {
+      nextHoverIndex = localPosition.dy > renderObject.size.height / 2
+          ? chapterIndex + 1
+          : chapterIndex;
+    }
     if (dragState.hoverIndex == nextHoverIndex) {
       return;
     }
@@ -713,9 +778,24 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
       final topLeft = renderObject.localToGlobal(Offset.zero);
       final rect = topLeft & renderObject.size;
       if (!rect.contains(globalPosition)) {
+        final withinTailLane =
+            globalPosition.dx >= rect.left &&
+            globalPosition.dx <= rect.right &&
+            globalPosition.dy >= rect.bottom &&
+            globalPosition.dy <= rect.bottom + _chapterTailGapExtent;
+        if (withinTailLane) {
+          return index + 1;
+        }
         continue;
       }
       final localPosition = renderObject.globalToLocal(globalPosition);
+      final sourceIndex = _chapterIndexById(_chapterDragState!.sourceChapterId);
+      if (sourceIndex < index) {
+        return index + 1;
+      }
+      if (sourceIndex > index) {
+        return index;
+      }
       return localPosition.dy > renderObject.size.height / 2
           ? index + 1
           : index;
@@ -1006,20 +1086,15 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
     );
   }
 
-  ({_ArrangePhotoVm? photo, int photoIndex, _ArrangeElementVm? element})
-  _findPhoto(String sourceElementId, int photoIndex) {
-    final locatedElement = _findElement(sourceElementId);
-    final element = locatedElement.element;
-    if (element == null ||
-        photoIndex < 0 ||
-        photoIndex >= element.photos.length) {
-      return (photo: null, photoIndex: -1, element: null);
+  ({_ArrangePhotoVm? photo, int photoIndex}) _findPhoto(
+    String sourceContainerId,
+    int photoIndex,
+  ) {
+    final photos = _photosForContainer(sourceContainerId);
+    if (photos == null || photoIndex < 0 || photoIndex >= photos.length) {
+      return (photo: null, photoIndex: -1);
     }
-    return (
-      photo: element.photos[photoIndex],
-      photoIndex: photoIndex,
-      element: element,
-    );
+    return (photo: photos[photoIndex], photoIndex: photoIndex);
   }
 
   Future<void> _handlePhotoDrop(
@@ -1031,15 +1106,14 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
       payload.sourceElementId,
       payload.sourcePhotoIndex,
     );
-    final sourceElement = locatedPhoto.element;
     final photo = locatedPhoto.photo;
-    if (sourceElement == null || photo == null) {
+    if (photo == null) {
       return;
     }
 
-    final locatedTargetElement = _findElement(targetElementId);
-    final targetElement = locatedTargetElement.element;
-    if (targetElement == null) {
+    final sourcePhotos = _photosForContainer(payload.sourceElementId);
+    final targetPhotos = _photosForContainer(targetElementId);
+    if (sourcePhotos == null || targetPhotos == null) {
       return;
     }
 
@@ -1049,23 +1123,23 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
     final previousUnassigned = _unassignedElements
         .map((item) => item.clone())
         .toList();
+    final previousUnassignedPhotos = _unassignedPhotos
+        .map((photo) => photo.clone())
+        .toList();
 
-    var normalizedTargetIndex = targetPhotoIndex.clamp(
-      0,
-      targetElement.photos.length,
-    );
-    if (sourceElement.elementId == targetElement.elementId &&
+    var normalizedTargetIndex = targetPhotoIndex.clamp(0, targetPhotos.length);
+    if (payload.sourceElementId == targetElementId &&
         payload.sourcePhotoIndex < normalizedTargetIndex) {
       normalizedTargetIndex -= 1;
     }
-    if (sourceElement.elementId == targetElement.elementId &&
+    if (payload.sourceElementId == targetElementId &&
         normalizedTargetIndex == payload.sourcePhotoIndex) {
       return;
     }
 
     setState(() {
-      sourceElement.photos.removeAt(payload.sourcePhotoIndex);
-      targetElement.photos.insert(normalizedTargetIndex, photo);
+      sourcePhotos.removeAt(payload.sourcePhotoIndex);
+      targetPhotos.insert(normalizedTargetIndex, photo);
     });
 
     try {
@@ -1079,6 +1153,7 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
       setState(() {
         _chapters = previousChapters;
         _unassignedElements = previousUnassigned;
+        _unassignedPhotos = previousUnassignedPhotos;
       });
       rethrow;
     }
@@ -1127,11 +1202,11 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
     if (renderObject == null || !renderObject.hasSize) {
       return;
     }
-    final targetElement = _findElement(targetElementId).element;
-    if (targetElement == null) {
+    final targetPhotos = _photosForContainer(targetElementId);
+    if (targetPhotos == null) {
       return;
     }
-    final itemIndex = targetElement.photos.indexWhere(
+    final itemIndex = targetPhotos.indexWhere(
       (photo) => photo.photoId == photoId,
     );
     if (itemIndex == -1) {
@@ -1225,7 +1300,9 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
                 padding: const EdgeInsets.only(bottom: 140),
                 children: [
                   ..._buildChapterListChildren(),
-                  if (_unassignedElements.isNotEmpty) _buildUnassignedSection(),
+                  if (_unassignedElements.isNotEmpty ||
+                      _unassignedPhotos.isNotEmpty)
+                    _buildUnassignedSection(),
                 ],
               ),
             ),
@@ -1350,13 +1427,17 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
     required VoidCallback? onTap,
     bool isDragging = false,
     bool includeKey = true,
+    bool showDragHandle = true,
+    InlineSpan? titleOverride,
+    Key? keyOverride,
   }) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Container(
         key: includeKey
-            ? ValueKey('globalArrangeChapterHeader-${chapter.chapterId}')
+            ? keyOverride ??
+                  ValueKey('globalArrangeChapterHeader-${chapter.chapterId}')
             : null,
         width: double.infinity,
         margin: const EdgeInsets.only(top: 12, bottom: 8),
@@ -1375,7 +1456,8 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
             const SizedBox(width: 8),
             Expanded(
               child: Text.rich(
-                _chapterDisplaySpan(chapterIndex, chapter.title),
+                titleOverride ??
+                    _chapterDisplaySpan(chapterIndex, chapter.title),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
@@ -1385,7 +1467,16 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
                 ),
               ),
             ),
-            const Icon(Icons.drag_handle, color: Colors.black26, size: 18),
+            SizedBox(
+              width: 18,
+              child: showDragHandle
+                  ? const Icon(
+                      Icons.drag_handle,
+                      color: Colors.black26,
+                      size: 18,
+                    )
+                  : const SizedBox.shrink(),
+            ),
           ],
         ),
       ),
@@ -1410,7 +1501,9 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
           return;
         }
         _releaseDragMotion();
-        await _handleChapterDrop(details.data, dragState.hoverIndex);
+        final targetIndex =
+            _resolveChapterDropTarget(details.offset) ?? dragState.hoverIndex;
+        await _handleChapterDrop(details.data, targetIndex);
       },
       builder: (context, candidateData, rejectedData) {
         return KeyedSubtree(
@@ -1423,9 +1516,17 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
               _recordDragPosition(details.globalPosition);
               _updateChapterHoverFromGlobalPosition(details.globalPosition);
             },
-            onDragCompleted: _clearChapterDrag,
-            onDraggableCanceled: (velocity, offset) => _clearChapterDrag(),
-            onDragEnd: (_) => _clearChapterDrag(),
+            onDragCompleted: () {},
+            onDraggableCanceled: (velocity, offset) {},
+            onDragEnd: (details) async {
+              if (details.wasAccepted) {
+                _clearChapterDrag();
+                return;
+              }
+              await _finishChapterDrag(
+                _ChapterDragPayload(chapterId: chapter.chapterId),
+              );
+            },
             childWhenDragging: _buildDragPlaceholder(
               key: ValueKey(
                 'globalArrangeChapterPlaceholder-${chapter.chapterId}',
@@ -1475,7 +1576,8 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
       },
       onAcceptWithDetails: (details) async {
         _releaseDragMotion();
-        await _handleChapterDrop(details.data, index);
+        final targetIndex = _resolveChapterDropTarget(details.offset) ?? index;
+        await _handleChapterDrop(details.data, targetIndex);
       },
       builder: (context, candidateData, rejectedData) {
         return KeyedSubtree(
@@ -1515,33 +1617,93 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
   }
 
   Widget _buildUnassignedSection() {
+    final chapter = _ArrangeChapterVm(
+      chapterId: 'chapter-unassigned',
+      title: '未归属章节',
+      elements: _unassignedElements,
+    );
     final children = <Widget>[
-      Container(
-        margin: const EdgeInsets.only(top: 12, bottom: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-        child: const Text(
-          '未 归 属 元 素',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 3.4,
-            color: Colors.black45,
-          ),
+      _buildChapterHeader(
+        chapter: chapter,
+        chapterIndex: -1,
+        isExpanded: _isUnassignedChapterExpanded,
+        onTap: _toggleUnassignedChapter,
+        showDragHandle: false,
+        titleOverride: const TextSpan(
+          children: [
+            TextSpan(text: 'CH', style: TextStyle(letterSpacing: 1.4)),
+            TextSpan(text: ' 未归属章节', style: TextStyle(letterSpacing: 1.2)),
+          ],
         ),
+        keyOverride: const ValueKey('globalArrangeChapterHeader-unassigned'),
       ),
     ];
 
-    children.addAll(
-      _buildElementListChildren(
-        elements: _unassignedElements,
-        owningChapterId: null,
-        chapterLabel: 'UNASSIGNED',
+    if (_isUnassignedChapterExpanded) {
+      children.addAll(
+        _buildElementListChildren(
+          elements: _unassignedElements,
+          owningChapterId: null,
+          chapterLabel: 'UNASSIGNED',
+        ),
+      );
+      children.add(_buildUnassignedPhotoPool());
+    }
+
+    children.add(
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Divider(
+          height: 1,
+          thickness: 0.5,
+          color: Colors.black.withValues(alpha: 0.05),
+        ),
       ),
     );
 
-    return Column(children: children);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: children,
+    );
+  }
+
+  Widget _buildUnassignedPhotoPool() {
+    final photoBucket = _unassignedPhotoBucket();
+    final shouldShow =
+        photoBucket.photos.isNotEmpty ||
+        (_photoDragState?.hoverElementId == globalArrangeLoosePhotoBucketId);
+    if (!shouldShow) {
+      return const SizedBox.shrink();
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(left: 48, right: 24, bottom: 12),
+            child: Text(
+              '未 关 联 照 片',
+              key: const ValueKey('globalArrangeLoosePhotoPoolHeader'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 3.0,
+                color: Colors.black38,
+              ),
+            ),
+          ),
+          _buildPhotoCollection(
+            element: photoBucket,
+            chapterLabel: 'UNASSIGNED',
+            elementTitleOverride: '未关联照片',
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildElementBlock({
@@ -1599,133 +1761,143 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
                 ),
               ),
             ),
-          if (isExpanded && element.photos.isNotEmpty)
-            ValueListenableBuilder<_PhotoDragState?>(
-              valueListenable: _photoDragStateListenable,
-              builder: (context, dragState, child) {
-                return LayoutBuilder(
-                  builder: (context, constraints) {
-                    const horizontalPadding = 24.0;
-                    const spacing = 16.0;
-                    final availableWidth =
-                        constraints.maxWidth - horizontalPadding * 2 - spacing;
-                    final itemWidth = availableWidth > 0
-                        ? availableWidth / 2
-                        : 0.0;
-                    final photoHeight = itemWidth > 0 ? itemWidth + 22.0 : 0.0;
-                    final photoChildren = <Widget>[];
-                    final projectedPhotos = _projectedPhotosForElement(element);
-                    final hoverPhotoIndex = _displayPhotoGapIndexForState(
-                      element,
-                      dragState,
-                    );
-                    final sourcePlaceholderIndex =
-                        dragState != null &&
-                            dragState.sourceElementId == element.elementId
-                        ? dragState.sourcePhotoIndex.clamp(
-                            0,
-                            projectedPhotos.length,
-                          )
-                        : -1;
-                    final sourcePlaceholderPhoto = sourcePlaceholderIndex == -1
-                        ? null
-                        : element.photos[dragState!.sourcePhotoIndex];
-                    final actualTargetPhotoIndex =
-                        dragState?.hoverElementId == element.elementId
-                        ? dragState!.hoverPhotoIndex
-                        : -1;
-                    for (
-                      var index = 0;
-                      index < projectedPhotos.length;
-                      index++
-                    ) {
-                      if (sourcePlaceholderIndex == index &&
-                          sourcePlaceholderPhoto != null) {
-                        photoChildren.add(
-                          _buildPhotoSourcePlaceholder(
-                            photo: sourcePlaceholderPhoto,
-                            parentElement: element,
-                            itemWidth: itemWidth,
-                          ),
-                        );
-                      }
-                      if (hoverPhotoIndex == index) {
-                        photoChildren.add(
-                          _buildPhotoGap(
-                            targetElementId: element.elementId,
-                            targetPhotoIndex: actualTargetPhotoIndex,
-                            itemWidth: itemWidth,
-                            photoHeight: photoHeight,
-                          ),
-                        );
-                      }
-                      final photoEntry = projectedPhotos[index];
-                      final photo = photoEntry.photo;
-                      photoChildren.add(
-                        AnimatedOpacity(
-                          duration: const Duration(milliseconds: 220),
-                          opacity: _isPhotoActive(element, photo) ? 1.0 : 0.15,
-                          child: SizedBox(
-                            width: itemWidth,
-                            child: _buildPhotoDragTarget(
-                              parentElement: element,
-                              photo: photo,
-                              photoIndex: photoEntry.originalIndex,
-                              chapterLabel: chapterLabel,
-                              itemWidth: itemWidth,
-                            ),
-                          ),
-                        ),
-                      );
-                    }
-                    if (sourcePlaceholderIndex == projectedPhotos.length &&
-                        sourcePlaceholderPhoto != null) {
-                      photoChildren.add(
-                        _buildPhotoSourcePlaceholder(
-                          photo: sourcePlaceholderPhoto,
-                          parentElement: element,
-                          itemWidth: itemWidth,
-                        ),
-                      );
-                    }
-                    if (hoverPhotoIndex == projectedPhotos.length) {
-                      photoChildren.add(
-                        _buildPhotoGap(
-                          targetElementId: element.elementId,
-                          targetPhotoIndex: actualTargetPhotoIndex,
-                          itemWidth: itemWidth,
-                          photoHeight: photoHeight,
-                        ),
-                      );
-                    }
-
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: horizontalPadding,
-                      ),
-                      child: GridView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: photoChildren.length,
-                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          crossAxisSpacing: spacing,
-                          mainAxisSpacing: 16,
-                          childAspectRatio: itemWidth > 0
-                              ? itemWidth / photoHeight
-                              : 1,
-                        ),
-                        itemBuilder: (context, index) {
-                          return photoChildren[index];
-                        },
-                      ),
-                    );
-                  },
-                );
-              },
-            ),
+          if (isExpanded)
+            _buildPhotoCollection(element: element, chapterLabel: chapterLabel),
         ],
       ),
+    );
+  }
+
+  Widget _buildPhotoCollection({
+    required _ArrangeElementVm element,
+    required String chapterLabel,
+    String? elementTitleOverride,
+  }) {
+    final shouldShow =
+        element.photos.isNotEmpty ||
+        (_photoDragState?.hoverElementId == element.elementId);
+    if (!shouldShow) {
+      return const SizedBox.shrink();
+    }
+
+    return ValueListenableBuilder<_PhotoDragState?>(
+      valueListenable: _photoDragStateListenable,
+      builder: (context, dragState, child) {
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            const horizontalPadding = 24.0;
+            const spacing = 16.0;
+            final availableWidth =
+                constraints.maxWidth - horizontalPadding * 2 - spacing;
+            final itemWidth = availableWidth > 0 ? availableWidth / 2 : 0.0;
+            final photoHeight = itemWidth > 0 ? itemWidth + 22.0 : 142.0;
+            final photoChildren = <Widget>[];
+            final projectedPhotos = _projectedPhotosForElement(element);
+            final hoverPhotoIndex = _displayPhotoGapIndexForState(
+              element,
+              dragState,
+            );
+            final sourcePlaceholderIndex =
+                dragState != null &&
+                    dragState.sourceElementId == element.elementId
+                ? dragState.sourcePhotoIndex.clamp(0, projectedPhotos.length)
+                : -1;
+            final sourcePlaceholderPhoto =
+                sourcePlaceholderIndex == -1 ||
+                    dragState == null ||
+                    dragState.sourcePhotoIndex >= element.photos.length
+                ? null
+                : element.photos[dragState.sourcePhotoIndex];
+            final actualTargetPhotoIndex =
+                dragState?.hoverElementId == element.elementId
+                ? dragState!.hoverPhotoIndex
+                : 0;
+            for (var index = 0; index < projectedPhotos.length; index++) {
+              if (sourcePlaceholderIndex == index &&
+                  sourcePlaceholderPhoto != null) {
+                photoChildren.add(
+                  _buildPhotoSourcePlaceholder(
+                    photo: sourcePlaceholderPhoto,
+                    parentElement: element,
+                    itemWidth: itemWidth,
+                  ),
+                );
+              }
+              if (hoverPhotoIndex == index) {
+                photoChildren.add(
+                  _buildPhotoGap(
+                    targetElementId: element.elementId,
+                    targetPhotoIndex: actualTargetPhotoIndex,
+                    itemWidth: itemWidth == 0 ? 120.0 : itemWidth,
+                    photoHeight: photoHeight,
+                  ),
+                );
+              }
+              final photoEntry = projectedPhotos[index];
+              final photo = photoEntry.photo;
+              photoChildren.add(
+                AnimatedOpacity(
+                  duration: const Duration(milliseconds: 220),
+                  opacity: _isPhotoActive(element, photo) ? 1.0 : 0.15,
+                  child: SizedBox(
+                    width: itemWidth == 0 ? 120.0 : itemWidth,
+                    child: _buildPhotoDragTarget(
+                      parentElement: element,
+                      photo: photo,
+                      photoIndex: photoEntry.originalIndex,
+                      chapterLabel: chapterLabel,
+                      elementTitleOverride: elementTitleOverride,
+                      itemWidth: itemWidth == 0 ? 120.0 : itemWidth,
+                    ),
+                  ),
+                ),
+              );
+            }
+            if (sourcePlaceholderIndex == projectedPhotos.length &&
+                sourcePlaceholderPhoto != null) {
+              photoChildren.add(
+                _buildPhotoSourcePlaceholder(
+                  photo: sourcePlaceholderPhoto,
+                  parentElement: element,
+                  itemWidth: itemWidth == 0 ? 120.0 : itemWidth,
+                ),
+              );
+            }
+            if (hoverPhotoIndex == projectedPhotos.length ||
+                photoChildren.isEmpty) {
+              photoChildren.add(
+                _buildPhotoGap(
+                  targetElementId: element.elementId,
+                  targetPhotoIndex: actualTargetPhotoIndex,
+                  itemWidth: itemWidth == 0 ? 120.0 : itemWidth,
+                  photoHeight: photoHeight,
+                ),
+              );
+            }
+
+            return Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: horizontalPadding,
+              ),
+              child: GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: photoChildren.length,
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: spacing,
+                  mainAxisSpacing: 16,
+                  childAspectRatio:
+                      (itemWidth == 0 ? 120.0 : itemWidth) / photoHeight,
+                ),
+                itemBuilder: (context, index) {
+                  return photoChildren[index];
+                },
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -1963,6 +2135,7 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
     required int photoIndex,
     required String chapterLabel,
     required double itemWidth,
+    String? elementTitleOverride,
   }) {
     return DragTarget<_PhotoDragPayload>(
       onWillAcceptWithDetails: (details) {
@@ -2025,7 +2198,7 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
               onOpenViewer: () => _openFullScreenViewer(
                 photos: parentElement.photos,
                 initialIndex: photoIndex,
-                elementTitle: parentElement.title,
+                elementTitle: elementTitleOverride ?? parentElement.title,
                 chapterLabel: chapterLabel,
               ),
             ),
@@ -2287,6 +2460,7 @@ class _ArrangePhotoVm {
     required this.photoId,
     required this.imageSource,
     required this.relationTags,
+    this.sourceRecordId,
   });
 
   factory _ArrangePhotoVm.fromData(GlobalArrangePhotoData data) {
@@ -2294,18 +2468,21 @@ class _ArrangePhotoVm {
       photoId: data.photoId,
       imageSource: data.imageSource,
       relationTags: List<String>.from(data.relationTags),
+      sourceRecordId: data.sourceRecordId,
     );
   }
 
   final String photoId;
   final String imageSource;
   final List<String> relationTags;
+  final String? sourceRecordId;
 
   _ArrangePhotoVm clone() {
     return _ArrangePhotoVm(
       photoId: photoId,
       imageSource: imageSource,
       relationTags: List<String>.from(relationTags),
+      sourceRecordId: sourceRecordId,
     );
   }
 }

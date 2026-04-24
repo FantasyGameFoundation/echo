@@ -33,7 +33,7 @@ class QuickRecordOverlayPrototype extends StatefulWidget {
 class _QuickRecordOverlayPrototypeState
     extends State<QuickRecordOverlayPrototype> {
   late final TextEditingController _textController;
-  CaptureMode _mode = CaptureMode.recordOnly;
+  CaptureMode _mode = CaptureMode.record;
   List<String> _mountedPhotos = const <String>[];
   bool _isSaving = false;
 
@@ -239,7 +239,7 @@ class _QuickRecordOverlayPrototypeState
                 style: const TextStyle(fontSize: 16, color: Colors.black87),
                 decoration: InputDecoration(
                   border: InputBorder.none,
-                  hintText: '在此输入文字速记...',
+                  hintText: '在此输入记录内容...',
                   hintStyle: TextStyle(
                     fontSize: 16,
                     color: Colors.grey.shade400,
@@ -362,6 +362,11 @@ class _QuickRecordOverlayPrototypeState
       key: const ValueKey('quickRecordModeSelector'),
       initialValue: _mode,
       color: const Color(0xFFF5F5F5),
+      elevation: 10,
+      shadowColor: Colors.black.withValues(alpha: 0.18),
+      surfaceTintColor: Colors.transparent,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+      menuPadding: EdgeInsets.zero,
       onSelected: (mode) {
         if (_mode == mode) {
           return;
@@ -375,9 +380,11 @@ class _QuickRecordOverlayPrototypeState
           for (final mode in CaptureMode.values)
             PopupMenuItem<CaptureMode>(
               value: mode,
-              child: Text(
-                mode.label,
-                style: const TextStyle(fontSize: 14, color: Colors.black87),
+              height: 72,
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(mode.label, style: _modeMenuTextStyle),
               ),
             ),
         ];
@@ -387,18 +394,34 @@ class _QuickRecordOverlayPrototypeState
           Text(
             _mode.label,
             key: const ValueKey('quickRecordModeLabel'),
-            style: const TextStyle(fontSize: 14, color: Colors.black87),
+            style: _modeTriggerTextStyle,
           ),
-          const SizedBox(width: 4),
+          const SizedBox(width: 6),
           Icon(
             Icons.keyboard_arrow_down,
-            size: 16,
+            size: 14,
             color: Colors.grey.shade700,
           ),
         ],
       ),
     );
   }
+
+  TextStyle get _modeTriggerTextStyle => const TextStyle(
+    fontSize: 17,
+    fontWeight: FontWeight.w300,
+    letterSpacing: 2.2,
+    height: 1.0,
+    color: Color(0xFF2F2F2F),
+  );
+
+  TextStyle get _modeMenuTextStyle => const TextStyle(
+    fontSize: 18,
+    fontWeight: FontWeight.w300,
+    letterSpacing: 2.4,
+    height: 1.0,
+    color: Color(0xFF2F2F2F),
+  );
 
   Widget _buildMountedPhotoTile({
     required String photoPath,
