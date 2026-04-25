@@ -223,6 +223,94 @@ void main() {
   });
 
   testWidgets(
+    'no-project top-right settings button opens a real settings page',
+    (tester) async {
+      await tester.pumpWidget(
+        EchoApp(
+          projectRepository: _InMemoryProjectRepository(),
+          structureChapterRepository: _InMemoryStructureChapterRepository(),
+          narrativeElementRepository: _InMemoryNarrativeElementRepository(),
+          projectRelationRepository: _InMemoryProjectRelationRepository(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.settings_outlined));
+      await tester.pumpAndSettle();
+
+      expect(find.text('图片压缩'), findsOneWidget);
+      expect(find.text('项目数据导出 / 导入'), findsOneWidget);
+      expect(find.text('新 建 项 目'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'settings page shows exactly three compression options with no resolution copy',
+    (tester) async {
+      await tester.pumpWidget(
+        EchoApp(
+          projectRepository: _InMemoryProjectRepository(),
+          structureChapterRepository: _InMemoryStructureChapterRepository(),
+          narrativeElementRepository: _InMemoryNarrativeElementRepository(),
+          projectRelationRepository: _InMemoryProjectRelationRepository(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.settings_outlined));
+      await tester.pumpAndSettle();
+
+      expect(find.text('图片压缩'), findsOneWidget);
+      expect(find.text('无压缩'), findsOneWidget);
+      expect(find.text('高质量'), findsOneWidget);
+      expect(find.text('标准'), findsOneWidget);
+      expect(find.text('高性能'), findsNothing);
+      expect(find.textContaining('2160'), findsNothing);
+      expect(find.textContaining('3840'), findsNothing);
+      expect(find.textContaining('1080'), findsNothing);
+      expect(find.textContaining('1920'), findsNothing);
+      expect(find.byType(RadioListTile<Object?>), findsNWidgets(3));
+      expect(_findSelectedCompressionOption('无压缩'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'compression choice stays selected after closing and reopening settings page',
+    (tester) async {
+      await tester.pumpWidget(
+        EchoApp(
+          projectRepository: _InMemoryProjectRepository(),
+          structureChapterRepository: _InMemoryStructureChapterRepository(),
+          narrativeElementRepository: _InMemoryNarrativeElementRepository(),
+          projectRelationRepository: _InMemoryProjectRelationRepository(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.settings_outlined));
+      await tester.pumpAndSettle();
+
+      expect(_findSelectedCompressionOption('无压缩'), findsOneWidget);
+
+      await tester.tap(find.text('高质量'));
+      await tester.pumpAndSettle();
+      expect(_findSelectedCompressionOption('高质量'), findsOneWidget);
+      expect(find.textContaining('保 存'), findsNothing);
+
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+
+      expect(find.text('新 建 项 目'), findsOneWidget);
+
+      await tester.tap(find.byIcon(Icons.settings_outlined));
+      await tester.pumpAndSettle();
+
+      expect(_findSelectedCompressionOption('高质量'), findsOneWidget);
+      expect(_findSelectedCompressionOption('无压缩'), findsNothing);
+    },
+  );
+
+  testWidgets(
     'no-project page opens wizard from center button and then lands on new project structure page',
     (tester) async {
       final repository = _InMemoryProjectRepository();
@@ -8133,6 +8221,19 @@ Future<String> _resolveIsarLibraryPath() async {
   throw UnsupportedError(
     'Isar core path resolution is not configured for this platform.',
   );
+}
+
+Finder _findSelectedCompressionOption(String label) {
+  return find.byWidgetPredicate((widget) {
+    if (widget is! RadioListTile<Object?>) {
+      return false;
+    }
+    final title = widget.title;
+    if (title is! Text || title.data != label) {
+      return false;
+    }
+    return widget.groupValue == widget.value;
+  });
 }
 
 class _InMemoryProjectRepository implements ProjectRepository {

@@ -3,6 +3,7 @@ import 'dart:ui';
 
 import 'package:echo/data/media/media_importer.dart';
 import 'package:echo/features/project/presentation/utils/project_cover_picker.dart';
+import 'package:echo/features/settings/infrastructure/services/local_media_ingest_policy.dart';
 import 'package:echo/features/structure_elements_relations/presentation/models/narrative_element_draft.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -13,6 +14,7 @@ Future<String> importDraftNarrativePhotoToApp(String sourcePath) {
   return importMediaFile(
     sourcePath: sourcePath,
     collection: 'narrative_elements',
+    policy: LocalMediaIngestPolicy(),
   );
 }
 
@@ -116,6 +118,8 @@ class _ChapterNarrativeElementCreatePageState
       try {
         final storedPath = await widget.onImportPhoto(photoPath);
         storedPaths.add(storedPath);
+      } on MediaImportCancelledException {
+        continue;
       } catch (_) {
         hasImportFailure = true;
       }

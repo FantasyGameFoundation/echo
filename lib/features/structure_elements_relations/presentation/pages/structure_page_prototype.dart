@@ -28,6 +28,7 @@ class StructurePagePrototype extends StatefulWidget {
     required this.onAddRelation,
     this.onOpenRelation,
     required this.onTabChanged,
+    this.onOpenSettings,
     required this.onBottomTabChanged,
   });
 
@@ -44,6 +45,7 @@ class StructurePagePrototype extends StatefulWidget {
   final VoidCallback onAddRelation;
   final ValueChanged<int>? onOpenRelation;
   final ValueChanged<int> onTabChanged;
+  final VoidCallback? onOpenSettings;
   final ValueChanged<PrototypeTab> onBottomTabChanged;
 
   @override
@@ -183,7 +185,7 @@ class _StructurePagePrototypeState extends State<StructurePagePrototype> {
           ),
           IconButton(
             icon: const Icon(Icons.settings_outlined, color: Colors.black87),
-            onPressed: () {},
+            onPressed: widget.onOpenSettings ?? () {},
           ),
         ],
       ),

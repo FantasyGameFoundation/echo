@@ -37,10 +37,12 @@ class ChapterCreatePage extends StatelessWidget {
     super.key,
     required this.existingChapters,
     required this.onSave,
+    this.onImportPhoto,
   });
 
   final List<StructureChapter> existingChapters;
   final SaveChapter onSave;
+  final ImportDraftNarrativePhoto? onImportPhoto;
 
   @override
   Widget build(BuildContext context) {
@@ -50,6 +52,7 @@ class ChapterCreatePage extends StatelessWidget {
       editorChapter: null,
       existingElements: const <NarrativeElement>[],
       onSave: onSave,
+      onImportPhoto: onImportPhoto,
     );
   }
 }
@@ -64,6 +67,7 @@ class ChapterEditPage extends StatelessWidget {
     required this.onComplete,
     required this.onDelete,
     this.onOpenExistingElement,
+    this.onImportPhoto,
   });
 
   final List<StructureChapter> existingChapters;
@@ -74,6 +78,7 @@ class ChapterEditPage extends StatelessWidget {
   final Future<void> Function() onDelete;
   final Future<ChapterElementEditorResult?> Function(NarrativeElement element)?
   onOpenExistingElement;
+  final ImportDraftNarrativePhoto? onImportPhoto;
 
   @override
   Widget build(BuildContext context) {
@@ -86,6 +91,7 @@ class ChapterEditPage extends StatelessWidget {
       onComplete: onComplete,
       onDelete: onDelete,
       onOpenExistingElement: onOpenExistingElement,
+      onImportPhoto: onImportPhoto,
     );
   }
 }
@@ -100,6 +106,7 @@ class _ChapterEditorPage extends StatefulWidget {
     this.onComplete,
     this.onDelete,
     this.onOpenExistingElement,
+    this.onImportPhoto,
   });
 
   final List<StructureChapter> existingChapters;
@@ -111,6 +118,7 @@ class _ChapterEditorPage extends StatefulWidget {
   final Future<void> Function()? onDelete;
   final Future<ChapterElementEditorResult?> Function(NarrativeElement element)?
   onOpenExistingElement;
+  final ImportDraftNarrativePhoto? onImportPhoto;
 
   bool get isEditMode => editorChapter != null;
 
@@ -245,7 +253,9 @@ class _ChapterEditorPageState extends State<_ChapterEditorPage> {
   Future<void> _openAddElementPage() async {
     final draft = await Navigator.of(context).push<NarrativeElementDraft>(
       MaterialPageRoute(
-        builder: (_) => const ChapterNarrativeElementCreatePage(),
+        builder: (_) => ChapterNarrativeElementCreatePage(
+          onImportPhoto: widget.onImportPhoto,
+        ),
       ),
     );
 
@@ -266,7 +276,10 @@ class _ChapterEditorPageState extends State<_ChapterEditorPage> {
         .push<NarrativeElementDraft>(
           MaterialPageRoute(
             builder: (_) =>
-                ChapterNarrativeElementCreatePage(initialDraft: element),
+                ChapterNarrativeElementCreatePage(
+                  initialDraft: element,
+                  onImportPhoto: widget.onImportPhoto,
+                ),
           ),
         );
 

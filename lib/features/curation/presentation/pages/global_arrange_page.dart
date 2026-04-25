@@ -86,6 +86,7 @@ class GlobalArrangePage extends StatefulWidget {
     required this.onMoveChapter,
     required this.onMoveElement,
     required this.onMovePhoto,
+    this.onOpenSettings,
     this.landingRequest,
     this.onLandingRequestConsumed,
   });
@@ -113,6 +114,7 @@ class GlobalArrangePage extends StatefulWidget {
     required int targetPhotoIndex,
   })
   onMovePhoto;
+  final Future<void> Function()? onOpenSettings;
   final GlobalArrangePhotoLandingRequest? landingRequest;
   final ValueChanged<String>? onLandingRequestConsumed;
 
@@ -1520,7 +1522,9 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
           ),
           IconButton(
             icon: const Icon(Icons.settings_outlined, color: Colors.black87),
-            onPressed: () {},
+            onPressed: () {
+              widget.onOpenSettings?.call();
+            },
           ),
         ],
       ),

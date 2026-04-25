@@ -11,6 +11,7 @@ class TimelinePagePrototype extends StatefulWidget {
     this.items = const <TimelineItem>[],
     required this.onOpenSidebar,
     required this.onBottomTabChanged,
+    this.onOpenSettings,
     this.onTimelineItemTap,
   });
 
@@ -18,6 +19,7 @@ class TimelinePagePrototype extends StatefulWidget {
   final List<TimelineItem> items;
   final VoidCallback onOpenSidebar;
   final ValueChanged<PrototypeTab> onBottomTabChanged;
+  final Future<void> Function()? onOpenSettings;
   final ValueChanged<TimelineItem>? onTimelineItemTap;
 
   @override
@@ -139,7 +141,9 @@ class _TimelinePagePrototypeState extends State<TimelinePagePrototype> {
           ),
           IconButton(
             icon: const Icon(Icons.settings_outlined, color: Colors.black87),
-            onPressed: () {},
+            onPressed: () {
+              widget.onOpenSettings?.call();
+            },
           ),
         ],
       ),

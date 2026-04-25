@@ -1,3 +1,4 @@
+import 'package:echo/data/media/media_importer.dart';
 import 'package:echo/features/capture/domain/models/capture_mode.dart';
 import 'package:echo/features/project/presentation/utils/project_cover_picker.dart';
 import 'package:echo/features/structure_elements_relations/presentation/pages/narrative_element_create_page.dart';
@@ -112,6 +113,8 @@ class _QuickRecordOverlayPrototypeState
       for (final sourcePath in sourcePaths) {
         importedPhotos.add(await importer(sourcePath));
       }
+    } on MediaImportCancelledException {
+      return;
     } catch (_) {
       if (!mounted) {
         return;

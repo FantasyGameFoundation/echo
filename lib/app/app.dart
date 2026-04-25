@@ -13,6 +13,14 @@ import 'package:echo/features/project/domain/repositories/project_repository.dar
 import 'package:echo/features/project/infrastructure/database/project_isar.dart';
 import 'package:echo/features/project/infrastructure/repositories/local_project_repository.dart';
 import 'package:echo/features/project/presentation/utils/project_cover_picker.dart';
+import 'package:echo/features/settings/domain/entities/app_settings.dart';
+import 'package:echo/features/settings/domain/repositories/app_settings_repository.dart';
+import 'package:echo/features/settings/domain/services/export_project_bundle.dart';
+import 'package:echo/features/settings/domain/services/import_project_bundle.dart';
+import 'package:echo/features/settings/infrastructure/services/local_export_project_bundle.dart';
+import 'package:echo/features/settings/infrastructure/services/local_import_project_bundle.dart';
+import 'package:echo/features/settings/infrastructure/services/local_media_ingest_policy.dart';
+import 'package:echo/features/settings/infrastructure/repositories/local_app_settings_repository.dart';
 import 'package:echo/features/structure_elements_relations/domain/repositories/narrative_element_repository.dart';
 import 'package:echo/features/structure_elements_relations/domain/repositories/project_relation_repository.dart';
 import 'package:echo/features/structure_elements_relations/domain/repositories/structure_chapter_repository.dart';
@@ -39,6 +47,9 @@ class EchoApp extends StatelessWidget {
     this.saveCaptureRecord,
     this.captureRecordRepository,
     this.beaconTaskRepository,
+    this.appSettingsRepository,
+    this.exportProjectBundle,
+    this.importProjectBundle,
   });
 
   static Future<Isar>? _sharedIsarFuture;
@@ -60,6 +71,8 @@ class EchoApp extends StatelessWidget {
       LocalProjectRelationRepository(openIsar: _sharedOpenIsar);
   static final BeaconTaskRepository _defaultBeaconTaskRepository =
       _buildDefaultBeaconTaskRepository();
+  static final AppSettingsRepository _defaultAppSettingsRepository =
+      _buildDefaultAppSettingsRepository();
   static final CaptureRecordRepository _defaultCaptureRecordRepository =
       _buildDefaultCaptureRecordRepository();
   static final SaveCaptureRecord _defaultSaveCaptureRecord = SaveCaptureRecord(
@@ -80,6 +93,13 @@ class EchoApp extends StatelessWidget {
     return LocalBeaconTaskRepository(openIsar: _sharedOpenIsar);
   }
 
+  static AppSettingsRepository _buildDefaultAppSettingsRepository() {
+    if (_isUnderWidgetTestRuntime) {
+      return _NoopAppSettingsRepository();
+    }
+    return LocalAppSettingsRepository();
+  }
+
   static bool get _isUnderWidgetTestRuntime {
     final bindingType = WidgetsBinding.instance.runtimeType.toString();
     return bindingType.contains('Test');
@@ -95,12 +115,19 @@ class EchoApp extends StatelessWidget {
   final SaveCaptureRecordRunner? saveCaptureRecord;
   final CaptureRecordRepository? captureRecordRepository;
   final BeaconTaskRepository? beaconTaskRepository;
+  final AppSettingsRepository? appSettingsRepository;
+  final ExportProjectBundle? exportProjectBundle;
+  final ImportProjectBundle? importProjectBundle;
 
   BeaconTaskRepository get resolvedBeaconTaskRepository =>
       beaconTaskRepository ?? _defaultBeaconTaskRepository;
 
+  AppSettingsRepository get resolvedAppSettingsRepository =>
+      appSettingsRepository ?? _defaultAppSettingsRepository;
+
   @override
   Widget build(BuildContext context) {
+    final resolvedSettingsRepository = resolvedAppSettingsRepository;
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Echo',
@@ -114,6 +141,22 @@ class EchoApp extends StatelessWidget {
         projectRelationRepository:
             projectRelationRepository ?? _defaultProjectRelationRepository,
         beaconTaskRepository: resolvedBeaconTaskRepository,
+        appSettingsRepository: resolvedSettingsRepository,
+        exportProjectBundle:
+            exportProjectBundle ??
+            LocalExportProjectBundle(
+              openProjectDatabase: _sharedOpenIsar,
+              settingsRepository: resolvedSettingsRepository,
+            ),
+        importProjectBundle:
+            importProjectBundle ??
+            LocalImportProjectBundle(
+              openProjectDatabase: _sharedOpenIsar,
+              settingsRepository: resolvedSettingsRepository,
+              mediaIngestPolicy: LocalMediaIngestPolicy(
+                settingsRepository: resolvedSettingsRepository,
+              ),
+            ),
         captureRecordRepository:
             captureRecordRepository ?? _defaultCaptureRecordRepository,
         narrativeElementPhotoPicker: narrativeElementPhotoPicker,
@@ -255,5 +298,33 @@ class _NoopBeaconTaskRepository implements BeaconTaskRepository {
     }
     _tasks.removeAt(index);
     return true;
+  }
+}
+
+class _NoopAppSettingsRepository implements AppSettingsRepository {
+  AppSettings _settings = AppSettings.defaults();
+
+  @override
+  Future<AppSettings> load() async => _settings;
+
+  @override
+  Future<AppSettings> save(AppSettings settings) async {
+    _settings = settings.copyWith(updatedAt: DateTime.now());
+    return _settings;
+  }
+
+  @override
+  Future<AppSettings> update({
+    AppMediaCompressionLevel? compressionLevel,
+    bool? includeSettingsInExportsByDefault,
+  }) async {
+    return save(
+      _settings.copyWith(
+        compressionLevel: compressionLevel,
+        includeSettingsInExportsByDefault:
+            includeSettingsInExportsByDefault,
+        updatedAt: DateTime.now(),
+      ),
+    );
   }
 }

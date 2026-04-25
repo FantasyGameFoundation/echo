@@ -1,5 +1,7 @@
 import 'dart:ui';
 
+import 'package:echo/core/platform/app_storage_directory.dart';
+import 'package:echo/data/media/media_importer.dart';
 import 'package:echo/features/capture/domain/entities/capture_record.dart';
 import 'package:echo/features/capture/domain/models/capture_mode.dart';
 import 'package:echo/features/capture/domain/models/save_capture_request.dart';
@@ -19,6 +21,12 @@ import 'package:echo/features/project/presentation/pages/no_project_prompt_page.
 import 'package:echo/features/project/presentation/pages/project_wizard_page.dart';
 import 'package:echo/features/project/presentation/utils/project_cover_picker.dart';
 import 'package:echo/features/project/presentation/widgets/project_sidebar.dart';
+import 'package:echo/features/settings/domain/entities/app_settings.dart';
+import 'package:echo/features/settings/domain/services/export_project_bundle.dart';
+import 'package:echo/features/settings/domain/services/import_project_bundle.dart';
+import 'package:echo/features/settings/domain/repositories/app_settings_repository.dart';
+import 'package:echo/features/settings/infrastructure/services/local_media_ingest_policy.dart';
+import 'package:echo/features/settings/presentation/pages/settings_placeholder_page.dart';
 import 'package:echo/features/structure_elements_relations/domain/element_status.dart';
 import 'package:echo/features/structure_elements_relations/domain/entities/narrative_element.dart';
 import 'package:echo/features/structure_elements_relations/domain/entities/project_relation_group.dart';
@@ -42,6 +50,7 @@ import 'package:echo/features/timeline/presentation/pages/timeline_page_prototyp
 import 'package:echo/shared/models/content_preview_item.dart';
 import 'package:echo/shared/models/prototype_tab.dart';
 import 'package:echo/shared/widgets/quick_record_overlay_prototype.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 typedef SaveCaptureRecordRunner =
@@ -55,6 +64,9 @@ class AppShellPage extends StatefulWidget {
     required this.narrativeElementRepository,
     required this.projectRelationRepository,
     required this.beaconTaskRepository,
+    required this.appSettingsRepository,
+    required this.exportProjectBundle,
+    required this.importProjectBundle,
     required this.captureRecordRepository,
     this.narrativeElementPhotoPicker,
     this.narrativeElementPhotoImporter,
@@ -67,6 +79,9 @@ class AppShellPage extends StatefulWidget {
   final NarrativeElementRepository narrativeElementRepository;
   final ProjectRelationRepository projectRelationRepository;
   final BeaconTaskRepository beaconTaskRepository;
+  final AppSettingsRepository appSettingsRepository;
+  final ExportProjectBundle exportProjectBundle;
+  final ImportProjectBundle importProjectBundle;
   final CaptureRecordRepository captureRecordRepository;
   final PickGalleryImages? narrativeElementPhotoPicker;
   final ImportNarrativePhoto? narrativeElementPhotoImporter;
@@ -140,9 +155,7 @@ class _AppShellPageState extends State<AppShellPage> {
                       pickGalleryImagesFromGallery,
                   onPickCapturedPhoto:
                       widget.capturePhotoPicker ?? pickCapturedPhotoFromCamera,
-                  onImportPhoto:
-                      widget.narrativeElementPhotoImporter ??
-                      importNarrativePhotoToApp,
+                  onImportPhoto: _resolvedNarrativeElementPhotoImporter,
                   onSaveRecord: _handleSaveCaptureRecord,
                 ),
               ),
@@ -184,11 +197,16 @@ class _AppShellPageState extends State<AppShellPage> {
                           project: project,
                           onSave:
                               (title, themeStatement, coverImagePath) async {
+                                final persistedCoverImagePath =
+                                    await _persistProjectCoverImage(
+                                      coverImagePath,
+                                      unchangedPath: project.coverImagePath,
+                                    );
                                 await widget.projectRepository.updateProject(
                                   projectId: project.projectId,
                                   title: title,
                                   themeStatement: themeStatement,
-                                  coverImagePath: coverImagePath,
+                                  coverImagePath: persistedCoverImagePath,
                                 );
                                 await _refreshProjects();
                               },
@@ -347,6 +365,7 @@ class _AppShellPageState extends State<AppShellPage> {
       return NoProjectPromptPage(
         onOpenSidebar: () => setState(() => _sidebarOpen = true),
         onCreateProject: _openProjectWizard,
+        onOpenSettings: _openSettingsPage,
       );
     }
 
@@ -368,6 +387,7 @@ class _AppShellPageState extends State<AppShellPage> {
               MaterialPageRoute(
                 builder: (_) => ChapterCreatePage(
                   existingChapters: _structureChapters,
+                  onImportPhoto: _resolvedNarrativeElementPhotoImporter,
                   onSave:
                       ({
                         required String title,
@@ -417,6 +437,7 @@ class _AppShellPageState extends State<AppShellPage> {
                   existingChapters: _structureChapters,
                   chapter: chapter,
                   existingElements: chapterElements,
+                  onImportPhoto: _resolvedNarrativeElementPhotoImporter,
                   onOpenExistingElement: (element) async {
                     return _openNarrativeElementEditor(
                       element: element,
@@ -500,7 +521,7 @@ class _AppShellPageState extends State<AppShellPage> {
                         await _refreshProjects();
                       },
                   onPickPhoto: widget.narrativeElementPhotoPicker,
-                  onImportPhoto: widget.narrativeElementPhotoImporter,
+                  onImportPhoto: _resolvedNarrativeElementPhotoImporter,
                 ),
               ),
             );
@@ -589,6 +610,7 @@ class _AppShellPageState extends State<AppShellPage> {
               _currentTabIndex = index;
             });
           },
+          onOpenSettings: _openSettingsPage,
           onBottomTabChanged: _changeTab,
         );
       case PrototypeTab.curation:
@@ -601,6 +623,7 @@ class _AppShellPageState extends State<AppShellPage> {
           onMoveChapter: _moveChapter,
           onMoveElement: _moveElement,
           onMovePhoto: _movePhoto,
+          onOpenSettings: _openSettingsPage,
           landingRequest: _globalArrangeLandingRequest,
           onLandingRequestConsumed: _handleGlobalArrangeLandingRequestConsumed,
         );
@@ -612,6 +635,7 @@ class _AppShellPageState extends State<AppShellPage> {
           chapterTitleById: _buildChapterTitleById(_structureChapters),
           onOpenSidebar: () => setState(() => _sidebarOpen = true),
           onBottomTabChanged: _changeTab,
+          onOpenSettings: _openSettingsPage,
           onCreateTask: _openCreateBeaconTaskPage,
           onOpenTask: _openBeaconTaskPage,
         );
@@ -621,9 +645,299 @@ class _AppShellPageState extends State<AppShellPage> {
           items: _buildTimelineItems(),
           onOpenSidebar: () => setState(() => _sidebarOpen = true),
           onBottomTabChanged: _changeTab,
+          onOpenSettings: _openSettingsPage,
           onTimelineItemTap: _handleTimelineItemTap,
         );
     }
+  }
+
+  Future<void> _openSettingsPage() async {
+    final initialSettings = await widget.appSettingsRepository.load();
+    if (!mounted) {
+      return;
+    }
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SettingsPlaceholderPage(
+          initialSettings: initialSettings,
+          canExportCurrentProject: _currentProject != null,
+          onUpdateCompressionLevel:
+              (compressionLevel) => widget.appSettingsRepository.update(
+                compressionLevel: compressionLevel,
+              ),
+          onUpdateExportIncludesSettings:
+              (include) => widget.appSettingsRepository.update(
+                includeSettingsInExportsByDefault: include,
+              ),
+          onInspectImportBundle: _inspectImportBundle,
+          onExportProject: _handleExportProject,
+          onImportProject: _handleImportProject,
+        ),
+      ),
+    );
+  }
+
+  Future<String?> _handleExportProject(bool includeSettings) async {
+    if (_currentProject == null || _isFileBundleUnsupportedPlatform) {
+      return null;
+    }
+
+    final storageRoot = await getAppStorageDirectoryPath();
+    final exportDirectoryPath =
+        '$storageRoot/exports/${DateTime.now().millisecondsSinceEpoch}';
+    final result = await widget.exportProjectBundle.execute(
+      ExportProjectBundleRequest(
+        projectId: _currentProject!.projectId,
+        bundleDirectoryPath: exportDirectoryPath,
+        includeSettings: includeSettings,
+      ),
+    );
+    return result.bundleDirectoryPath;
+  }
+
+  Future<AppSettings> _handleImportProject(
+    String bundlePath,
+    bool applySettingsPayload,
+  ) async {
+    if (_isFileBundleUnsupportedPlatform) {
+      return widget.appSettingsRepository.load();
+    }
+
+    await widget.importProjectBundle.execute(
+      ImportProjectBundleRequest(
+        bundleDirectoryPath: bundlePath,
+        applyImportedSettings: applySettingsPayload,
+      ),
+    );
+    await _refreshProjects();
+    return widget.appSettingsRepository.load();
+  }
+
+  Future<ImportProjectBundleInspection> _inspectImportBundle(String bundlePath) {
+    return widget.importProjectBundle.inspect(bundlePath);
+  }
+
+  bool get _isFileBundleUnsupportedPlatform {
+    return kIsWeb;
+  }
+
+  Future<String?> _persistProjectCoverImage(
+    String? selectedPath, {
+    String? unchangedPath,
+  }) async {
+    final trimmedPath = selectedPath?.trim();
+    if (trimmedPath == null || trimmedPath.isEmpty) {
+      return null;
+    }
+    if (trimmedPath == unchangedPath) {
+      return unchangedPath;
+    }
+    final importApproved = await _confirmOversizedSingleImport(
+      sourcePath: trimmedPath,
+      collection: 'project_covers',
+    );
+    if (!importApproved) {
+      return unchangedPath;
+    }
+    return importMediaFile(
+      sourcePath: trimmedPath,
+      collection: 'project_covers',
+      policy: LocalMediaIngestPolicy(
+        settingsRepository: widget.appSettingsRepository,
+      ),
+    );
+  }
+
+  ImportNarrativePhoto get _resolvedNarrativeElementPhotoImporter {
+    return widget.narrativeElementPhotoImporter ?? _importNarrativePhoto;
+  }
+
+  Future<String> _importNarrativePhoto(String sourcePath) {
+    return _importNarrativePhotoWithPrompt(sourcePath);
+  }
+
+  Future<String> _importNarrativePhotoWithPrompt(String sourcePath) async {
+    final importApproved = await _confirmOversizedSingleImport(
+      sourcePath: sourcePath,
+      collection: 'narrative_elements',
+    );
+    if (!importApproved) {
+      throw const MediaImportCancelledException();
+    }
+    return importMediaFile(
+      sourcePath: sourcePath,
+      collection: 'narrative_elements',
+      policy: LocalMediaIngestPolicy(
+        settingsRepository: widget.appSettingsRepository,
+      ),
+    );
+  }
+
+  Future<bool> _confirmOversizedSingleImport({
+    required String sourcePath,
+    required String collection,
+  }) async {
+    var currentSettings = await widget.appSettingsRepository.load();
+    var isUpdating = false;
+
+    Future<bool> isOversized() async {
+      final plan = await LocalMediaIngestPolicy(
+        settingsRepository: widget.appSettingsRepository,
+      ).resolve(sourcePath: sourcePath, collection: collection);
+      final bounds = await inspectMediaImageBounds(sourcePath);
+      if (bounds == null) {
+        return false;
+      }
+      return isMediaImageOversizedForPlan(bounds, plan);
+    }
+
+    var oversized = await isOversized();
+    if (!oversized) {
+      return true;
+    }
+
+    final decision = await showDialog<bool>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.4),
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            Future<void> updateCompression(
+              AppMediaCompressionLevel level,
+            ) async {
+              if (isUpdating || currentSettings.compressionLevel == level) {
+                return;
+              }
+              setDialogState(() => isUpdating = true);
+              final updatedSettings = await widget.appSettingsRepository.update(
+                compressionLevel: level,
+              );
+              oversized = await isOversized();
+              if (!mounted) {
+                return;
+              }
+              setDialogState(() {
+                currentSettings = updatedSettings;
+                isUpdating = false;
+              });
+            }
+
+            final description = oversized
+                ? '当前图片超出所选压缩规格。你可以调整压缩档位重新检查，或按当前档位压缩导入。'
+                : '当前图片已符合所选压缩规格，可以直接继续导入。';
+
+            return Dialog(
+              shape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.zero,
+              ),
+              elevation: 0,
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(32, 36, 32, 32),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  border: Border.all(color: Colors.black12),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      '导 入 图 片',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 2.0,
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    Text(
+                      description,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: Colors.black54,
+                        height: 1.6,
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    for (final option in AppMediaCompressionLevel.values)
+                      RadioListTile<Object?>(
+                        value: option,
+                        groupValue: currentSettings.compressionLevel,
+                        onChanged: isUpdating
+                            ? null
+                            : (value) {
+                                if (value is AppMediaCompressionLevel) {
+                                  updateCompression(value);
+                                }
+                              },
+                        title: Text(option.label),
+                        activeColor: Colors.black87,
+                        contentPadding: EdgeInsets.zero,
+                        visualDensity: const VisualDensity(
+                          horizontal: -4,
+                          vertical: -4,
+                        ),
+                      ),
+                    const SizedBox(height: 20),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: InkWell(
+                            onTap: isUpdating
+                                ? null
+                                : () => Navigator.of(dialogContext).pop(true),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              decoration: const BoxDecoration(
+                                color: Colors.black,
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                oversized ? '压 缩 导 入' : '继 续 导 入',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 13,
+                                  letterSpacing: 2.0,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: InkWell(
+                            onTap: isUpdating
+                                ? null
+                                : () => Navigator.of(dialogContext).pop(false),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              decoration: BoxDecoration(
+                                border: Border.all(color: Colors.black12),
+                              ),
+                              alignment: Alignment.center,
+                              child: const Text(
+                                '取 消',
+                                style: TextStyle(
+                                  color: Colors.black54,
+                                  fontSize: 13,
+                                  letterSpacing: 2.0,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+    return decision ?? false;
   }
 
   void _changeTab(PrototypeTab tab) {
@@ -655,10 +969,13 @@ class _AppShellPageState extends State<AppShellPage> {
       MaterialPageRoute(
         builder: (_) => ProjectWizardPage(
           onFinish: (title, themeStatement, coverImagePath) async {
+            final persistedCoverImagePath = await _persistProjectCoverImage(
+              coverImagePath,
+            );
             await widget.projectRepository.createProject(
               title: title,
               themeStatement: themeStatement,
-              coverImagePath: coverImagePath,
+              coverImagePath: persistedCoverImagePath,
             );
             await _refreshProjects();
             if (!mounted) {

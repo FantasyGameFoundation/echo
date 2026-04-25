@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:echo/data/media/media_importer.dart';
 import 'package:echo/features/project/presentation/utils/project_cover_picker.dart';
+import 'package:echo/features/settings/infrastructure/services/local_media_ingest_policy.dart';
 import 'package:echo/features/structure_elements_relations/domain/entities/narrative_element.dart';
 import 'package:echo/features/structure_elements_relations/domain/entities/structure_chapter.dart';
 import 'package:echo/features/structure_elements_relations/presentation/widgets/compact_remove_button.dart';
@@ -26,6 +27,7 @@ Future<String> importNarrativePhotoToApp(String sourcePath) {
   return importMediaFile(
     sourcePath: sourcePath,
     collection: 'narrative_elements',
+    policy: LocalMediaIngestPolicy(),
   );
 }
 
@@ -243,6 +245,8 @@ class _NarrativeElementEditorPageState
       try {
         final storedPath = await widget.onImportPhoto(photoPath);
         storedPaths.add(storedPath);
+      } on MediaImportCancelledException {
+        continue;
       } catch (_) {
         hasImportFailure = true;
       }

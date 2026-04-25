@@ -15,6 +15,7 @@ class BeaconPagePrototype extends StatefulWidget {
     required this.chapterTitleById,
     required this.onOpenSidebar,
     required this.onBottomTabChanged,
+    this.onOpenSettings,
     required this.onCreateTask,
     required this.onOpenTask,
   });
@@ -25,6 +26,7 @@ class BeaconPagePrototype extends StatefulWidget {
   final Map<String, String> chapterTitleById;
   final VoidCallback onOpenSidebar;
   final ValueChanged<PrototypeTab> onBottomTabChanged;
+  final Future<void> Function()? onOpenSettings;
   final Future<void> Function() onCreateTask;
   final Future<void> Function(BeaconTask task) onOpenTask;
 
@@ -474,8 +476,10 @@ class _BeaconPagePrototypeState extends State<BeaconPagePrototype> {
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.settings, color: Colors.black87),
-            onPressed: () {},
+            icon: const Icon(Icons.settings_outlined, color: Colors.black87),
+            onPressed: () {
+              widget.onOpenSettings?.call();
+            },
           ),
         ],
       ),
