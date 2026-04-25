@@ -1,6 +1,8 @@
+import 'dart:io';
 import 'dart:ui';
 
 import 'package:echo/core/platform/app_storage_directory.dart';
+import 'package:echo/core/platform/project_bundle_file_transfer.dart';
 import 'package:echo/data/media/media_importer.dart';
 import 'package:echo/features/capture/domain/entities/capture_record.dart';
 import 'package:echo/features/capture/domain/models/capture_mode.dart';
@@ -68,6 +70,7 @@ class AppShellPage extends StatefulWidget {
     required this.exportProjectBundle,
     required this.importProjectBundle,
     required this.captureRecordRepository,
+    required this.projectBundleFileTransfer,
     this.narrativeElementPhotoPicker,
     this.narrativeElementPhotoImporter,
     this.capturePhotoPicker,
@@ -83,6 +86,7 @@ class AppShellPage extends StatefulWidget {
   final ExportProjectBundle exportProjectBundle;
   final ImportProjectBundle importProjectBundle;
   final CaptureRecordRepository captureRecordRepository;
+  final ProjectBundleFileTransfer projectBundleFileTransfer;
   final PickGalleryImages? narrativeElementPhotoPicker;
   final ImportNarrativePhoto? narrativeElementPhotoImporter;
   final PickCapturedPhoto? capturePhotoPicker;
@@ -662,42 +666,62 @@ class _AppShellPageState extends State<AppShellPage> {
         builder: (_) => SettingsPlaceholderPage(
           initialSettings: initialSettings,
           canExportCurrentProject: _currentProject != null,
-          onUpdateCompressionLevel:
-              (compressionLevel) => widget.appSettingsRepository.update(
-                compressionLevel: compressionLevel,
-              ),
-          onUpdateExportIncludesSettings:
-              (include) => widget.appSettingsRepository.update(
-                includeSettingsInExportsByDefault: include,
-              ),
-          onInspectImportBundle: _inspectImportBundle,
+          onUpdateCompressionLevel: (compressionLevel) => widget
+              .appSettingsRepository
+              .update(compressionLevel: compressionLevel),
+          onUpdateExportIncludesSettings: (include) => widget
+              .appSettingsRepository
+              .update(includeSettingsInExportsByDefault: include),
           onExportProject: _handleExportProject,
+          onPickImportBundle: _pickImportBundle,
+          onInspectImportBundle: _inspectImportBundle,
           onImportProject: _handleImportProject,
         ),
       ),
     );
   }
 
-  Future<String?> _handleExportProject(bool includeSettings) async {
-    if (_currentProject == null || _isFileBundleUnsupportedPlatform) {
+  Future<ProjectBundleExportReceipt?> _handleExportProject(
+    bool includeSettings,
+  ) async {
+    final currentProject = _currentProject;
+    if (currentProject == null || _isFileBundleUnsupportedPlatform) {
       return null;
     }
 
     final storageRoot = await getAppStorageDirectoryPath();
-    final exportDirectoryPath =
-        '$storageRoot/exports/${DateTime.now().millisecondsSinceEpoch}';
-    final result = await widget.exportProjectBundle.execute(
-      ExportProjectBundleRequest(
-        projectId: _currentProject!.projectId,
-        bundleDirectoryPath: exportDirectoryPath,
-        includeSettings: includeSettings,
-      ),
-    );
-    return result.bundleDirectoryPath;
+    final stagingDirectoryPath =
+        '$storageRoot/bundle_exports/${DateTime.now().millisecondsSinceEpoch}';
+    final stagingDirectory = Directory(stagingDirectoryPath);
+
+    try {
+      final result = await widget.exportProjectBundle.execute(
+        ExportProjectBundleRequest(
+          projectId: currentProject.projectId,
+          bundleDirectoryPath: stagingDirectory.path,
+          includeSettings: includeSettings,
+        ),
+      );
+      return await widget.projectBundleFileTransfer.exportBundleDirectory(
+        bundleDirectoryPath: result.bundleDirectoryPath,
+        suggestedBundleName: _buildProjectBundleDirectoryName(currentProject),
+      );
+    } finally {
+      if (await stagingDirectory.exists()) {
+        await stagingDirectory.delete(recursive: true);
+      }
+    }
+  }
+
+  Future<ProjectBundleImportSelection?> _pickImportBundle() {
+    if (_isFileBundleUnsupportedPlatform) {
+      return Future.value();
+    }
+    return widget.projectBundleFileTransfer.pickImportBundleDirectory();
   }
 
   Future<AppSettings> _handleImportProject(
-    String bundlePath,
+    ProjectBundleImportSelection selection,
     bool applySettingsPayload,
   ) async {
     if (_isFileBundleUnsupportedPlatform) {
@@ -706,7 +730,7 @@ class _AppShellPageState extends State<AppShellPage> {
 
     await widget.importProjectBundle.execute(
       ImportProjectBundleRequest(
-        bundleDirectoryPath: bundlePath,
+        bundleDirectoryPath: selection.bundleDirectoryPath,
         applyImportedSettings: applySettingsPayload,
       ),
     );
@@ -714,12 +738,34 @@ class _AppShellPageState extends State<AppShellPage> {
     return widget.appSettingsRepository.load();
   }
 
-  Future<ImportProjectBundleInspection> _inspectImportBundle(String bundlePath) {
-    return widget.importProjectBundle.inspect(bundlePath);
+  Future<ImportProjectBundleInspection> _inspectImportBundle(
+    ProjectBundleImportSelection selection,
+  ) {
+    return widget.importProjectBundle.inspect(selection.bundleDirectoryPath);
   }
 
   bool get _isFileBundleUnsupportedPlatform {
     return kIsWeb;
+  }
+
+  String _buildProjectBundleDirectoryName(Project project) {
+    final trimmedTitle = project.title.trim();
+    final normalizedTitle = trimmedTitle.isEmpty ? '未命名项目' : trimmedTitle;
+    final sanitizedTitle = normalizedTitle.replaceAll(
+      RegExp(r'[\\/:*?"<>|]'),
+      ' ',
+    );
+    final compactTitle = sanitizedTitle
+        .split(RegExp(r'\s+'))
+        .where((part) => part.isNotEmpty)
+        .join(' ')
+        .trim();
+    final timestamp = DateTime.now().toLocal().toIso8601String().replaceAll(
+      RegExp(r'[:.]'),
+      '-',
+    );
+    final bundleTitle = compactTitle.isEmpty ? '未命名项目' : compactTitle;
+    return 'Echo-$bundleTitle-$timestamp.echo-bundle';
   }
 
   Future<String?> _persistProjectCoverImage(

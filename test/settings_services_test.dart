@@ -17,6 +17,9 @@ import 'package:echo/features/settings/infrastructure/repositories/local_app_set
 import 'package:echo/features/settings/infrastructure/services/local_export_project_bundle.dart';
 import 'package:echo/features/settings/infrastructure/services/local_import_project_bundle.dart';
 import 'package:echo/features/structure_elements_relations/domain/entities/narrative_element.dart';
+import 'package:echo/features/structure_elements_relations/domain/entities/project_relation_group.dart';
+import 'package:echo/features/structure_elements_relations/domain/entities/project_relation_member.dart';
+import 'package:echo/features/structure_elements_relations/domain/entities/project_relation_type.dart';
 import 'package:echo/features/structure_elements_relations/domain/entities/structure_chapter.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:isar/isar.dart';
@@ -412,6 +415,310 @@ void main() {
       expect(importedProject.coverImagePath, isNot(photoFile.path));
       expect(importedProject.coverImagePath, isNotNull);
       expect(importedCaptures.single.rawText, '');
+
+      await sourceDatabase.close();
+      await targetDatabase.close();
+      await rootDirectory.delete(recursive: true);
+    },
+  );
+
+  test(
+    'import inspection and execution can resolve a wrapped bundle directory',
+    () async {
+      final rootDirectory = await Directory.systemTemp.createTemp(
+        'echo-import-bundle-wrapper-test',
+      );
+      final sourceDatabaseDirectory = Directory('${rootDirectory.path}/source-db');
+      final sourceSettingsDirectory = Directory(
+        '${rootDirectory.path}/source-settings',
+      );
+      final bundleDirectory = Directory('${rootDirectory.path}/bundle');
+      final wrapperDirectory = Directory('${rootDirectory.path}/picked-folder');
+      final targetDatabaseDirectory = Directory('${rootDirectory.path}/target-db');
+      final targetSettingsDirectory = Directory(
+        '${rootDirectory.path}/target-settings',
+      );
+      await sourceDatabaseDirectory.create(recursive: true);
+      await sourceSettingsDirectory.create(recursive: true);
+      await wrapperDirectory.create(recursive: true);
+      await targetDatabaseDirectory.create(recursive: true);
+      await targetSettingsDirectory.create(recursive: true);
+
+      Future<Isar> openSourceIsar() => openProjectIsar(
+        name: 'echo_import_bundle_wrapper_source_test',
+        directoryPath: sourceDatabaseDirectory.path,
+      );
+      Future<Isar> openTargetIsar() => openProjectIsar(
+        name: 'echo_import_bundle_wrapper_target_test',
+        directoryPath: targetDatabaseDirectory.path,
+      );
+
+      final sourceDatabase = await openSourceIsar();
+      await sourceDatabase.writeTxn(() async {
+        await sourceDatabase.projects.put(
+          Project.create(
+            id: 'project-wrapper-source',
+            projectTitle: '父目录选择',
+            projectThemeStatement: '验证导入时可自动识别 bundle 根目录',
+          ),
+        );
+      });
+
+      final sourceSettingsRepository = LocalAppSettingsRepository(
+        resolveStorageDirectoryPath: () async => sourceSettingsDirectory.path,
+      );
+      await sourceSettingsRepository.save(
+        AppSettings(
+          compressionLevel: AppMediaCompressionLevel.standard,
+          includeSettingsInExportsByDefault: true,
+        ),
+      );
+
+      final exportService = LocalExportProjectBundle(
+        openProjectDatabase: openSourceIsar,
+        settingsRepository: sourceSettingsRepository,
+      );
+      await exportService.execute(
+        ExportProjectBundleRequest(
+          projectId: 'project-wrapper-source',
+          bundleDirectoryPath: bundleDirectory.path,
+          includeSettings: true,
+        ),
+      );
+
+      await bundleDirectory.rename('${wrapperDirectory.path}/picked.echo-bundle');
+
+      final targetSettingsRepository = LocalAppSettingsRepository(
+        resolveStorageDirectoryPath: () async => targetSettingsDirectory.path,
+      );
+      final importService = LocalImportProjectBundle(
+        openProjectDatabase: openTargetIsar,
+        settingsRepository: targetSettingsRepository,
+      );
+
+      final inspection = await importService.inspect(wrapperDirectory.path);
+      expect(inspection.hasSettingsPayload, isTrue);
+
+      final importResult = await importService.execute(
+        ImportProjectBundleRequest(
+          bundleDirectoryPath: wrapperDirectory.path,
+          applyImportedSettings: true,
+        ),
+      );
+
+      final targetDatabase = await openTargetIsar();
+      final importedProjects = await targetDatabase.projects.where().findAll();
+
+      expect(importResult.hadSettingsPayload, isTrue);
+      expect(importedProjects.single.title, '父目录选择');
+
+      await sourceDatabase.close();
+      await targetDatabase.close();
+      await rootDirectory.delete(recursive: true);
+    },
+  );
+
+  test(
+    'importing the same bundle twice remaps ids and does not violate unique indexes',
+    () async {
+      final rootDirectory = await Directory.systemTemp.createTemp(
+        'echo-import-bundle-duplicate-test',
+      );
+      final sourceDatabaseDirectory = Directory('${rootDirectory.path}/source-db');
+      final sourceSettingsDirectory = Directory(
+        '${rootDirectory.path}/source-settings',
+      );
+      final targetDatabaseDirectory = Directory('${rootDirectory.path}/target-db');
+      final targetSettingsDirectory = Directory(
+        '${rootDirectory.path}/target-settings',
+      );
+      final bundleDirectory = Directory('${rootDirectory.path}/bundle');
+      await sourceDatabaseDirectory.create(recursive: true);
+      await sourceSettingsDirectory.create(recursive: true);
+      await targetDatabaseDirectory.create(recursive: true);
+      await targetSettingsDirectory.create(recursive: true);
+
+      Future<Isar> openSourceIsar() => openProjectIsar(
+        name: 'echo_import_bundle_duplicate_source_test',
+        directoryPath: sourceDatabaseDirectory.path,
+      );
+      Future<Isar> openTargetIsar() => openProjectIsar(
+        name: 'echo_import_bundle_duplicate_target_test',
+        directoryPath: targetDatabaseDirectory.path,
+      );
+
+      final sourceDatabase = await openSourceIsar();
+      await sourceDatabase.writeTxn(() async {
+        await sourceDatabase.projects.put(
+          Project.create(
+            id: 'project-duplicate-source',
+            projectTitle: '重复导入',
+            projectThemeStatement: '同一 bundle 可重复导入',
+          ),
+        );
+        await sourceDatabase.structureChapters.put(
+          StructureChapter.create(
+            id: 'chapter-duplicate-source',
+            projectId: 'project-duplicate-source',
+            chapterTitle: '第一章',
+          ),
+        );
+        await sourceDatabase.narrativeElements.put(
+          NarrativeElement.create(
+            id: 'element-duplicate-source',
+            projectId: 'project-duplicate-source',
+            chapterId: 'chapter-duplicate-source',
+            elementTitle: '叙事元素',
+          ),
+        );
+        await sourceDatabase.projectRelationTypes.put(
+          ProjectRelationType.create(
+            id: 'type-duplicate-source',
+            projectId: 'project-duplicate-source',
+            relationName: '关系',
+            relationDescription: '关系说明',
+            relationSortOrder: 0,
+          ),
+        );
+        await sourceDatabase.projectRelationGroups.put(
+          ProjectRelationGroup.create(
+            id: 'group-duplicate-source',
+            projectId: 'project-duplicate-source',
+            relationTypeId: 'type-duplicate-source',
+            relationGroupTitle: '关系组',
+          ),
+        );
+        await sourceDatabase.projectRelationMembers.put(
+          ProjectRelationMember.create(
+            id: 'member-duplicate-source',
+            projectId: 'project-duplicate-source',
+            groupId: 'group-duplicate-source',
+            targetKind: 'element',
+            elementId: 'element-duplicate-source',
+            sourceElementId: 'element-duplicate-source',
+            sortOrder: 0,
+          ),
+        );
+        await sourceDatabase.captureRecords.put(
+          CaptureRecord.create(
+            id: 'capture-duplicate-source',
+            projectId: 'project-duplicate-source',
+            captureMode: 'record',
+            captureText: '第一次记录',
+          ),
+        );
+        await sourceDatabase.beaconTasks.put(
+          BeaconTask.create(
+            id: 'task-duplicate-source',
+            projectId: 'project-duplicate-source',
+            taskTitle: '任务',
+            taskDescription: '验证重复导入',
+            linkedElementIds: <String>['element-duplicate-source'],
+          ),
+        );
+      });
+
+      final sourceSettingsRepository = LocalAppSettingsRepository(
+        resolveStorageDirectoryPath: () async => sourceSettingsDirectory.path,
+      );
+      await sourceSettingsRepository.save(
+        AppSettings(
+          compressionLevel: AppMediaCompressionLevel.highQuality,
+          includeSettingsInExportsByDefault: true,
+        ),
+      );
+
+      final exportService = LocalExportProjectBundle(
+        openProjectDatabase: openSourceIsar,
+        settingsRepository: sourceSettingsRepository,
+      );
+      await exportService.execute(
+        ExportProjectBundleRequest(
+          projectId: 'project-duplicate-source',
+          bundleDirectoryPath: bundleDirectory.path,
+          includeSettings: true,
+        ),
+      );
+
+      final targetSettingsRepository = LocalAppSettingsRepository(
+        resolveStorageDirectoryPath: () async => targetSettingsDirectory.path,
+      );
+      final importService = LocalImportProjectBundle(
+        openProjectDatabase: openTargetIsar,
+        settingsRepository: targetSettingsRepository,
+      );
+
+      final firstImport = await importService.execute(
+        ImportProjectBundleRequest(bundleDirectoryPath: bundleDirectory.path),
+      );
+      final secondImport = await importService.execute(
+        ImportProjectBundleRequest(bundleDirectoryPath: bundleDirectory.path),
+      );
+
+      final targetDatabase = await openTargetIsar();
+      final importedProjects = await targetDatabase.projects.where().findAll();
+      final importedChapters = await targetDatabase.structureChapters
+          .where()
+          .findAll();
+      final importedElements = await targetDatabase.narrativeElements
+          .where()
+          .findAll();
+      final importedRelationTypes = await targetDatabase.projectRelationTypes
+          .where()
+          .findAll();
+      final importedRelationGroups = await targetDatabase.projectRelationGroups
+          .where()
+          .findAll();
+      final importedRelationMembers = await targetDatabase.projectRelationMembers
+          .where()
+          .findAll();
+      final importedCaptures = await targetDatabase.captureRecords
+          .where()
+          .findAll();
+      final importedTasks = await targetDatabase.beaconTasks.where().findAll();
+
+      expect(firstImport.importedProjectId, isNot(secondImport.importedProjectId));
+      expect(importedProjects, hasLength(2));
+      expect(importedChapters, hasLength(2));
+      expect(importedElements, hasLength(2));
+      expect(importedRelationTypes, hasLength(2));
+      expect(importedRelationGroups, hasLength(2));
+      expect(importedRelationMembers, hasLength(2));
+      expect(importedCaptures, hasLength(2));
+      expect(importedTasks, hasLength(2));
+
+      final importedProjectIds = importedProjects.map((project) => project.projectId).toSet();
+      final importedChapterIds = importedChapters.map((chapter) => chapter.chapterId).toSet();
+      final importedElementIds = importedElements.map((element) => element.elementId).toSet();
+      final importedRelationTypeIds = importedRelationTypes
+          .map((type) => type.relationTypeId)
+          .toSet();
+      final importedRelationGroupIds = importedRelationGroups
+          .map((group) => group.relationGroupId)
+          .toSet();
+
+      expect(importedProjectIds.length, 2);
+      expect(importedChapterIds.length, 2);
+      expect(importedElementIds.length, 2);
+      expect(importedRelationTypeIds.length, 2);
+      expect(importedRelationGroupIds.length, 2);
+      expect(
+        importedRelationMembers.every(
+          (member) =>
+              importedRelationGroupIds.contains(member.owningGroupId) &&
+              importedElementIds.contains(member.linkedElementId) &&
+              importedElementIds.contains(member.linkedSourceElementId),
+        ),
+        isTrue,
+      );
+      expect(
+        importedTasks.every(
+          (task) =>
+              task.linkedElementIds.every(importedElementIds.contains) &&
+              importedProjectIds.contains(task.owningProjectId),
+        ),
+        isTrue,
+      );
 
       await sourceDatabase.close();
       await targetDatabase.close();

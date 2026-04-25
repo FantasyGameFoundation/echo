@@ -1,7 +1,9 @@
+import 'package:echo/core/platform/project_bundle_file_transfer.dart';
 import 'package:echo/features/settings/domain/entities/app_settings.dart';
 import 'package:echo/features/settings/domain/services/import_project_bundle.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class SettingsPlaceholderPage extends StatefulWidget {
   const SettingsPlaceholderPage({
@@ -10,38 +12,46 @@ class SettingsPlaceholderPage extends StatefulWidget {
     required this.onUpdateCompressionLevel,
     required this.onUpdateExportIncludesSettings,
     this.canExportCurrentProject = false,
-    this.onInspectImportBundle,
     this.onExportProject,
+    this.onPickImportBundle,
+    this.onInspectImportBundle,
     this.onImportProject,
   });
 
   final AppSettings initialSettings;
   final bool canExportCurrentProject;
-  final Future<AppSettings> Function(
-    AppMediaCompressionLevel compressionLevel,
-  )
+  final Future<AppSettings> Function(AppMediaCompressionLevel compressionLevel)
   onUpdateCompressionLevel;
   final Future<AppSettings> Function(bool include)
   onUpdateExportIncludesSettings;
-  final Future<ImportProjectBundleInspection> Function(String bundlePath)?
+  final Future<ProjectBundleExportReceipt?> Function(bool includeSettings)?
+  onExportProject;
+  final Future<ProjectBundleImportSelection?> Function()? onPickImportBundle;
+  final Future<ImportProjectBundleInspection> Function(
+    ProjectBundleImportSelection selection,
+  )?
   onInspectImportBundle;
-  final Future<String?> Function(bool includeSettings)? onExportProject;
-  final Future<AppSettings> Function(String bundlePath, bool applySettingsPayload)?
+  final Future<AppSettings> Function(
+    ProjectBundleImportSelection selection,
+    bool applySettingsPayload,
+  )?
   onImportProject;
 
   @override
-  State<SettingsPlaceholderPage> createState() => _SettingsPlaceholderPageState();
+  State<SettingsPlaceholderPage> createState() =>
+      _SettingsPlaceholderPageState();
 }
 
 class _SettingsPlaceholderPageState extends State<SettingsPlaceholderPage> {
   late AppSettings _settings;
-  late final TextEditingController _importPathController;
   bool _isUpdatingCompression = false;
   bool _isUpdatingExportOption = false;
   bool _isExporting = false;
+  bool _isSelectingImportBundle = false;
   bool _isImporting = false;
-  String? _lastExportPath;
-  String? _lastImportPath;
+  ProjectBundleExportReceipt? _lastExportReceipt;
+  ProjectBundleImportSelection? _selectedImportBundle;
+  String? _lastImportedDisplayPath;
 
   bool get _importExportDisabled => kIsWeb;
 
@@ -49,12 +59,13 @@ class _SettingsPlaceholderPageState extends State<SettingsPlaceholderPage> {
   void initState() {
     super.initState();
     _settings = widget.initialSettings;
-    _importPathController = TextEditingController();
   }
 
   @override
   void dispose() {
-    _importPathController.dispose();
+    if (!_isImporting) {
+      _selectedImportBundle?.dispose();
+    }
     super.dispose();
   }
 
@@ -107,20 +118,22 @@ class _SettingsPlaceholderPageState extends State<SettingsPlaceholderPage> {
 
     setState(() => _isExporting = true);
     try {
-      final exportPath = await widget.onExportProject!(
+      final exportReceipt = await widget.onExportProject!(
         _settings.includeSettingsInExportsByDefault,
       );
       if (!mounted) {
         return;
       }
-      setState(() => _lastExportPath = exportPath);
-      if (exportPath != null) {
-        _showPassiveHint('已导出到本地目录');
+      setState(() => _lastExportReceipt = exportReceipt);
+      if (exportReceipt != null) {
+        _showPassiveHint('导出完成');
       }
-    } catch (_) {
-      if (mounted) {
-        _showPassiveHint('导出失败');
-      }
+    } catch (error) {
+      _handleTransferFailure(
+        debugContext: 'Export failed',
+        fallbackPrefix: '导出失败',
+        error: error,
+      );
     } finally {
       if (mounted) {
         setState(() => _isExporting = false);
@@ -128,13 +141,41 @@ class _SettingsPlaceholderPageState extends State<SettingsPlaceholderPage> {
     }
   }
 
-  Future<void> _importProject() async {
-    final bundlePath = _importPathController.text.trim();
-    if (_isImporting || widget.onImportProject == null || bundlePath.isEmpty) {
+  Future<void> _pickImportBundle() async {
+    if (_isSelectingImportBundle || widget.onPickImportBundle == null) {
       return;
     }
 
-    var inspection = await widget.onInspectImportBundle?.call(bundlePath) ??
+    setState(() => _isSelectingImportBundle = true);
+    try {
+      final selection = await widget.onPickImportBundle!.call();
+      if (!mounted || selection == null) {
+        return;
+      }
+      final previousSelection = _selectedImportBundle;
+      setState(() => _selectedImportBundle = selection);
+      await previousSelection?.dispose();
+    } catch (error) {
+      _handleTransferFailure(
+        debugContext: 'Import pick failed',
+        fallbackPrefix: '导入失败',
+        error: error,
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSelectingImportBundle = false);
+      }
+    }
+  }
+
+  Future<void> _importProject() async {
+    final selection = _selectedImportBundle;
+    if (_isImporting || widget.onImportProject == null || selection == null) {
+      return;
+    }
+
+    var inspection =
+        await widget.onInspectImportBundle?.call(selection) ??
         const ImportProjectBundleInspection(
           hasSettingsPayload: false,
           oversizedMediaCount: 0,
@@ -142,14 +183,14 @@ class _SettingsPlaceholderPageState extends State<SettingsPlaceholderPage> {
 
     if (inspection.oversizedMediaCount > 0) {
       final shouldContinue = await _confirmOversizedImport(
-        bundlePath: bundlePath,
+        bundleLabel: selection.displayPath,
         initialInspection: inspection,
       );
       if (!shouldContinue) {
         return;
       }
-      inspection = await widget.onInspectImportBundle?.call(bundlePath) ??
-          inspection;
+      inspection =
+          await widget.onInspectImportBundle?.call(selection) ?? inspection;
     }
 
     final applyImportedSettings = inspection.hasSettingsPayload
@@ -163,21 +204,25 @@ class _SettingsPlaceholderPageState extends State<SettingsPlaceholderPage> {
     setState(() => _isImporting = true);
     try {
       final updatedSettings = await widget.onImportProject!(
-        bundlePath,
+        selection,
         shouldApplyImportedSettings,
       );
+      await selection.dispose();
       if (!mounted) {
         return;
       }
       setState(() {
         _settings = updatedSettings;
-        _lastImportPath = bundlePath;
+        _lastImportedDisplayPath = selection.displayPath;
+        _selectedImportBundle = null;
       });
       _showPassiveHint('已导入为新项目');
-    } catch (_) {
-      if (mounted) {
-        _showPassiveHint('导入失败');
-      }
+    } catch (error) {
+      _handleTransferFailure(
+        debugContext: 'Import execution failed',
+        fallbackPrefix: '导入失败',
+        error: error,
+      );
     } finally {
       if (mounted) {
         setState(() => _isImporting = false);
@@ -186,7 +231,7 @@ class _SettingsPlaceholderPageState extends State<SettingsPlaceholderPage> {
   }
 
   Future<bool> _confirmOversizedImport({
-    required String bundlePath,
+    required String bundleLabel,
     required ImportProjectBundleInspection initialInspection,
   }) async {
     var currentSettings = _settings;
@@ -209,9 +254,13 @@ class _SettingsPlaceholderPageState extends State<SettingsPlaceholderPage> {
               final updatedSettings = await widget.onUpdateCompressionLevel(
                 level,
               );
-              final updatedInspection =
-                  await widget.onInspectImportBundle?.call(bundlePath) ??
-                  currentInspection;
+              final selectedImportBundle = _selectedImportBundle;
+              final updatedInspection = selectedImportBundle == null
+                  ? currentInspection
+                  : await widget.onInspectImportBundle?.call(
+                          selectedImportBundle,
+                        ) ??
+                        currentInspection;
               if (!mounted) {
                 return;
               }
@@ -253,6 +302,15 @@ class _SettingsPlaceholderPageState extends State<SettingsPlaceholderPage> {
                       ),
                     ),
                     const SizedBox(height: 18),
+                    Text(
+                      bundleLabel,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.black38,
+                        height: 1.5,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
                     Text(
                       description,
                       style: const TextStyle(
@@ -488,7 +546,7 @@ class _SettingsPlaceholderPageState extends State<SettingsPlaceholderPage> {
       child: Row(
         children: [
           IconButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: _isImporting ? null : () => Navigator.of(context).pop(),
             icon: const Icon(
               Icons.arrow_back_ios_new,
               size: 18,
@@ -530,11 +588,7 @@ class _SettingsPlaceholderPageState extends State<SettingsPlaceholderPage> {
         const SizedBox(height: 8),
         const Text(
           '控制后续写入图片时采用的压缩规格，不需要额外保存。',
-          style: TextStyle(
-            fontSize: 13,
-            color: Color(0xFF8F8F8F),
-            height: 1.6,
-          ),
+          style: TextStyle(fontSize: 13, color: Color(0xFF8F8F8F), height: 1.6),
         ),
         const SizedBox(height: 18),
         Container(
@@ -600,7 +654,7 @@ class _SettingsPlaceholderPageState extends State<SettingsPlaceholderPage> {
         Text(
           _importExportDisabled
               ? '当前平台暂不提供文件型导出 / 导入。'
-              : '导出当前项目数据，或从本地 bundle 目录导入为新项目。',
+              : '导出当前项目数据到系统文件位置，或从已保存的 bundle 目录导入为新项目。',
           style: const TextStyle(
             fontSize: 13,
             color: Color(0xFF8F8F8F),
@@ -637,40 +691,42 @@ class _SettingsPlaceholderPageState extends State<SettingsPlaceholderPage> {
               const SizedBox(height: 6),
               _buildActionButton(
                 label: _isExporting ? '导出中…' : '导出当前项目',
-                onTap: _importExportDisabled ||
+                onTap:
+                    _importExportDisabled ||
                         !widget.canExportCurrentProject ||
                         _isExporting
                     ? null
                     : _exportProject,
               ),
-              if (_lastExportPath != null) ...[
+              if (_lastExportReceipt != null) ...[
                 const SizedBox(height: 12),
-                _buildMetaText('导出目录：$_lastExportPath'),
+                _buildExportReceiptCard(_lastExportReceipt!),
               ],
               const SizedBox(height: 22),
-              TextField(
-                controller: _importPathController,
-                enabled: !_importExportDisabled && !_isImporting,
-                style: const TextStyle(fontSize: 14, color: Colors.black87),
-                decoration: const InputDecoration(
-                  hintText: '输入 bundle 目录路径',
-                  hintStyle: TextStyle(color: Color(0xFFB2B2B2)),
-                  border: UnderlineInputBorder(),
-                  focusedBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: Colors.black87),
-                  ),
-                ),
+              _buildActionButton(
+                label: _isSelectingImportBundle ? '选择中…' : '选择导入包',
+                onTap: _importExportDisabled || _isSelectingImportBundle
+                    ? null
+                    : _pickImportBundle,
+                isPrimary: false,
               ),
               const SizedBox(height: 14),
               _buildActionButton(
                 label: _isImporting ? '导入中…' : '导入为新项目',
-                onTap: _importExportDisabled || _isImporting
+                onTap:
+                    _importExportDisabled ||
+                        _isImporting ||
+                        _selectedImportBundle == null
                     ? null
                     : _importProject,
               ),
-              if (_lastImportPath != null) ...[
+              if (_selectedImportBundle != null) ...[
                 const SizedBox(height: 12),
-                _buildMetaText('最近导入：$_lastImportPath'),
+                _buildMetaText('待导入：${_selectedImportBundle!.displayPath}'),
+              ],
+              if (_lastImportedDisplayPath != null) ...[
+                const SizedBox(height: 8),
+                _buildMetaText('最近导入：$_lastImportedDisplayPath'),
               ],
             ],
           ),
@@ -682,6 +738,7 @@ class _SettingsPlaceholderPageState extends State<SettingsPlaceholderPage> {
   Widget _buildActionButton({
     required String label,
     required VoidCallback? onTap,
+    bool isPrimary = true,
   }) {
     final enabled = onTap != null;
     return InkWell(
@@ -690,13 +747,24 @@ class _SettingsPlaceholderPageState extends State<SettingsPlaceholderPage> {
         width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 14),
         decoration: BoxDecoration(
-          color: enabled ? Colors.black87 : Colors.black12,
+          color: isPrimary
+              ? (enabled ? Colors.black87 : Colors.black12)
+              : Colors.transparent,
+          border: isPrimary
+              ? null
+              : Border.all(
+                  color: enabled
+                      ? const Color(0xFF1F1F1F).withValues(alpha: 0.12)
+                      : const Color(0xFF1F1F1F).withValues(alpha: 0.08),
+                ),
         ),
         alignment: Alignment.center,
         child: Text(
           label,
           style: TextStyle(
-            color: enabled ? Colors.white : Colors.black38,
+            color: isPrimary
+                ? (enabled ? Colors.white : Colors.black38)
+                : (enabled ? Colors.black87 : Colors.black38),
             fontSize: 13,
             letterSpacing: 2.0,
           ),
@@ -714,5 +782,113 @@ class _SettingsPlaceholderPageState extends State<SettingsPlaceholderPage> {
         height: 1.6,
       ),
     );
+  }
+
+  Widget _buildExportReceiptCard(ProjectBundleExportReceipt receipt) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF3F2EE),
+        border: Border.all(
+          color: const Color(0xFF1F1F1F).withValues(alpha: 0.08),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '导出地址',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Color(0xFF7C7A73),
+                    letterSpacing: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  receipt.displayPath,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Colors.black87,
+                    height: 1.6,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          _buildCopyButton(receipt.copyablePath),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCopyButton(String value) {
+    return InkWell(
+      onTap: () => _copyExportPath(value),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.72),
+          border: Border.all(
+            color: const Color(0xFF1F1F1F).withValues(alpha: 0.10),
+          ),
+        ),
+        child: const Text(
+          '复制',
+          style: TextStyle(
+            fontSize: 11,
+            color: Colors.black87,
+            letterSpacing: 1.0,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _copyExportPath(String value) async {
+    await Clipboard.setData(ClipboardData(text: value));
+    if (!mounted) {
+      return;
+    }
+    _showPassiveHint('已复制导出地址');
+  }
+
+  void _handleTransferFailure({
+    required String debugContext,
+    required String fallbackPrefix,
+    required Object error,
+  }) {
+    if (error is ProjectBundleFileTransferException) {
+      debugPrint('$debugContext: $error');
+      if (mounted) {
+        _showPassiveHint(_buildTransferFailureMessage(fallbackPrefix, error));
+      }
+      return;
+    }
+
+    debugPrint('$debugContext with unexpected error: $error');
+    if (mounted) {
+      _showPassiveHint(fallbackPrefix);
+    }
+  }
+
+  String _buildTransferFailureMessage(
+    String fallbackPrefix,
+    ProjectBundleFileTransferException error,
+  ) {
+    if (error.isPermissionDenied) {
+      return '$fallbackPrefix，需要文件存储权限';
+    }
+    final message = error.message?.trim();
+    if (message == null || message.isEmpty) {
+      return fallbackPrefix;
+    }
+    return '$fallbackPrefix：$message';
   }
 }

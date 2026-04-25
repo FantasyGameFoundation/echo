@@ -55,16 +55,13 @@ class LocalImportProjectBundle implements ImportProjectBundle {
   Future<ImportProjectBundleInspection> inspect(
     String bundleDirectoryPath,
   ) async {
-    final bundleDirectory = Directory(bundleDirectoryPath);
-    if (!await bundleDirectory.exists()) {
-      throw StateError('Bundle directory does not exist: $bundleDirectoryPath');
-    }
+    final bundleDirectory = await _resolveBundleDirectory(bundleDirectoryPath);
 
     final manifest = await _readRequiredJsonMap(
       p.join(bundleDirectory.path, projectBundleManifestFileName),
     );
     final settingsPath = p.join(
-      bundleDirectoryPath,
+      bundleDirectory.path,
       projectBundleSettingsFileName,
     );
     final hasSettingsPayload = await File(settingsPath).exists();
@@ -73,7 +70,7 @@ class LocalImportProjectBundle implements ImportProjectBundle {
 
     for (final entry in mediaEntries) {
       final relativePath = _readRequiredString(entry, 'relativePath');
-      final sourcePath = p.join(bundleDirectoryPath, relativePath);
+      final sourcePath = p.join(bundleDirectory.path, relativePath);
       final plan = await _mediaIngestPolicy.resolve(
         sourcePath: sourcePath,
         collection: 'projects/import_inspection',
@@ -94,10 +91,9 @@ class LocalImportProjectBundle implements ImportProjectBundle {
   Future<ImportProjectBundleResult> execute(
     ImportProjectBundleRequest request,
   ) async {
-    final bundleDirectory = Directory(request.bundleDirectoryPath);
-    if (!await bundleDirectory.exists()) {
-      throw StateError('Bundle directory does not exist: ${bundleDirectory.path}');
-    }
+    final bundleDirectory = await _resolveBundleDirectory(
+      request.bundleDirectoryPath,
+    );
 
     final manifest = await _readRequiredJsonMap(
       p.join(bundleDirectory.path, projectBundleManifestFileName),
@@ -127,6 +123,28 @@ class LocalImportProjectBundle implements ImportProjectBundle {
         : null;
 
     final newProjectId = const Uuid().v4();
+    final chapterIdMap = _buildIdMap(_readMapList(manifest, 'chapters'), 'chapterId');
+    final elementIdMap = _buildIdMap(
+      _readMapList(manifest, 'narrativeElements'),
+      'elementId',
+    );
+    final captureIdMap = _buildIdMap(_readMapList(manifest, 'captures'), 'recordId');
+    final relationTypeIdMap = _buildIdMap(
+      _readMapList(manifest, 'relationTypes'),
+      'relationTypeId',
+    );
+    final relationGroupIdMap = _buildIdMap(
+      _readMapList(manifest, 'relationGroups'),
+      'relationGroupId',
+    );
+    final relationMemberIdMap = _buildIdMap(
+      _readMapList(manifest, 'relationMembers'),
+      'relationMemberId',
+    );
+    final beaconTaskIdMap = _buildIdMap(
+      _readMapList(manifest, 'beaconTasks'),
+      'taskId',
+    );
     final importedMediaPaths = <String>[];
     var transactionCommitted = false;
     var importedSettingsApplied = false;
@@ -157,8 +175,9 @@ class LocalImportProjectBundle implements ImportProjectBundle {
       );
 
       final chapters = _readMapList(manifest, 'chapters').map((chapterMap) {
+        final sourceChapterId = _readRequiredString(chapterMap, 'chapterId');
         return StructureChapter.create(
-          id: _readRequiredString(chapterMap, 'chapterId'),
+          id: chapterIdMap[sourceChapterId],
           projectId: newProjectId,
           chapterTitle: _readRequiredString(chapterMap, 'title'),
           chapterDescription: _readNullableString(chapterMap, 'description'),
@@ -174,10 +193,14 @@ class LocalImportProjectBundle implements ImportProjectBundle {
         manifest,
         'narrativeElements',
       ).map((elementMap) {
+        final sourceElementId = _readRequiredString(elementMap, 'elementId');
         return NarrativeElement.create(
-          id: _readRequiredString(elementMap, 'elementId'),
+          id: elementIdMap[sourceElementId],
           projectId: newProjectId,
-          chapterId: _readNullableString(elementMap, 'owningChapterId'),
+          chapterId: _remapOptionalId(
+            _readNullableString(elementMap, 'owningChapterId'),
+            chapterIdMap,
+          ),
           elementTitle: _readRequiredString(elementMap, 'title'),
           elementDescription: _readNullableString(elementMap, 'description'),
           elementStatus: _readRequiredString(elementMap, 'status'),
@@ -191,8 +214,9 @@ class LocalImportProjectBundle implements ImportProjectBundle {
       }).toList(growable: false);
 
       final captures = _readMapList(manifest, 'captures').map((captureMap) {
+        final sourceCaptureId = _readRequiredString(captureMap, 'recordId');
         return CaptureRecord.create(
-          id: _readRequiredString(captureMap, 'recordId'),
+          id: captureIdMap[sourceCaptureId],
           projectId: newProjectId,
           captureMode: _readRequiredString(captureMap, 'mode'),
           captureText: _readNullableString(captureMap, 'rawText') ?? '',
@@ -213,8 +237,12 @@ class LocalImportProjectBundle implements ImportProjectBundle {
         manifest,
         'relationTypes',
       ).map((relationTypeMap) {
+        final sourceRelationTypeId = _readRequiredString(
+          relationTypeMap,
+          'relationTypeId',
+        );
         return ProjectRelationType.create(
-          id: _readRequiredString(relationTypeMap, 'relationTypeId'),
+          id: relationTypeIdMap[sourceRelationTypeId],
           projectId: newProjectId,
           relationName: _readRequiredString(relationTypeMap, 'name'),
           relationDescription: _readRequiredString(
@@ -231,12 +259,16 @@ class LocalImportProjectBundle implements ImportProjectBundle {
         manifest,
         'relationGroups',
       ).map((relationGroupMap) {
+        final sourceRelationGroupId = _readRequiredString(
+          relationGroupMap,
+          'relationGroupId',
+        );
         return ProjectRelationGroup.create(
-          id: _readRequiredString(relationGroupMap, 'relationGroupId'),
+          id: relationGroupIdMap[sourceRelationGroupId],
           projectId: newProjectId,
-          relationTypeId: _readRequiredString(
-            relationGroupMap,
-            'linkedRelationTypeId',
+          relationTypeId: _remapRequiredId(
+            _readRequiredString(relationGroupMap, 'linkedRelationTypeId'),
+            relationTypeIdMap,
           ),
           relationGroupTitle: _readNullableString(relationGroupMap, 'title'),
           relationGroupDescription: _readNullableString(
@@ -258,19 +290,29 @@ class LocalImportProjectBundle implements ImportProjectBundle {
         manifest,
         'relationMembers',
       ).map((memberMap) {
+        final sourceRelationMemberId = _readRequiredString(
+          memberMap,
+          'relationMemberId',
+        );
         return ProjectRelationMember.create(
-          id: _readRequiredString(memberMap, 'relationMemberId'),
+          id: relationMemberIdMap[sourceRelationMemberId],
           projectId: newProjectId,
-          groupId: _readRequiredString(memberMap, 'owningGroupId'),
+          groupId: _remapRequiredId(
+            _readRequiredString(memberMap, 'owningGroupId'),
+            relationGroupIdMap,
+          ),
           targetKind: _readRequiredString(memberMap, 'kind'),
-          elementId: _readNullableString(memberMap, 'linkedElementId'),
+          elementId: _remapOptionalId(
+            _readNullableString(memberMap, 'linkedElementId'),
+            elementIdMap,
+          ),
           photoPath: _rewriteImportedMediaPath(
             _readNullableString(memberMap, 'linkedPhotoPath'),
             importedMediaMap,
           ),
-          sourceElementId: _readNullableString(
-            memberMap,
-            'linkedSourceElementId',
+          sourceElementId: _remapOptionalId(
+            _readNullableString(memberMap, 'linkedSourceElementId'),
+            elementIdMap,
           ),
           sortOrder: _readRequiredInt(memberMap, 'memberSortOrder'),
           createdTimestamp: _readRequiredDateTime(memberMap, 'createdAt'),
@@ -278,12 +320,15 @@ class LocalImportProjectBundle implements ImportProjectBundle {
       }).toList(growable: false);
 
       final beaconTasks = _readMapList(manifest, 'beaconTasks').map((taskMap) {
+        final sourceTaskId = _readRequiredString(taskMap, 'taskId');
         return BeaconTask.create(
-          id: _readRequiredString(taskMap, 'taskId'),
+          id: beaconTaskIdMap[sourceTaskId],
           projectId: newProjectId,
           taskTitle: _readRequiredString(taskMap, 'title'),
           taskDescription: _readNullableString(taskMap, 'description') ?? '',
-          linkedElementIds: _readStringList(taskMap, 'linkedElementIds'),
+          linkedElementIds: _readStringList(taskMap, 'linkedElementIds')
+              .map((elementId) => _remapRequiredId(elementId, elementIdMap))
+              .toList(growable: false),
           taskStatus: _readRequiredString(taskMap, 'status'),
           createdTimestamp: _readRequiredDateTime(taskMap, 'createdAt'),
           updatedTimestamp: _readRequiredDateTime(taskMap, 'updatedAt'),
@@ -369,6 +414,33 @@ class LocalImportProjectBundle implements ImportProjectBundle {
     }
 
     return importedMediaMap;
+  }
+
+  Map<String, String> _buildIdMap(
+    List<Map<String, Object?>> entries,
+    String key,
+  ) {
+    final idMap = <String, String>{};
+    for (final entry in entries) {
+      final sourceId = _readRequiredString(entry, key);
+      idMap[sourceId] = const Uuid().v4();
+    }
+    return idMap;
+  }
+
+  String _remapRequiredId(String sourceId, Map<String, String> idMap) {
+    final remappedId = idMap[sourceId];
+    if (remappedId == null) {
+      throw StateError('Bundle reference "$sourceId" could not be remapped.');
+    }
+    return remappedId;
+  }
+
+  String? _remapOptionalId(String? sourceId, Map<String, String> idMap) {
+    if (sourceId == null) {
+      return null;
+    }
+    return _remapRequiredId(sourceId, idMap);
   }
 
   Future<void> _rollbackImportedProject({
@@ -468,6 +540,62 @@ class LocalImportProjectBundle implements ImportProjectBundle {
         } catch (_) {}
       }
     }
+  }
+
+  Future<Directory> _resolveBundleDirectory(String bundleDirectoryPath) async {
+    final bundleDirectory = Directory(bundleDirectoryPath);
+    if (!await bundleDirectory.exists()) {
+      throw StateError('Bundle directory does not exist: $bundleDirectoryPath');
+    }
+
+    final manifestFile = File(
+      p.join(bundleDirectory.path, projectBundleManifestFileName),
+    );
+    if (await manifestFile.exists()) {
+      return bundleDirectory;
+    }
+
+    final candidateDirectories = await _findBundleCandidateDirectories(
+      bundleDirectory,
+    );
+
+    if (candidateDirectories.length == 1) {
+      return candidateDirectories.single;
+    }
+
+    final childEntries = await bundleDirectory
+        .list(recursive: false)
+        .map((entity) => p.basename(entity.path))
+        .toList();
+    final childSummary = childEntries.isEmpty
+        ? '(empty)'
+        : childEntries.join(', ');
+
+    throw StateError(
+      'Required bundle file is missing: '
+      '${p.join(bundleDirectory.path, projectBundleManifestFileName)} '
+      '[children: $childSummary, candidateCount: ${candidateDirectories.length}]',
+    );
+  }
+
+  Future<List<Directory>> _findBundleCandidateDirectories(
+    Directory rootDirectory,
+  ) async {
+    final candidateDirectories = <Directory>[];
+    await for (final entity in rootDirectory.list(recursive: true)) {
+      if (entity is! File || p.basename(entity.path) != projectBundleManifestFileName) {
+        continue;
+      }
+
+      final parentPath = p.dirname(entity.path);
+      final parentDirectory = Directory(parentPath);
+      if (!await parentDirectory.exists()) {
+        continue;
+      }
+      candidateDirectories.add(parentDirectory);
+    }
+
+    return candidateDirectories;
   }
 
   Future<Map<String, Object?>> _readRequiredJsonMap(String filePath) async {

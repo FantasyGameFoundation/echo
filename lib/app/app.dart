@@ -1,5 +1,6 @@
 import 'package:echo/app/shell/app_shell_page.dart';
 import 'package:echo/app/theme/app_theme.dart';
+import 'package:echo/core/platform/project_bundle_file_transfer.dart';
 import 'package:echo/features/beacon/domain/entities/beacon_task.dart';
 import 'package:echo/features/beacon/domain/repositories/beacon_task_repository.dart';
 import 'package:echo/features/beacon/infrastructure/repositories/local_beacon_task_repository.dart';
@@ -50,6 +51,7 @@ class EchoApp extends StatelessWidget {
     this.appSettingsRepository,
     this.exportProjectBundle,
     this.importProjectBundle,
+    this.projectBundleFileTransfer,
   });
 
   static Future<Isar>? _sharedIsarFuture;
@@ -118,6 +120,7 @@ class EchoApp extends StatelessWidget {
   final AppSettingsRepository? appSettingsRepository;
   final ExportProjectBundle? exportProjectBundle;
   final ImportProjectBundle? importProjectBundle;
+  final ProjectBundleFileTransfer? projectBundleFileTransfer;
 
   BeaconTaskRepository get resolvedBeaconTaskRepository =>
       beaconTaskRepository ?? _defaultBeaconTaskRepository;
@@ -159,6 +162,9 @@ class EchoApp extends StatelessWidget {
             ),
         captureRecordRepository:
             captureRecordRepository ?? _defaultCaptureRecordRepository,
+        projectBundleFileTransfer:
+            projectBundleFileTransfer ??
+            const PlatformProjectBundleFileTransfer(),
         narrativeElementPhotoPicker: narrativeElementPhotoPicker,
         narrativeElementPhotoImporter: narrativeElementPhotoImporter,
         capturePhotoPicker: capturePhotoPicker,
@@ -321,8 +327,7 @@ class _NoopAppSettingsRepository implements AppSettingsRepository {
     return save(
       _settings.copyWith(
         compressionLevel: compressionLevel,
-        includeSettingsInExportsByDefault:
-            includeSettingsInExportsByDefault,
+        includeSettingsInExportsByDefault: includeSettingsInExportsByDefault,
         updatedAt: DateTime.now(),
       ),
     );
