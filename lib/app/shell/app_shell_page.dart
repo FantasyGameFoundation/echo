@@ -733,13 +733,6 @@ class _AppShellPageState extends State<AppShellPage> {
     if (trimmedPath == unchangedPath) {
       return unchangedPath;
     }
-    final importApproved = await _confirmOversizedSingleImport(
-      sourcePath: trimmedPath,
-      collection: 'project_covers',
-    );
-    if (!importApproved) {
-      return unchangedPath;
-    }
     return importMediaFile(
       sourcePath: trimmedPath,
       collection: 'project_covers',
@@ -758,13 +751,6 @@ class _AppShellPageState extends State<AppShellPage> {
   }
 
   Future<String> _importNarrativePhotoWithPrompt(String sourcePath) async {
-    final importApproved = await _confirmOversizedSingleImport(
-      sourcePath: sourcePath,
-      collection: 'narrative_elements',
-    );
-    if (!importApproved) {
-      throw const MediaImportCancelledException();
-    }
     return importMediaFile(
       sourcePath: sourcePath,
       collection: 'narrative_elements',
@@ -772,172 +758,6 @@ class _AppShellPageState extends State<AppShellPage> {
         settingsRepository: widget.appSettingsRepository,
       ),
     );
-  }
-
-  Future<bool> _confirmOversizedSingleImport({
-    required String sourcePath,
-    required String collection,
-  }) async {
-    var currentSettings = await widget.appSettingsRepository.load();
-    var isUpdating = false;
-
-    Future<bool> isOversized() async {
-      final plan = await LocalMediaIngestPolicy(
-        settingsRepository: widget.appSettingsRepository,
-      ).resolve(sourcePath: sourcePath, collection: collection);
-      final bounds = await inspectMediaImageBounds(sourcePath);
-      if (bounds == null) {
-        return false;
-      }
-      return isMediaImageOversizedForPlan(bounds, plan);
-    }
-
-    var oversized = await isOversized();
-    if (!oversized) {
-      return true;
-    }
-
-    final decision = await showDialog<bool>(
-      context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.4),
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (dialogContext, setDialogState) {
-            Future<void> updateCompression(
-              AppMediaCompressionLevel level,
-            ) async {
-              if (isUpdating || currentSettings.compressionLevel == level) {
-                return;
-              }
-              setDialogState(() => isUpdating = true);
-              final updatedSettings = await widget.appSettingsRepository.update(
-                compressionLevel: level,
-              );
-              oversized = await isOversized();
-              if (!mounted) {
-                return;
-              }
-              setDialogState(() {
-                currentSettings = updatedSettings;
-                isUpdating = false;
-              });
-            }
-
-            final description = oversized
-                ? '当前图片超出所选压缩规格。你可以调整压缩档位重新检查，或按当前档位压缩导入。'
-                : '当前图片已符合所选压缩规格，可以直接继续导入。';
-
-            return Dialog(
-              shape: const RoundedRectangleBorder(
-                borderRadius: BorderRadius.zero,
-              ),
-              elevation: 0,
-              child: Container(
-                padding: const EdgeInsets.fromLTRB(32, 36, 32, 32),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  border: Border.all(color: Colors.black12),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      '导 入 图 片',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 2.0,
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    Text(
-                      description,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: Colors.black54,
-                        height: 1.6,
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    for (final option in AppMediaCompressionLevel.values)
-                      RadioListTile<Object?>(
-                        value: option,
-                        groupValue: currentSettings.compressionLevel,
-                        onChanged: isUpdating
-                            ? null
-                            : (value) {
-                                if (value is AppMediaCompressionLevel) {
-                                  updateCompression(value);
-                                }
-                              },
-                        title: Text(option.label),
-                        activeColor: Colors.black87,
-                        contentPadding: EdgeInsets.zero,
-                        visualDensity: const VisualDensity(
-                          horizontal: -4,
-                          vertical: -4,
-                        ),
-                      ),
-                    const SizedBox(height: 20),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: InkWell(
-                            onTap: isUpdating
-                                ? null
-                                : () => Navigator.of(dialogContext).pop(true),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              decoration: const BoxDecoration(
-                                color: Colors.black,
-                              ),
-                              alignment: Alignment.center,
-                              child: Text(
-                                oversized ? '压 缩 导 入' : '继 续 导 入',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 13,
-                                  letterSpacing: 2.0,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: InkWell(
-                            onTap: isUpdating
-                                ? null
-                                : () => Navigator.of(dialogContext).pop(false),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              decoration: BoxDecoration(
-                                border: Border.all(color: Colors.black12),
-                              ),
-                              alignment: Alignment.center,
-                              child: const Text(
-                                '取 消',
-                                style: TextStyle(
-                                  color: Colors.black54,
-                                  fontSize: 13,
-                                  letterSpacing: 2.0,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-    return decision ?? false;
   }
 
   void _changeTab(PrototypeTab tab) {

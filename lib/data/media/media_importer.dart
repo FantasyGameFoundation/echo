@@ -115,20 +115,21 @@ Future<List<ImportedMediaFile>> importMediaFilesWithPolicy({
 }
 
 Future<MediaImageBounds?> inspectMediaImageBounds(String sourcePath) async {
-  ui.ImmutableBuffer? buffer;
   ui.ImageDescriptor? descriptor;
   try {
-    buffer = await ui.ImmutableBuffer.fromFilePath(sourcePath);
+    final fileBytes = await File(sourcePath).readAsBytes();
+    final buffer = await ui.ImmutableBuffer.fromUint8List(fileBytes);
     descriptor = await ui.ImageDescriptor.encoded(buffer);
-    return MediaImageBounds(
+    final bounds = MediaImageBounds(
       width: descriptor.width,
       height: descriptor.height,
     );
+    buffer.dispose();
+    return bounds;
   } catch (_) {
     return null;
   } finally {
     descriptor?.dispose();
-    buffer?.dispose();
   }
 }
 
@@ -158,13 +159,13 @@ Future<Uint8List?> _resizeImageIfNeeded(
     return null;
   }
 
-  ui.ImmutableBuffer? buffer;
   ui.ImageDescriptor? descriptor;
   ui.Codec? codec;
   ui.Image? image;
 
   try {
-    buffer = await ui.ImmutableBuffer.fromFilePath(sourceFile.path);
+    final fileBytes = await sourceFile.readAsBytes();
+    final buffer = await ui.ImmutableBuffer.fromUint8List(fileBytes);
     descriptor = await ui.ImageDescriptor.encoded(buffer);
     final width = descriptor.width;
     final height = descriptor.height;
@@ -186,13 +187,19 @@ Future<Uint8List?> _resizeImageIfNeeded(
     final frame = await codec.getNextFrame();
     image = frame.image;
     final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-    return byteData?.buffer.asUint8List();
+    if (byteData == null) {
+      return null;
+    }
+    return Uint8List.view(
+      byteData.buffer,
+      byteData.offsetInBytes,
+      byteData.lengthInBytes,
+    );
   } catch (_) {
     return null;
   } finally {
     image?.dispose();
     codec?.dispose();
     descriptor?.dispose();
-    buffer?.dispose();
   }
 }
