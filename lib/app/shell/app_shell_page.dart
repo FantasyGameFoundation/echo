@@ -47,9 +47,11 @@ import 'package:echo/features/structure_elements_relations/presentation/pages/na
 import 'package:echo/features/structure_elements_relations/presentation/pages/project_relation_create_page.dart';
 import 'package:echo/features/structure_elements_relations/presentation/pages/project_relation_group_page.dart';
 import 'package:echo/features/structure_elements_relations/presentation/pages/structure_page_prototype.dart';
+import 'package:echo/features/structure_elements_relations/presentation/widgets/editor_confirmation_dialog.dart';
 import 'package:echo/features/timeline/presentation/models/timeline_item.dart';
 import 'package:echo/features/timeline/presentation/pages/timeline_page_prototype.dart';
 import 'package:echo/shared/models/content_preview_item.dart';
+import 'package:echo/shared/models/photo_processing_registry.dart';
 import 'package:echo/shared/models/prototype_tab.dart';
 import 'package:echo/shared/widgets/quick_record_overlay_prototype.dart';
 import 'package:flutter/foundation.dart';
@@ -117,6 +119,8 @@ class _AppShellPageState extends State<AppShellPage> {
       const <StructureChapterCardData>[];
   List<Map<String, dynamic>> _narrativeElementGroups =
       const <Map<String, dynamic>>[];
+  final PhotoProcessingRegistry _photoProcessingRegistry =
+      PhotoProcessingRegistry();
   GlobalArrangePhotoLandingRequest? _globalArrangeLandingRequest;
 
   @override
@@ -126,20 +130,41 @@ class _AppShellPageState extends State<AppShellPage> {
   }
 
   @override
+  void dispose() {
+    _photoProcessingRegistry.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: !_showAddOverlay,
+      canPop: _canPopShellRoute,
       onPopInvokedWithResult: (didPop, result) {
-        if (!didPop && _showAddOverlay) {
-          setState(() {
-            _showAddOverlay = false;
-          });
+        if (didPop) {
+          return;
         }
+        _handleShellBackNavigation();
       },
       child: Scaffold(
         body: Stack(
           children: [
             _buildCurrentPage(),
+            AnimatedBuilder(
+              animation: _photoProcessingRegistry,
+              builder: (context, child) {
+                final hasProcessing = _photoProcessingRegistry.refs.any(
+                  (ref) => ref.isProcessing,
+                );
+                if (!hasProcessing) {
+                  return const SizedBox.shrink();
+                }
+                return Positioned(
+                  top: MediaQuery.of(context).padding.top + 12,
+                  right: 18,
+                  child: _buildProcessingBusyPill(),
+                );
+              },
+            ),
             if (_showAddOverlay) ...[
               Positioned.fill(
                 child: BackdropFilter(
@@ -160,6 +185,9 @@ class _AppShellPageState extends State<AppShellPage> {
                   onPickCapturedPhoto:
                       widget.capturePhotoPicker ?? pickCapturedPhotoFromCamera,
                   onImportPhoto: _resolvedNarrativeElementPhotoImporter,
+                  photoProcessingRegistry: _photoProcessingRegistry,
+                  photoProcessingContextId:
+                      'quick-record-${_currentProject?.projectId ?? 'none'}',
                   onSaveRecord: _handleSaveCaptureRecord,
                 ),
               ),
@@ -251,6 +279,75 @@ class _AppShellPageState extends State<AppShellPage> {
     );
   }
 
+  bool get _canPopShellRoute {
+    return !_showAddOverlay &&
+        !_sidebarOpen &&
+        _currentTab == PrototypeTab.structure;
+  }
+
+  void _handleShellBackNavigation() {
+    if (_showAddOverlay) {
+      setState(() {
+        _showAddOverlay = false;
+      });
+      return;
+    }
+    if (_sidebarOpen) {
+      setState(() {
+        _sidebarOpen = false;
+      });
+      return;
+    }
+    if (_currentTab != PrototypeTab.structure) {
+      setState(() {
+        _currentTab = PrototypeTab.structure;
+        _globalArrangeLandingRequest = null;
+      });
+    }
+  }
+
+  Widget _buildProcessingBusyPill() {
+    return Container(
+      key: const ValueKey('shellPhotoProcessingBusyPill'),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.76),
+        border: Border.all(color: Colors.black.withValues(alpha: 0.06)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.055),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 12,
+            height: 12,
+            child: CircularProgressIndicator(
+              strokeWidth: 1.3,
+              valueColor: AlwaysStoppedAnimation<Color>(
+                Colors.black.withValues(alpha: 0.34),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            '显 影 中',
+            style: TextStyle(
+              fontSize: 9,
+              letterSpacing: 2.0,
+              color: Colors.black.withValues(alpha: 0.55),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _handleSaveCaptureRecord({
     required CaptureMode mode,
     required String rawText,
@@ -311,6 +408,7 @@ class _AppShellPageState extends State<AppShellPage> {
         items.add(
           TimelineItem(
             id: 'timeline-photo-${record.recordId}',
+            recordId: record.recordId,
             createdAt: record.createdAt,
             type: TimelineItemType.photo,
             content: trimmedText,
@@ -326,6 +424,7 @@ class _AppShellPageState extends State<AppShellPage> {
       items.add(
         TimelineItem(
           id: 'timeline-note-${record.recordId}',
+          recordId: record.recordId,
           createdAt: record.createdAt,
           type: TimelineItemType.note,
           content: trimmedText,
@@ -353,6 +452,10 @@ class _AppShellPageState extends State<AppShellPage> {
         photoPath: photoTarget.photoPath,
       );
     });
+  }
+
+  Future<void> _handleTimelineItemLongPress(TimelineItem item) async {
+    await _confirmAndDeleteTimelineRecord(item);
   }
 
   void _handleGlobalArrangeLandingRequestConsumed(String requestId) {
@@ -526,6 +629,9 @@ class _AppShellPageState extends State<AppShellPage> {
                       },
                   onPickPhoto: widget.narrativeElementPhotoPicker,
                   onImportPhoto: _resolvedNarrativeElementPhotoImporter,
+                  photoProcessingRegistry: _photoProcessingRegistry,
+                  photoProcessingContextId:
+                      'narrative-create-${_currentProject!.projectId}',
                 ),
               ),
             );
@@ -630,6 +736,7 @@ class _AppShellPageState extends State<AppShellPage> {
           onOpenSettings: _openSettingsPage,
           landingRequest: _globalArrangeLandingRequest,
           onLandingRequestConsumed: _handleGlobalArrangeLandingRequestConsumed,
+          onDeletePhoto: _confirmAndDeletePhoto,
         );
       case PrototypeTab.overview:
         return BeaconPagePrototype(
@@ -651,6 +758,7 @@ class _AppShellPageState extends State<AppShellPage> {
           onBottomTabChanged: _changeTab,
           onOpenSettings: _openSettingsPage,
           onTimelineItemTap: _handleTimelineItemTap,
+          onTimelineItemLongPress: _handleTimelineItemLongPress,
         );
     }
   }
@@ -999,6 +1107,7 @@ class _AppShellPageState extends State<AppShellPage> {
             await widget.beaconTaskRepository.archiveTask(task.taskId);
             await _refreshProjects();
           },
+          onRestore: () => _confirmAndRestoreTask(task),
         ),
       ),
     );
@@ -1377,6 +1486,8 @@ class _AppShellPageState extends State<AppShellPage> {
                   photoPaths: photoPaths,
                 );
               },
+          photoProcessingRegistry: _photoProcessingRegistry,
+          photoProcessingContextId: 'narrative-edit-${element.elementId}',
         ),
       ),
     );
@@ -1937,6 +2048,181 @@ class _AppShellPageState extends State<AppShellPage> {
     }
   }
 
+  Future<bool> _confirmAndDeletePhoto(String photoPath) async {
+    final trimmedPath = photoPath.trim();
+    if (trimmedPath.isEmpty) {
+      return false;
+    }
+    final confirmed = await showEditorConfirmationDialog(
+      context: context,
+      title: '删除照片',
+      content: '删除后，这张照片会从整理页、历程和相关关系中移除，并删除本机图片文件。',
+      actionText: '删除',
+    );
+    if (!confirmed) {
+      return false;
+    }
+
+    try {
+      await _removePhotoFromElementsAndRelations(trimmedPath);
+      await _removePhotoFromCaptureRecords(trimmedPath);
+      await _refreshProjects();
+      await _deletePhysicalPhotoFiles(<String>{trimmedPath});
+      return true;
+    } catch (_) {
+      if (mounted) {
+        _showPassiveHint('删除照片失败');
+      }
+      await _refreshProjects();
+      return false;
+    }
+  }
+
+  Future<void> _confirmAndDeleteTimelineRecord(TimelineItem item) async {
+    CaptureRecord? record;
+    for (final currentRecord in _captureRecords) {
+      if (currentRecord.recordId == item.recordId) {
+        record = currentRecord;
+        break;
+      }
+    }
+    if (record == null) {
+      await _refreshProjects();
+      return;
+    }
+    final confirmed = await showEditorConfirmationDialog(
+      context: context,
+      title: '删除历程',
+      content: '删除后，这条历程及其关联照片会从项目中移除，并清理不再使用的本机图片文件。',
+      actionText: '删除',
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    final photoPaths = <String>{
+      ..._normalizedPhotoPaths(record.photoPaths),
+      ..._normalizedPhotoPaths(record.unorganizedPhotoPaths),
+    };
+    try {
+      for (final photoPath in photoPaths) {
+        await _removePhotoFromElementsAndRelations(photoPath);
+      }
+      final deleted = await widget.captureRecordRepository.deleteRecord(
+        record.recordId,
+      );
+      if (!deleted) {
+        throw StateError('Failed to delete capture record: ${record.recordId}');
+      }
+      await _refreshProjects();
+      await _deletePhysicalPhotoFilesIfUnreferenced(photoPaths);
+    } catch (_) {
+      if (mounted) {
+        _showPassiveHint('删除历程失败');
+      }
+      await _refreshProjects();
+    }
+  }
+
+  Future<bool> _confirmAndRestoreTask(BeaconTask task) async {
+    final confirmed = await showEditorConfirmationDialog(
+      context: context,
+      title: '恢复任务',
+      content: '恢复后，这条任务会回到“待执行”列表。',
+      actionText: '恢复',
+    );
+    if (!confirmed) {
+      return false;
+    }
+
+    final restored = await widget.beaconTaskRepository.restoreTask(task.taskId);
+    if (restored == null) {
+      _showPassiveHint('恢复任务失败');
+      await _refreshProjects();
+      return false;
+    }
+    await _refreshProjects();
+    return true;
+  }
+
+  Future<void> _removePhotoFromElementsAndRelations(String photoPath) async {
+    for (final element in _narrativeElements) {
+      if (!element.photoPaths.contains(photoPath)) {
+        continue;
+      }
+      await _removePhotoMembers(
+        sourceElementId: element.elementId,
+        photoPath: photoPath,
+      );
+      final updatedPhotos = [
+        for (final currentPath in element.photoPaths)
+          if (currentPath != photoPath) currentPath,
+      ];
+      await widget.narrativeElementRepository.updateElement(
+        elementId: element.elementId,
+        title: element.title,
+        description: element.description,
+        chapterId: element.owningChapterId,
+        status: element.status,
+        photoPaths: updatedPhotos,
+      );
+    }
+  }
+
+  Future<void> _removePhotoFromCaptureRecords(String photoPath) async {
+    for (final record in _captureRecords) {
+      if (!record.photoPaths.contains(photoPath) &&
+          !record.unorganizedPhotoPaths.contains(photoPath)) {
+        continue;
+      }
+      final updatedPhotos = [
+        for (final currentPath in record.photoPaths)
+          if (currentPath != photoPath) currentPath,
+      ];
+      final updatedPendingPhotos = [
+        for (final currentPath in record.unorganizedPhotoPaths)
+          if (currentPath != photoPath) currentPath,
+      ];
+      await widget.captureRecordRepository.updateRecordPhotos(
+        recordId: record.recordId,
+        photoPaths: updatedPhotos,
+        pendingPhotoPaths: updatedPendingPhotos,
+      );
+    }
+  }
+
+  Future<void> _deletePhysicalPhotoFilesIfUnreferenced(
+    Set<String> photoPaths,
+  ) async {
+    final referencedPaths = <String>{
+      for (final element in _narrativeElements) ...element.photoPaths,
+      for (final record in _captureRecords) ...record.photoPaths,
+      for (final record in _captureRecords) ...record.unorganizedPhotoPaths,
+    };
+    final deletablePaths = {
+      for (final photoPath in photoPaths)
+        if (!referencedPaths.contains(photoPath)) photoPath,
+    };
+    await _deletePhysicalPhotoFiles(deletablePaths);
+  }
+
+  Future<void> _deletePhysicalPhotoFiles(Set<String> photoPaths) {
+    return Future<void>.sync(() {
+      for (final photoPath in photoPaths) {
+        final trimmedPath = photoPath.trim();
+        if (trimmedPath.isEmpty ||
+            ((Uri.tryParse(trimmedPath)?.hasScheme ?? false) &&
+                !trimmedPath.startsWith('/'))) {
+          continue;
+        }
+        final file = File(trimmedPath);
+        if (file.existsSync()) {
+          file.deleteSync();
+        }
+      }
+    });
+  }
+
   Future<void> _openPendingOrganizePage() async {
     if (!mounted) {
       return;
@@ -1944,7 +2230,7 @@ class _AppShellPageState extends State<AppShellPage> {
 
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (routeContext) {
+        builder: (_) {
           return PendingOrganizePage(
             data: _buildPendingOrganizePageData(),
             onSavePhoto: _savePendingOrganizeEntry,

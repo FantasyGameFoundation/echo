@@ -1,9 +1,49 @@
 import 'package:echo/features/curation/presentation/pages/global_arrange_page.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('chapter drag start invokes medium haptic feedback', (
+    tester,
+  ) async {
+    final hapticCalls = <MethodCall>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'HapticFeedback.vibrate') {
+          hapticCalls.add(call);
+        }
+        return null;
+      },
+    );
+    addTearDown(() {
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      );
+    });
+    _setLargeSurface(tester);
+
+    await tester.pumpWidget(const MaterialApp(home: _ArrangeHarness()));
+    await tester.pumpAndSettle();
+
+    final dragGesture = await _startLongPressDrag(
+      tester,
+      find.byKey(const ValueKey('globalArrangeChapterHeader-chapter-1')),
+    );
+    await tester.pump();
+
+    expect(
+      hapticCalls.map((call) => call.arguments),
+      contains('HapticFeedbackType.mediumImpact'),
+    );
+
+    await dragGesture.up();
+    await tester.pumpAndSettle();
+  });
+
   testWidgets(
     'chapter drag keeps the source placeholder and impacted chapter visible',
     (tester) async {
@@ -513,6 +553,46 @@ void main() {
       await tester.pumpAndSettle();
     },
   );
+
+  testWidgets('photo drag edge auto scroll reverses during one drag', (
+    tester,
+  ) async {
+    _setCompactSurface(tester);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: _ArrangeHarness(initialBoardData: _seedLargeBoardData()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final listViewFinder = find.byType(ListView).first;
+    final scrollable = tester.state<ScrollableState>(
+      find
+          .descendant(of: listViewFinder, matching: find.byType(Scrollable))
+          .first,
+    );
+    final dragGesture = await _startLongPressDrag(
+      tester,
+      find.byKey(const ValueKey('globalArrangePhotoCard-photo-1')),
+    );
+
+    final bottomEdgeTarget =
+        tester.getRect(listViewFinder).bottomCenter - const Offset(0, 10);
+    await dragGesture.moveTo(bottomEdgeTarget);
+    await tester.pump(const Duration(milliseconds: 260));
+    final offsetAfterDownScroll = scrollable.position.pixels;
+    expect(offsetAfterDownScroll, greaterThan(0));
+
+    final topEdgeTarget =
+        tester.getRect(listViewFinder).topCenter + const Offset(0, 10);
+    await dragGesture.moveTo(topEdgeTarget);
+    await tester.pump(const Duration(milliseconds: 260));
+    expect(scrollable.position.pixels, lessThan(offsetAfterDownScroll));
+
+    await dragGesture.up();
+    await tester.pumpAndSettle();
+  });
 
   testWidgets('element can move from chapter into unassigned lane', (
     tester,

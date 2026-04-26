@@ -1,4 +1,6 @@
+import 'package:echo/features/beacon/domain/entities/beacon_task.dart';
 import 'package:echo/features/beacon/presentation/pages/beacon_page_prototype.dart';
+import 'package:echo/features/structure_elements_relations/domain/entities/narrative_element.dart';
 import 'package:echo/features/structure_elements_relations/presentation/models/structure_chapter_card_data.dart';
 import 'package:echo/features/structure_elements_relations/presentation/models/structure_relation_card_data.dart';
 import 'package:echo/features/structure_elements_relations/presentation/pages/structure_page_prototype.dart';
@@ -63,8 +65,13 @@ void main() {
 
       await expectBottomNavPinned(
         BeaconPagePrototype(
+          tasks: const <BeaconTask>[],
+          elements: const <NarrativeElement>[],
+          chapterTitleById: const <String, String>{},
           onOpenSidebar: _noop,
           onBottomTabChanged: _noopPrototypeTab,
+          onCreateTask: _noopFuture,
+          onOpenTask: _noopBeaconTask,
         ),
       );
     },
@@ -76,3 +83,7 @@ void _noop() {}
 void _noopTab(int _) {}
 
 void _noopPrototypeTab(PrototypeTab _) {}
+
+Future<void> _noopFuture() async {}
+
+Future<void> _noopBeaconTask(BeaconTask _) async {}

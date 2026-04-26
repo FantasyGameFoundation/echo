@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 
@@ -5,6 +6,8 @@ import 'package:echo/data/media/media_importer.dart';
 import 'package:echo/features/project/presentation/utils/project_cover_picker.dart';
 import 'package:echo/features/settings/infrastructure/services/local_media_ingest_policy.dart';
 import 'package:echo/features/structure_elements_relations/presentation/models/narrative_element_draft.dart';
+import 'package:echo/shared/models/processing_photo_ref.dart';
+import 'package:echo/shared/widgets/developing_photo_tile.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -45,7 +48,7 @@ class _ChapterNarrativeElementCreatePageState
   late final String _initialTitle;
   late final String _initialDescription;
   late final List<String> _initialPhotoPaths;
-  final List<String> _mountedPhotos = <String>[];
+  final List<ProcessingPhotoRef> _photoRefs = <ProcessingPhotoRef>[];
   bool _didUnlockCompletedElement = false;
 
   String get _currentTitle => _nameController.text.trim();
@@ -70,11 +73,19 @@ class _ChapterNarrativeElementCreatePageState
   bool get _hasChanges {
     return _currentTitle != _initialTitle ||
         _currentDescription != _initialDescription ||
-        !listEquals(_mountedPhotos, _initialPhotoPaths) ||
+        _hasProcessingPhotos ||
+        !listEquals(_readyPhotoPaths, _initialPhotoPaths) ||
         _didUnlockCompletedElement;
   }
 
-  bool get _canSave => _currentTitle.isNotEmpty;
+  bool get _hasProcessingPhotos => _photoRefs.any((ref) => ref.isProcessing);
+
+  List<String> get _readyPhotoPaths => [
+    for (final ref in _photoRefs)
+      if (ref.isReady && ref.importedPath != null) ref.importedPath!,
+  ];
+
+  bool get _canSave => _currentTitle.isNotEmpty && !_hasProcessingPhotos;
 
   @override
   void initState() {
@@ -84,7 +95,15 @@ class _ChapterNarrativeElementCreatePageState
     _initialPhotoPaths = List<String>.from(
       widget.initialDraft?.photoPaths ?? const <String>[],
     );
-    _mountedPhotos.addAll(_initialPhotoPaths);
+    _photoRefs.addAll([
+      for (var index = 0; index < _initialPhotoPaths.length; index++)
+        ProcessingPhotoRef.ready(
+          id: 'chapter-draft-initial-$index',
+          sourcePath: _initialPhotoPaths[index],
+          importedPath: _initialPhotoPaths[index],
+          contextId: 'chapter-draft-element',
+        ),
+    ]);
     _nameController = TextEditingController(text: _initialTitle);
     _descController = TextEditingController(text: _initialDescription);
     _nameController.addListener(_onChanged);
@@ -112,34 +131,73 @@ class _ChapterNarrativeElementCreatePageState
       return;
     }
 
-    final storedPaths = <String>[];
-    var hasImportFailure = false;
-    for (final photoPath in photoPaths) {
-      try {
-        final storedPath = await widget.onImportPhoto(photoPath);
-        storedPaths.add(storedPath);
-      } on MediaImportCancelledException {
-        continue;
-      } catch (_) {
-        hasImportFailure = true;
+    final refs = [
+      for (var index = 0; index < photoPaths.length; index++)
+        ProcessingPhotoRef.processing(
+          id: 'chapter-draft-${DateTime.now().microsecondsSinceEpoch}-$index',
+          sourcePath: photoPaths[index],
+          contextId: 'chapter-draft-element',
+        ),
+    ];
+    setState(() {
+      _photoRefs.addAll(refs);
+    });
+    for (final ref in refs) {
+      unawaited(_resolvePhotoRef(ref));
+    }
+  }
+
+  Future<void> _resolvePhotoRef(ProcessingPhotoRef ref) async {
+    try {
+      final storedPath = await widget.onImportPhoto(ref.sourcePath);
+      if (!mounted) {
+        return;
       }
-    }
-    if (!mounted) {
-      return;
-    }
-    if (storedPaths.isNotEmpty) {
-      setState(() {
-        _mountedPhotos.addAll(storedPaths);
-      });
-    }
-    if (hasImportFailure) {
+      _replacePhotoRef(
+        ref.copyWith(
+          status: ProcessingPhotoStatus.ready,
+          importedPath: storedPath,
+        ),
+      );
+    } on MediaImportCancelledException {
+      if (mounted) {
+        _removePhotoRefById(ref.id);
+      }
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      _replacePhotoRef(
+        ref.copyWith(
+          status: ProcessingPhotoStatus.failed,
+          errorMessage: '照片导入失败，请重试',
+        ),
+      );
       _showPassiveHint('照片导入失败，请重试');
     }
   }
 
-  void _removePhoto(int index) {
+  void _replacePhotoRef(ProcessingPhotoRef nextRef) {
     setState(() {
-      _mountedPhotos.removeAt(index);
+      for (var index = 0; index < _photoRefs.length; index++) {
+        if (_photoRefs[index].id == nextRef.id) {
+          _photoRefs[index] = nextRef;
+          break;
+        }
+      }
+    });
+  }
+
+  void _removePhoto(int index) {
+    if (index < 0 || index >= _photoRefs.length) {
+      return;
+    }
+    _removePhotoRefById(_photoRefs[index].id);
+  }
+
+  void _removePhotoRefById(String refId) {
+    setState(() {
+      _photoRefs.removeWhere((ref) => ref.id == refId);
     });
   }
 
@@ -156,7 +214,7 @@ class _ChapterNarrativeElementCreatePageState
       NarrativeElementDraft(
         title: _currentTitle,
         description: _currentDescription,
-        photoPaths: List<String>.from(_mountedPhotos),
+        photoPaths: _readyPhotoPaths,
         status: _currentStatus,
       ),
     );
@@ -173,7 +231,7 @@ class _ChapterNarrativeElementCreatePageState
     if (!_canSave) {
       return;
     }
-    if (_mountedPhotos.isEmpty) {
+    if (_readyPhotoPaths.isEmpty) {
       _showPassiveHint('元素缺少照片，无法完成。');
       return;
     }
@@ -182,7 +240,7 @@ class _ChapterNarrativeElementCreatePageState
       NarrativeElementDraft(
         title: _currentTitle,
         description: _currentDescription,
-        photoPaths: List<String>.from(_mountedPhotos),
+        photoPaths: _readyPhotoPaths,
         status: 'ready',
       ),
     );
@@ -442,26 +500,45 @@ class _ChapterNarrativeElementCreatePageState
 
   Widget _buildPhotoMounter() {
     final mountItems = <Widget>[
-      for (int i = 0; i < _mountedPhotos.length; i++)
+      for (int i = 0; i < _photoRefs.length; i++)
         Stack(
           children: [
-            Container(
-              width: 80,
-              height: 80,
-              decoration: const BoxDecoration(color: Color(0xFFE0E0E0)),
-              clipBehavior: Clip.hardEdge,
-              child: Image.file(
-                File(_mountedPhotos[i]),
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) {
-                  return const Icon(
-                    Icons.image,
-                    color: Colors.black26,
-                    size: 28,
-                  );
-                },
+            if (!_photoRefs[i].isReady || _photoRefs[i].importedPath == null)
+              DevelopingPhotoTile(failed: _photoRefs[i].isFailed)
+            else
+              TweenAnimationBuilder<double>(
+                tween: Tween<double>(begin: 0, end: 1),
+                duration: const Duration(milliseconds: 220),
+                curve: Curves.easeOutCubic,
+                builder: (context, opacity, child) =>
+                    Opacity(opacity: opacity, child: child),
+                child: Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE0E0E0),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.045),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  clipBehavior: Clip.hardEdge,
+                  child: Image.file(
+                    File(_photoRefs[i].importedPath!),
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return const Icon(
+                        Icons.image,
+                        color: Colors.black26,
+                        size: 28,
+                      );
+                    },
+                  ),
+                ),
               ),
-            ),
             Positioned(
               top: 0,
               right: 0,

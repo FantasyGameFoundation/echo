@@ -19,5 +19,7 @@ abstract class BeaconTaskRepository {
 
   Future<BeaconTask?> archiveTask(String taskId);
 
+  Future<BeaconTask?> restoreTask(String taskId);
+
   Future<bool> deleteTask(String taskId);
 }

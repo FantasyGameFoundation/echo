@@ -226,6 +226,33 @@ class _NoopCaptureRecordRepository implements CaptureRecordRepository {
     }
     return null;
   }
+
+  @override
+  Future<CaptureRecord?> updateRecordPhotos({
+    required String recordId,
+    required List<String> photoPaths,
+    required List<String> pendingPhotoPaths,
+  }) async {
+    for (final record in _records) {
+      if (record.recordId == recordId) {
+        record.photoPaths = List<String>.from(photoPaths);
+        record.unorganizedPhotoPaths = List<String>.from(pendingPhotoPaths);
+        record.updatedAt = DateTime.now();
+        return record;
+      }
+    }
+    return null;
+  }
+
+  @override
+  Future<bool> deleteRecord(String recordId) async {
+    final index = _records.indexWhere((record) => record.recordId == recordId);
+    if (index < 0) {
+      return false;
+    }
+    _records.removeAt(index);
+    return true;
+  }
 }
 
 class _NoopBeaconTaskRepository implements BeaconTaskRepository {
@@ -289,6 +316,18 @@ class _NoopBeaconTaskRepository implements BeaconTaskRepository {
     for (final task in _tasks) {
       if (task.taskId == taskId) {
         task.statusValue = BeaconTaskStatus.archived;
+        task.updatedAt = DateTime.now();
+        return task;
+      }
+    }
+    return null;
+  }
+
+  @override
+  Future<BeaconTask?> restoreTask(String taskId) async {
+    for (final task in _tasks) {
+      if (task.taskId == taskId) {
+        task.statusValue = BeaconTaskStatus.pending;
         task.updatedAt = DateTime.now();
         return task;
       }

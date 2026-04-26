@@ -13,6 +13,7 @@ class TimelinePagePrototype extends StatefulWidget {
     required this.onBottomTabChanged,
     this.onOpenSettings,
     this.onTimelineItemTap,
+    this.onTimelineItemLongPress,
   });
 
   final String projectTitle;
@@ -21,6 +22,7 @@ class TimelinePagePrototype extends StatefulWidget {
   final ValueChanged<PrototypeTab> onBottomTabChanged;
   final Future<void> Function()? onOpenSettings;
   final ValueChanged<TimelineItem>? onTimelineItemTap;
+  final ValueChanged<TimelineItem>? onTimelineItemLongPress;
 
   @override
   State<TimelinePagePrototype> createState() => _TimelinePagePrototypeState();
@@ -198,6 +200,19 @@ class _TimelinePagePrototypeState extends State<TimelinePagePrototype> {
       key: ValueKey('timelineItem-${item.id}'),
       child: _buildEventCard(item),
     );
+    final canDelete = widget.onTimelineItemLongPress != null;
+    final interactiveCard = canOpenCuration || canDelete
+        ? GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: canOpenCuration
+                ? () => widget.onTimelineItemTap?.call(item)
+                : null,
+            onLongPress: canDelete
+                ? () => widget.onTimelineItemLongPress?.call(item)
+                : null,
+            child: card,
+          )
+        : card;
 
     return Padding(
       padding: const EdgeInsets.only(left: 24, right: 24),
@@ -254,15 +269,7 @@ class _TimelinePagePrototypeState extends State<TimelinePagePrototype> {
                 ],
               ),
             ),
-            Expanded(
-              child: canOpenCuration
-                  ? GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () => widget.onTimelineItemTap?.call(item),
-                      child: card,
-                    )
-                  : card,
-            ),
+            Expanded(child: interactiveCard),
           ],
         ),
       ),

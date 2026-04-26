@@ -10,6 +10,7 @@ import 'package:echo/shared/models/content_preview_item.dart';
 import 'package:echo/shared/models/prototype_tab.dart';
 import 'package:echo/shared/widgets/content_preview_card.dart';
 import 'package:echo/shared/widgets/custom_bottom_nav_bar.dart';
+import 'package:echo/shared/widgets/restrained_action_button.dart';
 import 'package:flutter/material.dart';
 
 class StructurePagePrototype extends StatefulWidget {
@@ -354,30 +355,10 @@ class _StructurePagePrototypeState extends State<StructurePagePrototype> {
   }
 
   Widget _buildAddElementButton() {
-    return InkWell(
+    return RestrainedActionButton(
+      key: const ValueKey('structureAddElementButton'),
+      label: '添加叙事元素',
       onTap: widget.onAddElement,
-      child: Container(
-        height: 64,
-        width: double.infinity,
-        decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey.shade300, width: 1.5),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.add, color: Colors.grey.shade400, size: 20),
-            const SizedBox(width: 8),
-            Text(
-              '添加叙事元素',
-              style: TextStyle(
-                color: Colors.grey.shade400,
-                fontSize: 14,
-                letterSpacing: 1.2,
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -511,76 +492,33 @@ class _StructurePagePrototypeState extends State<StructurePagePrototype> {
   }
 
   Widget _buildAddChapterButton() {
-    return InkWell(
+    return RestrainedActionButton(
+      key: const ValueKey('structureAddChapterButton'),
+      label: '添加章节',
       onTap: widget.onAddChapter,
-      child: Container(
-        height: 64,
-        width: double.infinity,
-        decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey.shade300, width: 1.5),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.add, color: Colors.grey.shade400, size: 20),
-            const SizedBox(width: 8),
-            Text(
-              '添加章节',
-              style: TextStyle(
-                color: Colors.grey.shade400,
-                fontSize: 14,
-                letterSpacing: 1.2,
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
   Widget _buildAddRelationButton() {
-    return InkWell(
-      onTap: widget.onAddRelation,
-      child: Container(
-        height: 64,
-        margin: const EdgeInsets.symmetric(vertical: 8),
-        decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey.shade300, width: 1.0),
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        RestrainedActionButton(
+          key: const ValueKey('structureAddRelationButton'),
+          label: '添加关联关系',
+          onTap: widget.onAddRelation,
+          margin: const EdgeInsets.symmetric(vertical: 8),
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.add, color: Colors.grey.shade400, size: 18),
-            const SizedBox(width: 8),
-            Stack(
-              alignment: Alignment.center,
-              children: [
-                Text(
-                  '添加关联关系',
-                  style: TextStyle(
-                    color: Colors.grey.shade400,
-                    fontSize: 13,
-                    letterSpacing: 2.0,
-                  ),
-                ),
-                IgnorePointer(
-                  child: Opacity(
-                    opacity: 0,
-                    child: Text(
-                      '添加关系类型',
-                      style: TextStyle(
-                        color: Colors.grey.shade400,
-                        fontSize: 13,
-                        letterSpacing: 2.0,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+        const IgnorePointer(
+          child: Opacity(
+            opacity: 0,
+            child: Text(
+              '添加关系类型',
+              style: TextStyle(fontSize: 12, letterSpacing: 1.8),
             ),
-          ],
+          ),
         ),
-      ),
+      ],
     );
   }
 }

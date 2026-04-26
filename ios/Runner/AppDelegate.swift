@@ -245,7 +245,9 @@ private final class ProjectBundleTransferCoordinator: NSObject, UIDocumentPicker
       do {
         let picker = try self.buildPicker(for: operation)
         picker.delegate = self
-        picker.allowsMultipleSelection = false
+        if case .importSelection = operation {
+          picker.allowsMultipleSelection = false
+        }
         NSLog("[EchoBundle] presenting document picker from \(type(of: presentingViewController))")
         presentingViewController.present(picker, animated: true)
       } catch let error as ProjectBundleTransferNativeError {
@@ -291,7 +293,9 @@ private final class ProjectBundleTransferCoordinator: NSObject, UIDocumentPicker
 
   func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
     cleanupStagedExportDirectory()
-    finish(with: nil)
+    completeAfterPickerDismissal {
+      self.finish(with: nil)
+    }
   }
 
   func documentPicker(
@@ -312,19 +316,31 @@ private final class ProjectBundleTransferCoordinator: NSObject, UIDocumentPicker
     do {
       let payload = try perform(operation: operation, with: selectedURL)
       cleanupStagedExportDirectory()
-      finish(with: payload)
+      completeAfterPickerDismissal {
+        self.finish(with: payload)
+      }
     } catch let error as ProjectBundleTransferNativeError {
       cleanupStagedExportDirectory()
-      finish(withError: error.flutterError)
+      completeAfterPickerDismissal {
+        self.finish(withError: error.flutterError)
+      }
     } catch {
       cleanupStagedExportDirectory()
-      finish(
-        withError: FlutterError(
-          code: "ioFailure",
-          message: error.localizedDescription,
-          details: nil
+      completeAfterPickerDismissal {
+        self.finish(
+          withError: FlutterError(
+            code: "ioFailure",
+            message: error.localizedDescription,
+            details: nil
+          )
         )
-      )
+      }
+    }
+  }
+
+  private func completeAfterPickerDismissal(_ completion: @escaping () -> Void) {
+    DispatchQueue.main.async {
+      completion()
     }
   }
 

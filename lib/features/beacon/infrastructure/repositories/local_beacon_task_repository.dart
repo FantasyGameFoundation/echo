@@ -99,6 +99,25 @@ class LocalBeaconTaskRepository implements BeaconTaskRepository {
   }
 
   @override
+  Future<BeaconTask?> restoreTask(String taskId) async {
+    final database = await _database();
+    final task = await database.beaconTasks
+        .filter()
+        .taskIdEqualTo(taskId)
+        .findFirst();
+    if (task == null) {
+      return null;
+    }
+    task.statusValue = BeaconTaskStatus.pending;
+    task.updatedAt = DateTime.now();
+
+    await database.writeTxn(() async {
+      await database.beaconTasks.put(task);
+    });
+    return task;
+  }
+
+  @override
   Future<bool> deleteTask(String taskId) async {
     final database = await _database();
     final task = await database.beaconTasks

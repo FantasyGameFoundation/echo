@@ -1,3 +1,5 @@
+// ignore_for_file: deprecated_member_use, unnecessary_underscores
+
 import 'dart:async';
 
 import 'package:echo/core/platform/project_bundle_file_transfer.dart';
@@ -287,6 +289,68 @@ void main() {
 
     expect(pickAttempts, 1);
   });
+
+  testWidgets(
+    'export keeps settings route mounted while native transfer flow is active',
+    (tester) async {
+      _setTallSurface(tester);
+      final exportCompleter = Completer<ProjectBundleExportReceipt?>();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) {
+              return Scaffold(
+                body: Center(
+                  child: TextButton(
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => SettingsPlaceholderPage(
+                            initialSettings: AppSettings.defaults(),
+                            canExportCurrentProject: true,
+                            onUpdateCompressionLevel: (level) async =>
+                                AppSettings(compressionLevel: level),
+                            onUpdateExportIncludesSettings: (include) async =>
+                                AppSettings(
+                                  includeSettingsInExportsByDefault: include,
+                                ),
+                            onExportProject: (_) => exportCompleter.future,
+                          ),
+                        ),
+                      );
+                    },
+                    child: const Text('打开设置'),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('打开设置'));
+      await tester.pumpAndSettle();
+
+      await _tapActionButton(tester, '导出当前项目');
+      expect(find.text('导出中…'), findsOneWidget);
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(find.text('设 置'), findsOneWidget);
+      expect(find.text('打开设置'), findsNothing);
+
+      exportCompleter.complete(null);
+      await tester.pumpAndSettle();
+
+      expect(find.text('设 置'), findsOneWidget);
+      await tester.tap(find.byIcon(Icons.arrow_back_ios_new));
+      await tester.pumpAndSettle();
+      expect(find.text('打开设置'), findsOneWidget);
+    },
+  );
 }
 
 Future<void> _pumpSettingsPage(

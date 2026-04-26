@@ -17,6 +17,7 @@ class BeaconTaskEditorPage extends StatefulWidget {
     this.task,
     this.onDelete,
     this.onArchive,
+    this.onRestore,
   });
 
   final BeaconTask? task;
@@ -30,6 +31,7 @@ class BeaconTaskEditorPage extends StatefulWidget {
   onSave;
   final Future<void> Function()? onDelete;
   final Future<void> Function()? onArchive;
+  final Future<bool> Function()? onRestore;
 
   @override
   State<BeaconTaskEditorPage> createState() => _BeaconTaskEditorPageState();
@@ -42,6 +44,7 @@ class _BeaconTaskEditorPageState extends State<BeaconTaskEditorPage> {
   bool _isSaving = false;
   bool _isDeleting = false;
   bool _isArchiving = false;
+  bool _isRestoring = false;
 
   bool get _isEditMode => widget.task != null;
 
@@ -97,10 +100,7 @@ class _BeaconTaskEditorPageState extends State<BeaconTaskEditorPage> {
         .toList(growable: false);
     if (unassignedElements.isNotEmpty) {
       groups.add(
-        _ChapterElementGroup(
-          heading: '未 归 章 节',
-          elements: unassignedElements,
-        ),
+        _ChapterElementGroup(heading: '未 归 章 节', elements: unassignedElements),
       );
     }
     return groups;
@@ -197,6 +197,24 @@ class _BeaconTaskEditorPageState extends State<BeaconTaskEditorPage> {
     Navigator.of(context).pop();
   }
 
+  Future<void> _restore() async {
+    if (widget.onRestore == null ||
+        _isRestoring ||
+        widget.task?.isArchived != true) {
+      return;
+    }
+    setState(() => _isRestoring = true);
+    final restored = await widget.onRestore!.call();
+    if (!mounted) {
+      return;
+    }
+    if (!restored) {
+      setState(() => _isRestoring = false);
+      return;
+    }
+    Navigator.of(context).pop();
+  }
+
   Future<bool> _showConfirmDialog({
     required String title,
     required String content,
@@ -208,7 +226,7 @@ class _BeaconTaskEditorPageState extends State<BeaconTaskEditorPage> {
       content: content,
       actionText: confirmLabel,
     );
-    return result ?? false;
+    return result;
   }
 
   void _toggleElement(String elementId) {
@@ -247,51 +265,51 @@ class _BeaconTaskEditorPageState extends State<BeaconTaskEditorPage> {
                   child: ListView(
                     padding: const EdgeInsets.fromLTRB(24, 12, 24, 120),
                     children: [
-                      _buildFieldLabel('任务名'),
-                      const SizedBox(height: 10),
-                      _buildGlassField(
-                        child: _buildTextField(
-                          key: const ValueKey('beaconTaskEditorTitleField'),
-                          controller: _titleController,
-                          maxLines: 1,
-                          hintText: '输入任务名',
-                          style: const TextStyle(
-                            fontSize: 30,
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFF232323),
-                            letterSpacing: 0.8,
-                            height: 1.2,
-                          ),
-                          hintStyle: const TextStyle(
-                            fontSize: 30,
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFFD3D3D3),
-                            letterSpacing: 0.8,
-                            height: 1.2,
-                          ),
+                      if (_isEditMode) ...[
+                        _buildFieldLabel('任务名'),
+                        const SizedBox(height: 10),
+                      ],
+                      _buildTextField(
+                        key: const ValueKey('beaconTaskEditorTitleField'),
+                        controller: _titleController,
+                        maxLines: 1,
+                        hintText: '任务名称',
+                        style: const TextStyle(
+                          fontSize: 30,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF232323),
+                          letterSpacing: 1.0,
+                          height: 1.2,
+                        ),
+                        hintStyle: const TextStyle(
+                          fontSize: 30,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFFD3D3D3),
+                          letterSpacing: 1.0,
+                          height: 1.2,
                         ),
                       ),
                       const SizedBox(height: 28),
-                      _buildFieldLabel('任务介绍'),
-                      const SizedBox(height: 10),
-                      _buildGlassField(
-                        child: _buildTextField(
-                          key: const ValueKey('beaconTaskEditorDescriptionField'),
-                          controller: _descriptionController,
-                          maxLines: 5,
-                          hintText: '输入任务介绍',
-                          style: const TextStyle(
-                            fontSize: 14,
-                            color: Color(0xFF6B6B6B),
-                            height: 1.8,
-                            fontStyle: FontStyle.italic,
-                          ),
-                          hintStyle: const TextStyle(
-                            fontSize: 14,
-                            color: Color(0xFFB8B8B8),
-                            height: 1.8,
-                            fontStyle: FontStyle.italic,
-                          ),
+                      if (_isEditMode) ...[
+                        _buildFieldLabel('任务介绍'),
+                        const SizedBox(height: 10),
+                      ],
+                      _buildTextField(
+                        key: const ValueKey('beaconTaskEditorDescriptionField'),
+                        controller: _descriptionController,
+                        maxLines: 5,
+                        hintText: '描述任务目标或现场线索',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: Color(0xFF6B6B6B),
+                          height: 1.6,
+                          fontStyle: FontStyle.italic,
+                        ),
+                        hintStyle: const TextStyle(
+                          fontSize: 14,
+                          color: Color(0xFFB8B8B8),
+                          height: 1.6,
+                          fontStyle: FontStyle.italic,
                         ),
                       ),
                       const SizedBox(height: 32),
@@ -346,23 +364,16 @@ class _BeaconTaskEditorPageState extends State<BeaconTaskEditorPage> {
               alignment: Alignment.centerRight,
               child: TextButton(
                 key: const ValueKey('beaconTaskEditorArchiveButton'),
-                onPressed: _isEditMode &&
-                        widget.task?.isArchived != true &&
-                        !_isArchiving &&
-                        widget.onArchive != null
-                    ? () {
-                        _archive();
-                      }
-                    : null,
+                onPressed: _archiveAction,
                 style: TextButton.styleFrom(
                   padding: EdgeInsets.zero,
                   minimumSize: const Size(48, 32),
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
                 child: Text(
-                  widget.task?.isArchived == true ? '已归档' : '归档',
+                  widget.task?.isArchived == true ? '恢复' : '归档',
                   style: TextStyle(
-                    color: widget.task?.isArchived == true
+                    color: _archiveAction == null
                         ? const Color(0xFFB0B0B0)
                         : Colors.black87,
                     fontSize: 12,
@@ -377,6 +388,26 @@ class _BeaconTaskEditorPageState extends State<BeaconTaskEditorPage> {
     );
   }
 
+  VoidCallback? get _archiveAction {
+    if (!_isEditMode) {
+      return null;
+    }
+    if (widget.task?.isArchived == true) {
+      if (_isRestoring || widget.onRestore == null) {
+        return null;
+      }
+      return () {
+        _restore();
+      };
+    }
+    if (_isArchiving || widget.onArchive == null) {
+      return null;
+    }
+    return () {
+      _archive();
+    };
+  }
+
   Widget _buildFieldLabel(String label) {
     return Text(
       label,
@@ -385,33 +416,6 @@ class _BeaconTaskEditorPageState extends State<BeaconTaskEditorPage> {
         fontWeight: FontWeight.w600,
         letterSpacing: 2.2,
         color: Color(0xFF8B8B8B),
-      ),
-    );
-  }
-
-  Widget _buildGlassField({required Widget child}) {
-    return ClipRect(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.72),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.06),
-                blurRadius: 20,
-                offset: const Offset(0, 10),
-              ),
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.02),
-                blurRadius: 4,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: child,
-        ),
       ),
     );
   }
@@ -457,7 +461,11 @@ class _BeaconTaskEditorPageState extends State<BeaconTaskEditorPage> {
 
     return Column(
       children: [
-        for (var groupIndex = 0; groupIndex < _chapterGroups.length; groupIndex++) ...[
+        for (
+          var groupIndex = 0;
+          groupIndex < _chapterGroups.length;
+          groupIndex++
+        ) ...[
           if (groupIndex > 0) const SizedBox(height: 18),
           _buildChapterHeading(_chapterGroups[groupIndex].heading),
           const SizedBox(height: 8),

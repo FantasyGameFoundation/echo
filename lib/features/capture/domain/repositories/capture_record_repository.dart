@@ -16,4 +16,12 @@ abstract class CaptureRecordRepository {
     required String recordId,
     required List<String> pendingPhotoPaths,
   });
+
+  Future<CaptureRecord?> updateRecordPhotos({
+    required String recordId,
+    required List<String> photoPaths,
+    required List<String> pendingPhotoPaths,
+  });
+
+  Future<bool> deleteRecord(String recordId);
 }

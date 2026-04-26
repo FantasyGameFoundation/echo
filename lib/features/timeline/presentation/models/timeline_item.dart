@@ -10,6 +10,7 @@ enum TimelineItemType { photo, note }
 class TimelineItem {
   const TimelineItem({
     required this.id,
+    required this.recordId,
     required this.createdAt,
     required this.type,
     required this.content,
@@ -19,6 +20,7 @@ class TimelineItem {
   });
 
   final String id;
+  final String recordId;
   final DateTime createdAt;
   final TimelineItemType type;
   final String content;

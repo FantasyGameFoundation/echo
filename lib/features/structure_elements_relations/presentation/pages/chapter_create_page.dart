@@ -4,6 +4,7 @@ import 'package:echo/features/structure_elements_relations/domain/entities/narra
 import 'package:echo/features/structure_elements_relations/domain/entities/structure_chapter.dart';
 import 'package:echo/features/structure_elements_relations/presentation/models/narrative_element_draft.dart';
 import 'package:echo/features/structure_elements_relations/presentation/pages/chapter_narrative_element_create_page.dart';
+import 'package:echo/features/structure_elements_relations/presentation/widgets/compact_remove_button.dart';
 import 'package:echo/features/structure_elements_relations/presentation/widgets/editor_bottom_action_bar.dart';
 import 'package:echo/features/structure_elements_relations/presentation/widgets/editor_confirmation_dialog.dart';
 import 'package:flutter/material.dart';
@@ -275,11 +276,10 @@ class _ChapterEditorPageState extends State<_ChapterEditorPage> {
     final updatedDraft = await Navigator.of(context)
         .push<NarrativeElementDraft>(
           MaterialPageRoute(
-            builder: (_) =>
-                ChapterNarrativeElementCreatePage(
-                  initialDraft: element,
-                  onImportPhoto: widget.onImportPhoto,
-                ),
+            builder: (_) => ChapterNarrativeElementCreatePage(
+              initialDraft: element,
+              onImportPhoto: widget.onImportPhoto,
+            ),
           ),
         );
 
@@ -849,6 +849,7 @@ class _ChapterEditorPageState extends State<_ChapterEditorPage> {
           child: _buildElementTag(
             label: _draftElements[index].title,
             addPhotoWarning: _draftElements[index].photoPaths.isEmpty,
+            onRemove: () => _removeDraftElement(_draftElements[index]),
           ),
         ),
       InkWell(
@@ -883,21 +884,59 @@ class _ChapterEditorPageState extends State<_ChapterEditorPage> {
   Widget _buildElementTag({
     required String label,
     bool addPhotoWarning = false,
+    VoidCallback? onRemove,
   }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF7F7F9),
-        border: Border.all(color: Colors.black12, width: 1),
-      ),
-      child: Text(
-        addPhotoWarning ? '$label · 待补照片' : label,
-        style: const TextStyle(
-          fontSize: 13,
-          color: Colors.black87,
-          letterSpacing: 1.0,
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        DecoratedBox(
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.66),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.06),
+                blurRadius: 18,
+                offset: const Offset(0, 8),
+              ),
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.018),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: ClipRect(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 7, sigmaY: 7),
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  10,
+                  onRemove == null ? 16 : 28,
+                  10,
+                ),
+                child: Text(
+                  addPhotoWarning ? '$label · 待补照片' : label,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: Colors.black87,
+                    letterSpacing: 1.0,
+                  ),
+                ),
+              ),
+            ),
+          ),
         ),
-      ),
+        if (onRemove != null)
+          Positioned(
+            top: -10,
+            right: -10,
+            child: CompactRemoveButton(
+              key: ValueKey('chapterElementTagRemove-$label'),
+              onTap: onRemove,
+            ),
+          ),
+      ],
     );
   }
 

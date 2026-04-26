@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:echo/features/beacon/domain/entities/beacon_task.dart';
 import 'package:echo/shared/models/prototype_tab.dart';
 import 'package:echo/shared/widgets/custom_bottom_nav_bar.dart';
+import 'package:echo/shared/widgets/restrained_action_button.dart';
 import 'package:echo/features/structure_elements_relations/domain/entities/narrative_element.dart';
 import 'package:flutter/material.dart';
 
@@ -58,17 +59,18 @@ class _BeaconPagePrototypeState extends State<BeaconPagePrototype> {
       return tasks;
     }
 
-    return tasks.where((task) {
-      final title = task.title.toLowerCase();
-      final description = (task.description ?? '').toLowerCase();
-      return title.contains(normalizedQuery) ||
-          description.contains(normalizedQuery);
-    }).toList(growable: false);
+    return tasks
+        .where((task) {
+          final title = task.title.toLowerCase();
+          final description = (task.description ?? '').toLowerCase();
+          return title.contains(normalizedQuery) ||
+              description.contains(normalizedQuery);
+        })
+        .toList(growable: false);
   }
 
-  List<BeaconTask> get _executionTasks => widget.tasks
-      .where((task) => !task.isArchived)
-      .toList(growable: false);
+  List<BeaconTask> get _executionTasks =>
+      widget.tasks.where((task) => !task.isArchived).toList(growable: false);
 
   List<BeaconTask> get _pendingTasks =>
       _filteredTasks.where((task) => !task.isArchived).toList(growable: false);
@@ -96,8 +98,10 @@ class _BeaconPagePrototypeState extends State<BeaconPagePrototype> {
   }
 
   int get _countAll => widget.tasks.length;
-  int get _countPending => widget.tasks.where((task) => !task.isArchived).length;
-  int get _countArchived => widget.tasks.where((task) => task.isArchived).length;
+  int get _countPending =>
+      widget.tasks.where((task) => !task.isArchived).length;
+  int get _countArchived =>
+      widget.tasks.where((task) => task.isArchived).length;
 
   Future<void> _enterExecutionMode() async {
     final selectedTaskIds = await _showExecutionTaskPickerDialog();
@@ -171,7 +175,9 @@ class _BeaconPagePrototypeState extends State<BeaconPagePrototype> {
           builder: (context, setDialogState) {
             return Dialog(
               key: const ValueKey('beaconExecutionTaskPickerDialog'),
-              shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+              shape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.zero,
+              ),
               elevation: 0,
               child: Container(
                 padding: const EdgeInsets.fromLTRB(28, 30, 28, 24),
@@ -193,7 +199,7 @@ class _BeaconPagePrototypeState extends State<BeaconPagePrototype> {
                     ),
                     const SizedBox(height: 14),
                     const Text(
-                      '勾选本次外拍要执行的进行中任务，再进入执行模式。',
+                      '勾选本次外拍要探索的进行中任务，再进入探索。',
                       style: TextStyle(
                         fontSize: 14,
                         color: Colors.black54,
@@ -302,7 +308,10 @@ class _BeaconPagePrototypeState extends State<BeaconPagePrototype> {
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 180),
                 curve: Curves.easeOutCubic,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
                 decoration: BoxDecoration(
                   color: selected
                       ? const Color(0xFFF3F4F4).withValues(alpha: 0.92)
@@ -331,7 +340,9 @@ class _BeaconPagePrototypeState extends State<BeaconPagePrototype> {
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontSize: 14,
-                          fontWeight: selected ? FontWeight.w500 : FontWeight.w400,
+                          fontWeight: selected
+                              ? FontWeight.w500
+                              : FontWeight.w400,
                           color: selected
                               ? const Color(0xFF3A3A3A)
                               : const Color(0xFF7B7B7B),
@@ -357,7 +368,9 @@ class _BeaconPagePrototypeState extends State<BeaconPagePrototype> {
       width: 16,
       height: 16,
       decoration: BoxDecoration(
-        color: selected ? const Color(0xFF2E3438) : Colors.white.withValues(alpha: 0.6),
+        color: selected
+            ? const Color(0xFF2E3438)
+            : Colors.white.withValues(alpha: 0.6),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.06),
@@ -367,11 +380,7 @@ class _BeaconPagePrototypeState extends State<BeaconPagePrototype> {
         ],
       ),
       child: selected
-          ? const Icon(
-              Icons.check,
-              size: 11,
-              color: Colors.white,
-            )
+          ? const Icon(Icons.check, size: 11, color: Colors.white)
           : null,
     );
   }
@@ -416,9 +425,7 @@ class _BeaconPagePrototypeState extends State<BeaconPagePrototype> {
                   _buildTopBar(),
                   const SizedBox(height: 24),
                   _buildTabsAndSearch(),
-                  Expanded(
-                    child: _buildTaskList(),
-                  ),
+                  Expanded(child: _buildTaskList()),
                 ],
               ),
               Positioned(
@@ -527,10 +534,7 @@ class _BeaconPagePrototypeState extends State<BeaconPagePrototype> {
                 onChanged: (value) => setState(() => _searchQuery = value),
                 decoration: const InputDecoration(
                   hintText: '搜索任务',
-                  hintStyle: TextStyle(
-                    color: Color(0xFF9A9A9A),
-                    fontSize: 13,
-                  ),
+                  hintStyle: TextStyle(color: Color(0xFF9A9A9A), fontSize: 13),
                   border: InputBorder.none,
                 ),
                 style: const TextStyle(
@@ -625,12 +629,7 @@ class _BeaconPagePrototypeState extends State<BeaconPagePrototype> {
 
     final tasks = _filteredTasks;
     return ListView(
-      padding: const EdgeInsets.only(
-        left: 24,
-        right: 24,
-        top: 24,
-        bottom: 140,
-      ),
+      padding: const EdgeInsets.only(left: 24, right: 24, top: 24, bottom: 140),
       children: [
         for (final task in tasks) _buildTaskCard(task),
         Padding(
@@ -641,10 +640,7 @@ class _BeaconPagePrototypeState extends State<BeaconPagePrototype> {
     );
   }
 
-  Widget _buildTaskSectionHeader({
-    required Key key,
-    required String label,
-  }) {
+  Widget _buildTaskSectionHeader({required Key key, required String label}) {
     return Align(
       alignment: Alignment.centerLeft,
       child: Text(
@@ -678,7 +674,8 @@ class _BeaconPagePrototypeState extends State<BeaconPagePrototype> {
   Widget _buildTaskCard(BeaconTask task) {
     final chapterTitles = _chapterTitlesForTask(task);
     final elementTitles = _elementTitlesForTask(task);
-    final hasAssociations = chapterTitles.isNotEmpty || elementTitles.isNotEmpty;
+    final hasAssociations =
+        chapterTitles.isNotEmpty || elementTitles.isNotEmpty;
 
     return InkWell(
       key: ValueKey('beaconTaskCard-${task.taskId}'),
@@ -728,7 +725,9 @@ class _BeaconPagePrototypeState extends State<BeaconPagePrototype> {
                   width: double.infinity,
                   padding: const EdgeInsets.only(top: 12),
                   decoration: BoxDecoration(
-                    border: Border(top: BorderSide(color: Colors.grey.shade100)),
+                    border: Border(
+                      top: BorderSide(color: Colors.grey.shade100),
+                    ),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -803,10 +802,14 @@ class _BeaconPagePrototypeState extends State<BeaconPagePrototype> {
         child: const Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.playlist_add_check_rounded, color: Colors.black87, size: 14),
+            Icon(
+              Icons.playlist_add_check_rounded,
+              color: Colors.black87,
+              size: 14,
+            ),
             SizedBox(width: 8),
             Text(
-              '执行模式',
+              '探索',
               style: TextStyle(
                 color: Colors.black87,
                 fontSize: 11,
@@ -821,33 +824,12 @@ class _BeaconPagePrototypeState extends State<BeaconPagePrototype> {
   }
 
   Widget _buildAddTaskButton() {
-    return InkWell(
+    return RestrainedActionButton(
       key: const ValueKey('beaconAddTaskButton'),
+      label: '添加任务',
       onTap: () {
         widget.onCreateTask();
       },
-      child: Container(
-        height: 64,
-        width: double.infinity,
-        decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey.shade300, width: 1.5),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.add, color: Colors.grey.shade400, size: 20),
-            const SizedBox(width: 8),
-            Text(
-              '添加任务',
-              style: TextStyle(
-                color: Colors.grey.shade400,
-                fontSize: 14,
-                letterSpacing: 1.2,
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -936,9 +918,7 @@ class _BeaconPagePrototypeState extends State<BeaconPagePrototype> {
                     width: double.infinity,
                     padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
                     decoration: const BoxDecoration(
-                      border: Border(
-                        top: BorderSide(color: Color(0xFFEAEAEA)),
-                      ),
+                      border: Border(top: BorderSide(color: Color(0xFFEAEAEA))),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1019,10 +999,7 @@ class _BeaconPagePrototypeState extends State<BeaconPagePrototype> {
 }
 
 class _ExecutionDisplayText extends StatelessWidget {
-  const _ExecutionDisplayText({
-    super.key,
-    required this.label,
-  });
+  const _ExecutionDisplayText({super.key, required this.label});
 
   final String label;
 

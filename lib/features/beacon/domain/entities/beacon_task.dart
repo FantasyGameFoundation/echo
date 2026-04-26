@@ -37,7 +37,7 @@ class BeaconTask {
        title = taskTitle,
        description = taskDescription,
        status = taskStatus,
-       this.linkedElementIds = linkedElementIds ?? <String>[],
+       linkedElementIds = linkedElementIds ?? <String>[],
        createdAt = createdTimestamp ?? DateTime.now(),
        updatedAt = updatedTimestamp ?? DateTime.now();
 

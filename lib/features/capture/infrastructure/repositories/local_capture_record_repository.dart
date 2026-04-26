@@ -91,4 +91,50 @@ class LocalCaptureRecordRepository implements CaptureRecordRepository {
     });
     return record;
   }
+
+  @override
+  Future<CaptureRecord?> updateRecordPhotos({
+    required String recordId,
+    required List<String> photoPaths,
+    required List<String> pendingPhotoPaths,
+  }) async {
+    final database = await _database();
+    final record = await database.captureRecords
+        .filter()
+        .recordIdEqualTo(recordId)
+        .findFirst();
+    if (record == null) {
+      return null;
+    }
+    record.photoPaths = _normalizePhotoPaths(photoPaths);
+    record.unorganizedPhotoPaths = _normalizePhotoPaths(pendingPhotoPaths);
+    record.updatedAt = DateTime.now();
+    await database.writeTxn(() async {
+      await database.captureRecords.put(record);
+    });
+    return record;
+  }
+
+  @override
+  Future<bool> deleteRecord(String recordId) async {
+    final database = await _database();
+    final record = await database.captureRecords
+        .filter()
+        .recordIdEqualTo(recordId)
+        .findFirst();
+    if (record == null) {
+      return false;
+    }
+    await database.writeTxn(() async {
+      await database.captureRecords.delete(record.isarId);
+    });
+    return true;
+  }
+
+  List<String> _normalizePhotoPaths(List<String> photoPaths) {
+    return photoPaths
+        .map((path) => path.trim())
+        .where((path) => path.isNotEmpty)
+        .toList(growable: false);
+  }
 }

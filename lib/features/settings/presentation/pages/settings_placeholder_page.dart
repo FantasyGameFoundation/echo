@@ -1,3 +1,5 @@
+// ignore_for_file: deprecated_member_use
+
 import 'package:echo/core/platform/project_bundle_file_transfer.dart';
 import 'package:echo/features/settings/domain/entities/app_settings.dart';
 import 'package:echo/features/settings/domain/services/import_project_bundle.dart';
@@ -54,6 +56,8 @@ class _SettingsPlaceholderPageState extends State<SettingsPlaceholderPage> {
   String? _lastImportedDisplayPath;
 
   bool get _importExportDisabled => kIsWeb;
+  bool get _isTransferFlowActive =>
+      _isExporting || _isSelectingImportBundle || _isImporting;
 
   @override
   void initState() {
@@ -518,23 +522,26 @@ class _SettingsPlaceholderPageState extends State<SettingsPlaceholderPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF7F7F5),
-      body: SafeArea(
-        child: Column(
-          children: [
-            _buildTopBar(),
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(24, 20, 24, 40),
-                children: [
-                  _buildCompressionSection(),
-                  const SizedBox(height: 40),
-                  _buildImportExportSection(),
-                ],
+    return PopScope<void>(
+      canPop: !_isTransferFlowActive,
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF7F7F5),
+        body: SafeArea(
+          child: Column(
+            children: [
+              _buildTopBar(),
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(24, 20, 24, 40),
+                  children: [
+                    _buildCompressionSection(),
+                    const SizedBox(height: 40),
+                    _buildImportExportSection(),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -546,7 +553,9 @@ class _SettingsPlaceholderPageState extends State<SettingsPlaceholderPage> {
       child: Row(
         children: [
           IconButton(
-            onPressed: _isImporting ? null : () => Navigator.of(context).pop(),
+            onPressed: _isTransferFlowActive
+                ? null
+                : () => Navigator.of(context).pop(),
             icon: const Icon(
               Icons.arrow_back_ios_new,
               size: 18,

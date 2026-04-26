@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:echo/data/media/media_importer.dart';
@@ -9,6 +10,9 @@ import 'package:echo/features/structure_elements_relations/presentation/widgets/
 import 'package:echo/features/structure_elements_relations/presentation/widgets/editor_bottom_action_bar.dart';
 import 'package:echo/features/structure_elements_relations/presentation/widgets/editor_confirmation_dialog.dart';
 import 'package:echo/features/structure_elements_relations/presentation/widgets/narrative_thumbnail_provider.dart';
+import 'package:echo/shared/models/photo_processing_registry.dart';
+import 'package:echo/shared/models/processing_photo_ref.dart';
+import 'package:echo/shared/widgets/developing_photo_tile.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -38,6 +42,8 @@ class NarrativeElementCreatePage extends StatelessWidget {
     required this.onSave,
     PickGalleryImages? onPickPhoto,
     ImportNarrativePhoto? onImportPhoto,
+    this.photoProcessingRegistry,
+    this.photoProcessingContextId = 'narrative-element-create',
   }) : onPickPhoto = onPickPhoto ?? pickGalleryImagesFromGallery,
        onImportPhoto = onImportPhoto ?? importNarrativePhotoToApp;
 
@@ -45,6 +51,8 @@ class NarrativeElementCreatePage extends StatelessWidget {
   final SaveNarrativeElement onSave;
   final PickGalleryImages onPickPhoto;
   final ImportNarrativePhoto onImportPhoto;
+  final PhotoProcessingRegistry? photoProcessingRegistry;
+  final String photoProcessingContextId;
 
   @override
   Widget build(BuildContext context) {
@@ -55,6 +63,8 @@ class NarrativeElementCreatePage extends StatelessWidget {
       onSave: onSave,
       onPickPhoto: onPickPhoto,
       onImportPhoto: onImportPhoto,
+      photoProcessingRegistry: photoProcessingRegistry,
+      photoProcessingContextId: photoProcessingContextId,
     );
   }
 }
@@ -70,6 +80,8 @@ class NarrativeElementEditPage extends StatelessWidget {
     this.allowChapterSelection = true,
     PickGalleryImages? onPickPhoto,
     ImportNarrativePhoto? onImportPhoto,
+    this.photoProcessingRegistry,
+    this.photoProcessingContextId = 'narrative-element-edit',
   }) : onPickPhoto = onPickPhoto ?? pickGalleryImagesFromGallery,
        onImportPhoto = onImportPhoto ?? importNarrativePhotoToApp;
 
@@ -81,6 +93,8 @@ class NarrativeElementEditPage extends StatelessWidget {
   final bool allowChapterSelection;
   final PickGalleryImages onPickPhoto;
   final ImportNarrativePhoto onImportPhoto;
+  final PhotoProcessingRegistry? photoProcessingRegistry;
+  final String photoProcessingContextId;
 
   @override
   Widget build(BuildContext context) {
@@ -93,6 +107,8 @@ class NarrativeElementEditPage extends StatelessWidget {
       onDelete: onDelete,
       onPickPhoto: onPickPhoto,
       onImportPhoto: onImportPhoto,
+      photoProcessingRegistry: photoProcessingRegistry,
+      photoProcessingContextId: photoProcessingContextId,
     );
   }
 }
@@ -105,6 +121,8 @@ class _NarrativeElementEditorPage extends StatefulWidget {
     required this.onSave,
     required this.onPickPhoto,
     required this.onImportPhoto,
+    required this.photoProcessingContextId,
+    this.photoProcessingRegistry,
     this.onComplete,
     this.onDelete,
   });
@@ -117,6 +135,8 @@ class _NarrativeElementEditorPage extends StatefulWidget {
   final Future<void> Function()? onDelete;
   final PickGalleryImages onPickPhoto;
   final ImportNarrativePhoto onImportPhoto;
+  final PhotoProcessingRegistry? photoProcessingRegistry;
+  final String photoProcessingContextId;
 
   bool get isEditMode => editorElement != null;
 
@@ -135,7 +155,7 @@ class _NarrativeElementEditorPageState
   late final String? _initialChapterId;
   late final List<String> _initialPhotoPaths;
   String? _selectedChapterId;
-  final List<String> _mountedPhotos = <String>[];
+  final List<ProcessingPhotoRef> _photoRefs = <ProcessingPhotoRef>[];
   bool _isSaving = false;
   bool _didUnlockCompletedElement = false;
   bool _didFinishEditing = false;
@@ -160,13 +180,22 @@ class _NarrativeElementEditorPageState
     return widget.editorElement?.status ?? 'finding';
   }
 
-  bool get _canSave => _currentTitle.isNotEmpty && !_isSaving;
+  bool get _hasProcessingPhotos => _photoRefs.any((ref) => ref.isProcessing);
+
+  List<String> get _readyPhotoPaths => [
+    for (final ref in _photoRefs)
+      if (ref.isReady && ref.importedPath != null) ref.importedPath!,
+  ];
+
+  bool get _canSave =>
+      _currentTitle.isNotEmpty && !_isSaving && !_hasProcessingPhotos;
 
   bool get _hasUnsavedChanges =>
       _currentTitle != _initialTitle ||
       _currentDescription != _initialDescription ||
       _selectedChapterId != _initialChapterId ||
-      !listEquals(_mountedPhotos, _initialPhotoPaths) ||
+      _hasProcessingPhotos ||
+      !listEquals(_readyPhotoPaths, _initialPhotoPaths) ||
       _didUnlockCompletedElement;
 
   String? get _unlockChapterId {
@@ -196,7 +225,15 @@ class _NarrativeElementEditorPageState
                     : widget.chapters.first.chapterId))
         : widget.editorElement?.owningChapterId;
     _selectedChapterId = _initialChapterId;
-    _mountedPhotos.addAll(_initialPhotoPaths);
+    _photoRefs.addAll([
+      for (var index = 0; index < _initialPhotoPaths.length; index++)
+        ProcessingPhotoRef.ready(
+          id: '${widget.photoProcessingContextId}-initial-$index',
+          sourcePath: _initialPhotoPaths[index],
+          importedPath: _initialPhotoPaths[index],
+          contextId: widget.photoProcessingContextId,
+        ),
+    ]);
     _nameController = TextEditingController(text: _initialTitle);
     _descController = TextEditingController(text: _initialDescription);
     _nameController.addListener(_onChanged);
@@ -205,6 +242,9 @@ class _NarrativeElementEditorPageState
 
   @override
   void dispose() {
+    widget.photoProcessingRegistry?.removeContext(
+      widget.photoProcessingContextId,
+    );
     _nameController.removeListener(_onChanged);
     _descController.removeListener(_onChanged);
     _nameController.dispose();
@@ -239,35 +279,85 @@ class _NarrativeElementEditorPageState
       return;
     }
 
-    final storedPaths = <String>[];
-    var hasImportFailure = false;
-    for (final photoPath in photoPaths) {
-      try {
-        final storedPath = await widget.onImportPhoto(photoPath);
-        storedPaths.add(storedPath);
-      } on MediaImportCancelledException {
-        continue;
-      } catch (_) {
-        hasImportFailure = true;
+    final refs = [
+      for (var index = 0; index < photoPaths.length; index++)
+        ProcessingPhotoRef.processing(
+          id: '${widget.photoProcessingContextId}-${DateTime.now().microsecondsSinceEpoch}-$index',
+          sourcePath: photoPaths[index],
+          contextId: widget.photoProcessingContextId,
+        ),
+    ];
+    setState(() {
+      _photoRefs.addAll(refs);
+    });
+    for (final ref in refs) {
+      widget.photoProcessingRegistry?.upsert(ref);
+      unawaited(_resolvePhotoRef(ref));
+    }
+  }
+
+  Future<void> _resolvePhotoRef(ProcessingPhotoRef ref) async {
+    try {
+      final storedPath = await widget.onImportPhoto(ref.sourcePath);
+      if (!mounted) {
+        widget.photoProcessingRegistry?.remove(ref.id);
+        return;
       }
-    }
-    if (!mounted) {
-      return;
-    }
-    if (storedPaths.isNotEmpty) {
-      setState(() {
-        _mountedPhotos.addAll(storedPaths);
-      });
-    }
-    if (hasImportFailure) {
+      _replacePhotoRef(
+        ref.copyWith(
+          status: ProcessingPhotoStatus.ready,
+          importedPath: storedPath,
+        ),
+      );
+    } on MediaImportCancelledException {
+      if (!mounted) {
+        widget.photoProcessingRegistry?.remove(ref.id);
+        return;
+      }
+      _removePhotoRefById(ref.id);
+    } catch (_) {
+      if (!mounted) {
+        widget.photoProcessingRegistry?.remove(ref.id);
+        return;
+      }
+      _replacePhotoRef(
+        ref.copyWith(
+          status: ProcessingPhotoStatus.failed,
+          errorMessage: '照片导入失败，请重试',
+        ),
+      );
       _showPassiveHint('照片导入失败，请重试');
     }
   }
 
-  void _removePhoto(int index) {
+  void _replacePhotoRef(ProcessingPhotoRef nextRef) {
     setState(() {
-      _mountedPhotos.removeAt(index);
+      for (var index = 0; index < _photoRefs.length; index++) {
+        if (_photoRefs[index].id == nextRef.id) {
+          _photoRefs[index] = nextRef;
+          break;
+        }
+      }
     });
+    if (nextRef.isProcessing) {
+      widget.photoProcessingRegistry?.upsert(nextRef);
+    } else {
+      widget.photoProcessingRegistry?.remove(nextRef.id);
+    }
+  }
+
+  void _removePhoto(int index) {
+    if (index < 0 || index >= _photoRefs.length) {
+      return;
+    }
+    _removePhotoRefById(_photoRefs[index].id);
+  }
+
+  void _removePhotoRefById(String refId) {
+    setState(() {
+      _photoRefs.removeWhere((ref) => ref.id == refId);
+    });
+    widget.photoProcessingRegistry?.remove(refId);
   }
 
   Future<void> _save() async {
@@ -304,7 +394,7 @@ class _NarrativeElementEditorPageState
       chapterId: _selectedChapterId,
       status: _currentStatus,
       unlockChapterId: unlockChapterId,
-      photoPaths: List<String>.from(_mountedPhotos),
+      photoPaths: _readyPhotoPaths,
     );
     if (!mounted) {
       return;
@@ -321,7 +411,7 @@ class _NarrativeElementEditorPageState
     if (!_canSave || widget.onComplete == null) {
       return;
     }
-    if (_mountedPhotos.isEmpty) {
+    if (_readyPhotoPaths.isEmpty) {
       _showPassiveHint('元素缺少照片，无法完成。');
       return;
     }
@@ -335,7 +425,7 @@ class _NarrativeElementEditorPageState
       chapterId: _selectedChapterId,
       status: 'ready',
       unlockChapterId: null,
-      photoPaths: List<String>.from(_mountedPhotos),
+      photoPaths: _readyPhotoPaths,
     );
     if (!mounted) {
       return;
@@ -494,7 +584,11 @@ class _NarrativeElementEditorPageState
   Widget _buildBottomActions() {
     final isLocked = _isLockedCompletedElement;
     return EditorBottomActionBar(
-      leftLabel: _isSaving ? '保 存 中' : '保 存',
+      leftLabel: _isSaving
+          ? '保 存 中'
+          : _hasProcessingPhotos
+          ? '显 影 中'
+          : '保 存',
       leftKey: ValueKey(
         isLocked ? 'narrativeLockedSaveButton' : 'narrativeSaveButton',
       ),
@@ -505,7 +599,7 @@ class _NarrativeElementEditorPageState
       rightKey: widget.isEditMode
           ? const ValueKey('narrativeDeleteButton')
           : null,
-      rightEnabled: !_isSaving,
+      rightEnabled: !_isSaving && !_hasProcessingPhotos,
       onRightTap: widget.isEditMode ? _deleteElement : null,
     );
   }
@@ -774,30 +868,55 @@ class _NarrativeElementEditorPageState
 
   Widget _buildPhotoMounter() {
     final mountItems = <Widget>[
-      for (int i = 0; i < _mountedPhotos.length; i++)
+      for (int i = 0; i < _photoRefs.length; i++)
         Column(
           children: [
             Stack(
               clipBehavior: Clip.none,
               children: [
-                Container(
-                  key: ValueKey('narrativeMountedPhotoTile-$i'),
-                  width: 80,
-                  height: 80,
-                  decoration: const BoxDecoration(color: Color(0xFFE0E0E0)),
-                  clipBehavior: Clip.hardEdge,
-                  child: Image(
-                    image: narrativeThumbnailProvider(_mountedPhotos[i]),
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
-                      return const Icon(
-                        Icons.image,
-                        color: Colors.black26,
-                        size: 28,
-                      );
-                    },
+                if (!_photoRefs[i].isReady ||
+                    _photoRefs[i].importedPath == null)
+                  DevelopingPhotoTile(
+                    key: ValueKey('narrativeMountedPhotoTile-$i'),
+                    failed: _photoRefs[i].isFailed,
+                  )
+                else
+                  TweenAnimationBuilder<double>(
+                    key: ValueKey('narrativeMountedPhotoTile-$i'),
+                    tween: Tween<double>(begin: 0, end: 1),
+                    duration: const Duration(milliseconds: 220),
+                    curve: Curves.easeOutCubic,
+                    builder: (context, opacity, child) =>
+                        Opacity(opacity: opacity, child: child),
+                    child: Container(
+                      width: 80,
+                      height: 80,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE0E0E0),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.045),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      clipBehavior: Clip.hardEdge,
+                      child: Image(
+                        image: narrativeThumbnailProvider(
+                          _photoRefs[i].importedPath!,
+                        ),
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return const Icon(
+                            Icons.image,
+                            color: Colors.black26,
+                            size: 28,
+                          );
+                        },
+                      ),
+                    ),
                   ),
-                ),
                 Positioned(
                   top: -8,
                   right: -8,
@@ -825,7 +944,7 @@ class _NarrativeElementEditorPageState
               const Icon(Icons.add, color: Colors.black54, size: 24),
               const SizedBox(height: 6),
               Text(
-                _mountedPhotos.isEmpty ? '添加' : '继续添加',
+                _photoRefs.isEmpty ? '添加' : '继续添加',
                 style: TextStyle(
                   fontSize: 10,
                   color: Colors.black.withValues(alpha: 0.45),

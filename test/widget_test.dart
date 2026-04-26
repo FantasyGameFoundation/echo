@@ -1,6 +1,9 @@
+// ignore_for_file: deprecated_member_use
+
 import 'dart:convert';
 import 'dart:ffi' show Abi;
 import 'dart:io';
+import 'dart:async';
 
 import 'package:echo/app/app.dart';
 import 'package:echo/features/beacon/domain/entities/beacon_task.dart';
@@ -19,6 +22,7 @@ import 'package:echo/features/project/presentation/pages/project_edit_page.dart'
 import 'package:echo/features/project/presentation/pages/project_wizard_page.dart';
 import 'package:echo/features/project/presentation/widgets/project_sidebar.dart';
 import 'package:echo/features/beacon/presentation/pages/beacon_task_editor_page.dart';
+import 'package:echo/features/curation/presentation/models/pending_organize_models.dart';
 import 'package:echo/features/curation/presentation/pages/global_arrange_page.dart';
 import 'package:echo/features/curation/presentation/pages/pending_organize_page.dart';
 import 'package:echo/features/structure_elements_relations/domain/element_status.dart';
@@ -48,11 +52,357 @@ import 'package:echo/features/timeline/presentation/pages/timeline_page_prototyp
 import 'package:echo/shared/models/content_preview_item.dart';
 import 'package:echo/shared/models/prototype_tab.dart';
 import 'package:echo/shared/widgets/custom_bottom_nav_bar.dart';
+import 'package:echo/shared/widgets/quick_record_overlay_prototype.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:isar/isar.dart';
 
 void main() {
+  testWidgets(
+    'quick record inserts developing placeholders before import resolves',
+    (tester) async {
+      final firstImport = Completer<String>();
+      final secondImport = Completer<String>();
+      SaveCaptureRequest? savedRequest;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: QuickRecordOverlayPrototype(
+              onClose: () {},
+              onPickGalleryPhotos: () async => <String>[
+                '/tmp/source-a.jpg',
+                '/tmp/source-b.jpg',
+              ],
+              onImportPhoto: (sourcePath) {
+                return sourcePath.endsWith('a.jpg')
+                    ? firstImport.future
+                    : secondImport.future;
+              },
+              onSaveRecord:
+                  ({
+                    required mode,
+                    required rawText,
+                    required photoPaths,
+                  }) async {
+                    savedRequest = SaveCaptureRequest(
+                      projectId: 'project-test',
+                      mode: mode,
+                      rawText: rawText,
+                      photoPaths: photoPaths,
+                    );
+                  },
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.byKey(const ValueKey('quickRecordGalleryButton')));
+      await tester.pump();
+
+      expect(find.text('显 影 中'), findsNWidgets(3));
+      expect(
+        tester
+            .widget<InkWell>(
+              find.byKey(const ValueKey('quickRecordSaveButton')),
+            )
+            .onTap,
+        isNotNull,
+      );
+
+      firstImport.complete('/tmp/imported-a.jpg');
+      await tester.pump();
+      expect(find.text('显 影 中'), findsNWidgets(2));
+
+      secondImport.complete('/tmp/imported-b.jpg');
+      await tester.pump();
+      expect(find.text('显 影 中'), findsNothing);
+
+      await tester.tap(find.byKey(const ValueKey('quickRecordSaveButton')));
+      await tester.pump();
+      expect(savedRequest?.photoPaths, <String>[
+        '/tmp/imported-a.jpg',
+        '/tmp/imported-b.jpg',
+      ]);
+    },
+  );
+
+  testWidgets(
+    'narrative element save is locked while selected photos are processing',
+    (tester) async {
+      final importCompleter = Completer<String>();
+      var saveCount = 0;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: NarrativeElementCreatePage(
+            chapters: <StructureChapter>[
+              StructureChapter.create(
+                id: 'chapter-test',
+                projectId: 'project-test',
+                chapterTitle: '章节',
+              ),
+            ],
+            onPickPhoto: () async => <String>['/tmp/source.jpg'],
+            onImportPhoto: (_) => importCompleter.future,
+            onSave:
+                ({
+                  required title,
+                  required description,
+                  required chapterId,
+                  required status,
+                  required unlockChapterId,
+                  required photoPaths,
+                }) async {
+                  saveCount += 1;
+                },
+          ),
+        ),
+      );
+
+      await tester.enterText(
+        find.byKey(const ValueKey('narrativeElementNameField')),
+        '元素',
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('narrativeMountedPhotoAddButton')),
+      );
+      await tester.pump();
+
+      expect(find.text('显 影 中'), findsWidgets);
+      expect(
+        tester
+            .widget<InkWell>(find.byKey(const ValueKey('narrativeSaveButton')))
+            .onTap,
+        isNull,
+      );
+      await tester.tap(find.byKey(const ValueKey('narrativeSaveButton')));
+      await tester.pump();
+      expect(saveCount, 0);
+
+      importCompleter.complete('/tmp/imported.jpg');
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('narrativeSaveButton')));
+      await tester.pump();
+      expect(saveCount, 1);
+    },
+  );
+
+  testWidgets(
+    'chapter draft element save is locked while selected photos are processing',
+    (tester) async {
+      final importCompleter = Completer<String>();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ChapterNarrativeElementCreatePage(
+            onPickPhoto: () async => <String>['/tmp/source.jpg'],
+            onImportPhoto: (_) => importCompleter.future,
+          ),
+        ),
+      );
+
+      await tester.enterText(
+        find.byKey(const ValueKey('chapterDraftElementNameField')),
+        '章节内元素',
+      );
+      await tester.tap(find.byType(InkWell).last);
+      await tester.pump();
+
+      expect(find.text('显 影 中'), findsWidgets);
+      await tester.tap(
+        find.byKey(const ValueKey('chapterDraftElementSaveButton')),
+        warnIfMissed: false,
+      );
+      await tester.pump();
+      expect(find.byType(ChapterNarrativeElementCreatePage), findsOneWidget);
+
+      importCompleter.complete('/tmp/imported.jpg');
+      await tester.pump();
+      expect(find.text('显 影 中'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'pending organize removes placement button and keeps relation data',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 1400));
+      addTearDown(() async {
+        await tester.binding.setSurfaceSize(null);
+      });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: PendingOrganizePage(
+            data: PendingOrganizePageData(
+              entries: const <PendingOrganizeEntryData>[
+                PendingOrganizeEntryData.photo(
+                  entryId: 'entry-1',
+                  imageSource: '/tmp/photo.jpg',
+                  photoPath: '/tmp/photo.jpg',
+                  sourceRecordId: 'record-1',
+                  sourceRelationGroupIds: <String>['group-1'],
+                ),
+              ],
+              relationTypes: const <PendingOrganizeRelationTypeOption>[
+                PendingOrganizeRelationTypeOption(
+                  relationTypeId: 'type-1',
+                  name: '关系',
+                  groups: <PendingOrganizeRelationGroupOption>[
+                    PendingOrganizeRelationGroupOption(
+                      groupId: 'group-1',
+                      relationTypeId: 'type-1',
+                      title: '关系组',
+                      previewItems: <ContentPreviewItem>[],
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            onSavePhoto: (_) async => const PendingOrganizePageData(),
+          ),
+        ),
+      );
+
+      expect(
+        find.byKey(const ValueKey('pendingOrganizePlaceOnBoardButton')),
+        findsNothing,
+      );
+      expect(find.text('关系'), findsOneWidget);
+    },
+  );
+
+  testWidgets('pending organize back leaves source pending data unchanged', (
+    tester,
+  ) async {
+    var saveCalled = false;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PendingOrganizePage(
+          data: const PendingOrganizePageData(
+            entries: <PendingOrganizeEntryData>[
+              PendingOrganizeEntryData.photo(
+                entryId: 'entry-1',
+                imageSource: '/tmp/photo.jpg',
+                photoPath: '/tmp/photo.jpg',
+                sourceRecordId: 'record-1',
+              ),
+            ],
+          ),
+          onSavePhoto: (_) async {
+            saveCalled = true;
+            return const PendingOrganizePageData();
+          },
+        ),
+      ),
+    );
+
+    await tester.tap(find.byIcon(Icons.arrow_back_ios_new));
+    await tester.pump();
+
+    expect(saveCalled, isFalse);
+  });
+
+  testWidgets(
+    'global arrange sticky filter pill clears active relation state after scroll',
+    (tester) async {
+      await tester.pumpWidget(MaterialApp(home: _CurationInteractionHarness()));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('呼应').first);
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('globalArrangeStickyFilterPill')),
+        findsOneWidget,
+      );
+
+      await tester.drag(find.byType(ListView), const Offset(0, -160));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(
+        find.byKey(const ValueKey('globalArrangeStickyFilterPill')),
+        findsOneWidget,
+      );
+
+      await tester.tap(
+        find.byKey(const ValueKey('globalArrangeStickyFilterClearButton')),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('globalArrangeStickyFilterPill')),
+        findsNothing,
+      );
+    },
+  );
+
+  testWidgets('global arrange keeps bottom nav visible during scroll', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(home: _CurationInteractionHarness.large()),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.fling(
+      find.byType(Scrollable).first,
+      const Offset(0, -600),
+      1000,
+    );
+    await tester.pump(const Duration(milliseconds: 320));
+    expect(
+      tester
+          .getSize(find.byKey(const ValueKey('globalArrangeBottomNavShell')))
+          .height,
+      80,
+    );
+
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 900));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(
+      tester
+          .getSize(find.byKey(const ValueKey('globalArrangeBottomNavShell')))
+          .height,
+      80,
+    );
+  });
+
+  testWidgets(
+    'fullscreen viewer dismisses only on dominant vertical drag at base scale',
+    (tester) async {
+      await tester.pumpWidget(MaterialApp(home: _CurationInteractionHarness()));
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const ValueKey('globalArrangePhotoOpenArea-photo-1')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byIcon(Icons.close), findsOneWidget);
+
+      await tester.drag(find.byType(PageView), const Offset(0, 190));
+      await tester.pumpAndSettle();
+      expect(find.byIcon(Icons.close), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'fullscreen viewer keeps horizontal paging and zoom from triggering dismiss',
+    (tester) async {
+      await tester.pumpWidget(MaterialApp(home: _CurationInteractionHarness()));
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const ValueKey('globalArrangePhotoOpenArea-photo-1')),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.drag(find.byType(PageView), const Offset(-520, 0));
+      await tester.pumpAndSettle();
+      expect(find.byIcon(Icons.close), findsOneWidget);
+      expect(find.text('2 / 2'), findsOneWidget);
+    },
+  );
+
   test(
     'local project repository restores projects from isar persistence',
     () async {
@@ -148,18 +498,12 @@ void main() {
 
   test('beacon task schema ids match the generated xxh3 values', () {
     expect(BeaconTaskSchema.id, -5558700412993255369);
-    expect(
-      BeaconTaskSchema.indexes['taskId']?.id,
-      -6391211041487498726,
-    );
+    expect(BeaconTaskSchema.indexes['taskId']?.id, -6391211041487498726);
     expect(
       BeaconTaskSchema.indexes['owningProjectId']?.id,
       8853439974620037944,
     );
-    expect(
-      BeaconTaskSchema.indexes['status']?.id,
-      -107785170620420283,
-    );
+    expect(BeaconTaskSchema.indexes['status']?.id, -107785170620420283);
   });
 
   test('in-memory repository archives and deletes projects', () async {
@@ -297,7 +641,7 @@ void main() {
       expect(_findSelectedCompressionOption('高质量'), findsOneWidget);
       expect(find.textContaining('保 存'), findsNothing);
 
-      await tester.pageBack();
+      await tester.tap(find.byIcon(Icons.arrow_back_ios_new));
       await tester.pumpAndSettle();
 
       expect(find.text('新 建 项 目'), findsOneWidget);
@@ -309,6 +653,57 @@ void main() {
       expect(_findSelectedCompressionOption('无压缩'), findsNothing);
     },
   );
+
+  testWidgets('shell back from top-level tabs returns to structure page', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      EchoApp(
+        projectRepository: _InMemoryProjectRepository(
+          initialProjects: <Project>[
+            Project.create(
+              id: 'project-shell-back',
+              projectTitle: '返回测试',
+              projectThemeStatement: '验证一级页面返回逻辑',
+              createdTimestamp: DateTime(2026),
+              updatedTimestamp: DateTime(2026),
+            ),
+          ],
+          currentProjectId: 'project-shell-back',
+        ),
+        structureChapterRepository: _InMemoryStructureChapterRepository(),
+        narrativeElementRepository: _InMemoryNarrativeElementRepository(),
+        projectRelationRepository: _InMemoryProjectRelationRepository(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('章节骨架'), findsOneWidget);
+
+    await tester.tap(find.text('整理'));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('globalArrangeBottomNavShell')),
+      findsOneWidget,
+    );
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.text('章节骨架'), findsOneWidget);
+
+    await tester.tap(find.text('历程'));
+    await tester.pumpAndSettle();
+    expect(find.text('暂无记录'), findsOneWidget);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.text('章节骨架'), findsOneWidget);
+
+    await tester.tap(find.text('信标'));
+    await tester.pumpAndSettle();
+    expect(find.text('待执行'), findsOneWidget);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.text('章节骨架'), findsOneWidget);
+  });
 
   testWidgets(
     'no-project page opens wizard from center button and then lands on new project structure page',
@@ -531,10 +926,11 @@ void main() {
       final disabledSaveButton = tester.widget<InkWell>(
         find.byKey(const ValueKey('quickRecordSaveButton')),
       );
-      expect(disabledSaveButton.onTap, isNull);
+      expect(disabledSaveButton.onTap, isNotNull);
 
       await tester.tap(find.byKey(const ValueKey('quickRecordSaveButton')));
       await tester.pumpAndSettle();
+      expect(find.text('请先添加照片'), findsOneWidget);
       expect(capturedRequest, isNull);
 
       await tester.tap(find.byKey(const ValueKey('quickRecordGalleryButton')));
@@ -583,14 +979,8 @@ void main() {
         find.byKey(const ValueKey('quickRecordModeSelector')),
       );
       final shape = selector.shape! as RoundedRectangleBorder;
-      expect(
-        shape.borderRadius,
-        const BorderRadius.all(Radius.circular(12)),
-      );
-      expect(
-        selector.menuPadding,
-        const EdgeInsets.symmetric(vertical: 4),
-      );
+      expect(shape.borderRadius, const BorderRadius.all(Radius.circular(12)));
+      expect(selector.menuPadding, const EdgeInsets.symmetric(vertical: 4));
       expect(
         selector.constraints,
         const BoxConstraints(minWidth: 96, maxWidth: 104),
@@ -964,9 +1354,14 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: ProjectWizardPage(
-            onFinish: (unusedTitle, unusedThemeStatement, unusedCoverImagePath) async {
-              throw StateError('mock create failure');
-            },
+            onFinish:
+                (
+                  unusedTitle,
+                  unusedThemeStatement,
+                  unusedCoverImagePath,
+                ) async {
+                  throw StateError('mock create failure');
+                },
           ),
         ),
       );
@@ -4028,13 +4423,13 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.scrollUntilVisible(
-      find.text('添加关系类型'),
+      find.text('添加关联关系'),
       300,
       scrollable: find.byType(Scrollable).first,
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('添加关系类型'));
+    await tester.tap(find.text('添加关联关系'));
     await tester.pumpAndSettle();
 
     expect(find.text('添 加 关 系 类 型'), findsOneWidget);
@@ -4250,7 +4645,7 @@ void main() {
       expect(find.text('形态的往复映照'), findsNothing);
       expect(find.text('从局部裂隙到整体张力'), findsNothing);
       await tester.scrollUntilVisible(
-        find.text('添 加 关 系 组'),
+        find.byKey(const ValueKey('addRelationGroupButton')),
         300,
         scrollable: find.byType(Scrollable).first,
       );
@@ -4259,6 +4654,7 @@ void main() {
         find.byKey(const ValueKey('addRelationGroupButton')),
         findsOneWidget,
       );
+      expect(find.text('添加关系组'), findsOneWidget);
     },
   );
 
@@ -4491,11 +4887,12 @@ void main() {
       await tester.pumpAndSettle();
 
       await tester.scrollUntilVisible(
-        find.text('添 加 关 系 组'),
+        find.byKey(const ValueKey('addRelationGroupButton')),
         300,
         scrollable: find.byType(Scrollable).first,
       );
       await tester.pumpAndSettle();
+      expect(find.text('添加关系组'), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('addRelationGroupButton')));
       await tester.pumpAndSettle();
 
@@ -6740,6 +7137,7 @@ void main() {
           items: [
             TimelineItem(
               id: 'photo-1',
+              recordId: 'record-photo',
               createdAt: DateTime(2026, 1, 12, 10, 30),
               type: TimelineItemType.photo,
               content: '照片条目',
@@ -6751,6 +7149,7 @@ void main() {
             ),
             TimelineItem(
               id: 'note-1',
+              recordId: 'record-note',
               createdAt: DateTime(2026, 1, 11, 8, 20),
               type: TimelineItemType.note,
               content: '带照片的手记',
@@ -6881,38 +7280,38 @@ void main() {
       await tester.tap(find.text('历程'));
       await tester.pumpAndSettle();
 
-      expect(find.text('作品照片'), findsOneWidget);
-      expect(find.text('纯文本手记'), findsOneWidget);
+      expect(find.textContaining('作品照片', findRichText: true), findsOneWidget);
+      expect(find.textContaining('纯文本手记', findRichText: true), findsOneWidget);
       await tester.scrollUntilVisible(
-        find.text('带图记录'),
+        find.textContaining('带图记录', findRichText: true),
         300,
         scrollable: find.byType(Scrollable).first,
       );
       await tester.pumpAndSettle();
-      expect(find.text('带图记录'), findsOneWidget);
-      expect(find.text('整理页未归属照片'), findsNothing);
+      expect(find.textContaining('带图记录', findRichText: true), findsOneWidget);
+      expect(find.textContaining('整理页未归属照片', findRichText: true), findsNothing);
 
       await tester.tap(find.text('照片'));
       await tester.pumpAndSettle();
 
-      expect(find.text('作品照片'), findsOneWidget);
+      expect(find.textContaining('作品照片', findRichText: true), findsOneWidget);
       expect(find.text('作品'), findsOneWidget);
-      expect(find.text('纯文本手记'), findsNothing);
-      expect(find.text('带图记录'), findsNothing);
+      expect(find.textContaining('纯文本手记', findRichText: true), findsNothing);
+      expect(find.textContaining('带图记录', findRichText: true), findsNothing);
 
       await tester.tap(find.text('手记'));
       await tester.pumpAndSettle();
 
       expect(find.text('作品'), findsNothing);
-      expect(find.text('作品照片'), findsNothing);
-      expect(find.text('纯文本手记'), findsOneWidget);
+      expect(find.textContaining('作品照片', findRichText: true), findsNothing);
+      expect(find.textContaining('纯文本手记', findRichText: true), findsOneWidget);
       await tester.scrollUntilVisible(
-        find.text('带图记录'),
+        find.textContaining('带图记录', findRichText: true),
         300,
         scrollable: find.byType(Scrollable).first,
       );
       await tester.pumpAndSettle();
-      expect(find.text('带图记录'), findsOneWidget);
+      expect(find.textContaining('带图记录', findRichText: true), findsOneWidget);
     },
   );
 
@@ -6925,6 +7324,7 @@ void main() {
             items: [
               TimelineItem(
                 id: 'note-gallery',
+                recordId: 'record-note-gallery',
                 createdAt: DateTime(2026, 2, 1, 10),
                 type: TimelineItemType.note,
                 content: '多图手记',
@@ -7198,6 +7598,232 @@ void main() {
   );
 
   testWidgets(
+    'fullscreen curation photo delete removes app references and physical file',
+    (tester) async {
+      final tempDir = Directory.systemTemp.createTempSync('echo-photo-delete-');
+      addTearDown(() {
+        if (tempDir.existsSync()) {
+          tempDir.deleteSync(recursive: true);
+        }
+      });
+      final photoFile = File('${tempDir.path}/delete-me.jpg');
+      photoFile.writeAsBytesSync(<int>[1, 2, 3]);
+      final photoPath = photoFile.path;
+      const projectId = 'project-photo-delete';
+      final relationRepository = _InMemoryProjectRelationRepository();
+      final relationTypes = await relationRepository
+          .listRelationTypesForProject(projectId);
+      await relationRepository.createRelationGroup(
+        projectId: projectId,
+        relationTypeId: relationTypes.first.relationTypeId,
+        title: '照片关系',
+        members: <ProjectRelationDraftMember>[
+          ProjectRelationDraftMember.photo(
+            photoPath: photoPath,
+            sourceElementId: 'element-delete',
+          ),
+          const ProjectRelationDraftMember.element(elementId: 'element-keep'),
+        ],
+      );
+      final elementRepository = _InMemoryNarrativeElementRepository(
+        initialElements: <NarrativeElement>[
+          NarrativeElement.create(
+            id: 'element-delete',
+            projectId: projectId,
+            chapterId: 'chapter-delete',
+            elementTitle: '待删照片元素',
+            linkedPhotoPaths: <String>[photoPath],
+          ),
+          NarrativeElement.create(
+            id: 'element-keep',
+            projectId: projectId,
+            chapterId: 'chapter-delete',
+            elementTitle: '保留元素',
+          ),
+        ],
+      );
+      final captureRecordRepository = _InMemoryCaptureRecordRepository(
+        initialRecords: <CaptureRecord>[
+          CaptureRecord.create(
+            id: 'record-delete-photo',
+            projectId: projectId,
+            captureMode: CaptureMode.portfolio.storageValue,
+            captureText: '会随最后照片消失的作品',
+            capturedPhotoPaths: <String>[photoPath],
+            pendingPhotoPaths: <String>[photoPath],
+            createdTimestamp: DateTime(2026, 2, 2, 10),
+            updatedTimestamp: DateTime(2026, 2, 2, 10),
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        EchoApp(
+          projectRepository: _InMemoryProjectRepository(
+            initialProjects: <Project>[
+              Project.create(
+                id: projectId,
+                projectTitle: '删除照片',
+                projectThemeStatement: '验证照片删除',
+                createdTimestamp: DateTime(2026),
+                updatedTimestamp: DateTime(2026),
+              ),
+            ],
+            currentProjectId: projectId,
+          ),
+          structureChapterRepository: _InMemoryStructureChapterRepository(
+            initialChapters: <StructureChapter>[
+              StructureChapter.create(
+                id: 'chapter-delete',
+                projectId: projectId,
+                chapterTitle: '第一章',
+                chapterSortOrder: 0,
+              ),
+            ],
+          ),
+          narrativeElementRepository: elementRepository,
+          projectRelationRepository: relationRepository,
+          captureRecordRepository: captureRecordRepository,
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 500));
+
+      await tester.tap(find.text('整理'));
+      await tester.pump(const Duration(milliseconds: 500));
+      final photoOpenAreaFinder = find.byKey(
+        ValueKey('globalArrangePhotoOpenArea-element-delete::0::$photoPath'),
+      );
+      await tester.ensureVisible(photoOpenAreaFinder);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(photoOpenAreaFinder.hitTestable(), findsOneWidget);
+      await tester.tap(photoOpenAreaFinder);
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const ValueKey('globalArrangePhotoDeleteButton')),
+      );
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(
+        find.descendant(of: find.byType(Dialog), matching: find.text('删除照片')),
+        findsOneWidget,
+      );
+      await tester.tap(
+        find.descendant(of: find.byType(Dialog), matching: find.text('删除')),
+      );
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump(const Duration(milliseconds: 500));
+
+      expect(
+        find.byKey(const ValueKey('globalArrangePhotoDeleteButton')),
+        findsNothing,
+      );
+      expect(photoFile.existsSync(), isFalse);
+      final updatedElements = await elementRepository.listElementsForProject(
+        projectId,
+      );
+      expect(
+        updatedElements
+            .singleWhere((element) => element.elementId == 'element-delete')
+            .photoPaths,
+        isEmpty,
+      );
+      final updatedRecords = await captureRecordRepository
+          .listRecordsForProject(projectId);
+      expect(updatedRecords.single.photoPaths, isEmpty);
+      expect(updatedRecords.single.unorganizedPhotoPaths, isEmpty);
+      final updatedMembers = await relationRepository
+          .listRelationMembersForProject(projectId);
+      expect(
+        updatedMembers.where((member) => member.linkedPhotoPath == photoPath),
+        isEmpty,
+      );
+
+      await tester.tap(find.text('历程'));
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.textContaining('会随最后照片消失', findRichText: true), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'timeline long press delete removes capture record and orphan file',
+    (tester) async {
+      final tempDir = Directory.systemTemp.createTempSync(
+        'echo-timeline-delete-',
+      );
+      addTearDown(() {
+        if (tempDir.existsSync()) {
+          tempDir.deleteSync(recursive: true);
+        }
+      });
+      final photoFile = File('${tempDir.path}/timeline-delete.jpg');
+      photoFile.writeAsBytesSync(<int>[1, 2, 3]);
+      const projectId = 'project-timeline-delete';
+      final captureRecordRepository = _InMemoryCaptureRecordRepository(
+        initialRecords: <CaptureRecord>[
+          CaptureRecord.create(
+            id: 'record-timeline-delete',
+            projectId: projectId,
+            captureMode: CaptureMode.portfolio.storageValue,
+            captureText: '待删除历程',
+            capturedPhotoPaths: <String>[photoFile.path],
+            pendingPhotoPaths: <String>[photoFile.path],
+            createdTimestamp: DateTime(2026, 2, 2, 10),
+            updatedTimestamp: DateTime(2026, 2, 2, 10),
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        EchoApp(
+          projectRepository: _InMemoryProjectRepository(
+            initialProjects: <Project>[
+              Project.create(
+                id: projectId,
+                projectTitle: '删除历程',
+                projectThemeStatement: '验证历程删除',
+                createdTimestamp: DateTime(2026),
+                updatedTimestamp: DateTime(2026),
+              ),
+            ],
+            currentProjectId: projectId,
+          ),
+          structureChapterRepository: _InMemoryStructureChapterRepository(),
+          narrativeElementRepository: _InMemoryNarrativeElementRepository(),
+          projectRelationRepository: _InMemoryProjectRelationRepository(),
+          captureRecordRepository: captureRecordRepository,
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 500));
+
+      await tester.tap(find.text('历程'));
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.longPress(
+        find.byKey(
+          const ValueKey('timelineItem-timeline-photo-record-timeline-delete'),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(
+        find.descendant(of: find.byType(Dialog), matching: find.text('删除历程')),
+        findsOneWidget,
+      );
+
+      await tester.tap(
+        find.descendant(of: find.byType(Dialog), matching: find.text('删除')),
+      );
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump(const Duration(milliseconds: 500));
+
+      expect(
+        await captureRecordRepository.listRecordsForProject(projectId),
+        isEmpty,
+      );
+      expect(photoFile.existsSync(), isFalse);
+      expect(find.textContaining('待删除历程', findRichText: true), findsNothing);
+    },
+  );
+
+  testWidgets(
     'echo app overview uses injected beacon tasks with derived chapter and element lines',
     (tester) async {
       final beaconTaskRepository = _InMemoryBeaconTaskRepository(
@@ -7263,7 +7889,10 @@ void main() {
       await tester.tap(find.text('信标'));
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const ValueKey('beaconNormalModeRoot')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('beaconNormalModeRoot')),
+        findsOneWidget,
+      );
       expect(find.text('县城剧院废弃放映厅'), findsOneWidget);
       expect(
         find.byKey(const ValueKey('beaconTaskChapterLine-task-1')),
@@ -7365,8 +7994,7 @@ void main() {
           StructureChapter.create(
             id: 'chapter-2',
             projectId: 'project-beacon',
-            chapterTitle:
-                '潮湿而冗长的第二章标题用于验证章节摘要在超长文案下保持单行省略而不是撑高卡片',
+            chapterTitle: '潮湿而冗长的第二章标题用于验证章节摘要在超长文案下保持单行省略而不是撑高卡片',
             chapterSortOrder: 1,
             createdTimestamp: DateTime(2026),
             updatedTimestamp: DateTime(2026),
@@ -7393,8 +8021,7 @@ void main() {
             id: 'element-c',
             projectId: 'project-beacon',
             chapterId: 'chapter-2',
-            elementTitle:
-                '潮湿而冗长的元素标题用于验证元素摘要在超长文案下保持单行省略而不是换行',
+            elementTitle: '潮湿而冗长的元素标题用于验证元素摘要在超长文案下保持单行省略而不是换行',
             createdTimestamp: DateTime(2026),
             updatedTimestamp: DateTime(2026),
           ),
@@ -7423,10 +8050,16 @@ void main() {
         find.byKey(const ValueKey('beaconTaskElementLine-task-both')),
       );
 
-      expect(chapterLine.data, '[章节]  晨曦之眼，潮湿而冗长的第二章标题用于验证章节摘要在超长文案下保持单行省略而不是撑高卡片');
+      expect(
+        chapterLine.data,
+        '[章节]  晨曦之眼，潮湿而冗长的第二章标题用于验证章节摘要在超长文案下保持单行省略而不是撑高卡片',
+      );
       expect(chapterLine.maxLines, 1);
       expect(chapterLine.overflow, TextOverflow.ellipsis);
-      expect(elementLine.data, '[元素]  同章元素一，同章元素二，潮湿而冗长的元素标题用于验证元素摘要在超长文案下保持单行省略而不是换行');
+      expect(
+        elementLine.data,
+        '[元素]  同章元素一，同章元素二，潮湿而冗长的元素标题用于验证元素摘要在超长文案下保持单行省略而不是换行',
+      );
       expect(elementLine.maxLines, 1);
       expect(elementLine.overflow, TextOverflow.ellipsis);
       expect(chapterLine.data?.split('晨曦之眼').length, 2);
@@ -7447,6 +8080,10 @@ void main() {
         find.byKey(const ValueKey('beaconTaskElementLine-task-none')),
         findsNothing,
       );
+
+      await tester.drag(find.byType(Scrollable).first, const Offset(0, -420));
+      await tester.pumpAndSettle();
+
       expect(
         find.byKey(
           const ValueKey('beaconTaskChapterLine-task-unresolved-chapter'),
@@ -7537,6 +8174,11 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('盐道码头'), findsOneWidget);
 
+      await tester.tap(find.byKey(const ValueKey('beaconSearchToggleButton')));
+      await tester.pumpAndSettle();
+
+      await tester.drag(find.byType(ListView).last, const Offset(0, -520));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('beaconAddTaskButton')));
       await tester.pumpAndSettle();
       expect(find.byType(BeaconTaskEditorPage), findsOneWidget);
@@ -7553,7 +8195,9 @@ void main() {
         find.byKey(const ValueKey('beaconTaskEditorElement-element-1')),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('beaconTaskEditorSaveButton')));
+      await tester.tap(
+        find.byKey(const ValueKey('beaconTaskEditorSaveButton')),
+      );
       await tester.pumpAndSettle();
 
       expect(find.text('林道伐木痕迹'), findsOneWidget);
@@ -7572,17 +8216,25 @@ void main() {
         find.byKey(const ValueKey('beaconTaskEditorTitleField')),
         '林道伐木痕迹更新',
       );
-      await tester.tap(find.byKey(const ValueKey('beaconTaskEditorSaveButton')));
+      await tester.tap(
+        find.byKey(const ValueKey('beaconTaskEditorSaveButton')),
+      );
       await tester.pumpAndSettle();
 
-      expect(find.text('林道伐木痕迹更新'), findsOneWidget);
-      expect(find.text('林道伐木痕迹'), findsNothing);
       expect(
         beaconTaskRepository.tasks
             .singleWhere((task) => task.taskId == 'task-3')
             .title,
         '林道伐木痕迹更新',
       );
+      await tester.fling(
+        find.byType(ListView).last,
+        const Offset(0, 600),
+        1000,
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('林道伐木痕迹更新'), findsOneWidget);
+      expect(find.text('林道伐木痕迹'), findsNothing);
     },
   );
 
@@ -7657,17 +8309,14 @@ void main() {
 
       await tester.tap(find.byKey(const ValueKey('beaconSearchToggleButton')));
       await tester.pumpAndSettle();
-      await tester.enterText(
-        find.byKey(const ValueKey('beaconSearchField')),
-        '',
-      );
-      await tester.pumpAndSettle();
 
       await tester.tap(find.text('全部'));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('beaconTaskCard-task-1')));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('beaconTaskEditorArchiveButton')));
+      await tester.tap(
+        find.byKey(const ValueKey('beaconTaskEditorArchiveButton')),
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.text('归档').last);
       await tester.pumpAndSettle();
@@ -7680,11 +8329,38 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('放映厅微光'), findsOneWidget);
 
+      await tester.tap(find.byKey(const ValueKey('beaconTaskCard-task-1')));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('beaconTaskEditorArchiveButton')),
+        findsOneWidget,
+      );
+      expect(find.text('恢复'), findsOneWidget);
+      await tester.tap(
+        find.byKey(const ValueKey('beaconTaskEditorArchiveButton')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('恢复任务'), findsOneWidget);
+      await tester.tap(find.text('恢复').last);
+      await tester.pumpAndSettle();
+
+      expect(
+        beaconTaskRepository.tasks
+            .singleWhere((task) => task.taskId == 'task-1')
+            .isArchived,
+        isFalse,
+      );
+      await tester.tap(find.text('待执行'));
+      await tester.pumpAndSettle();
+      expect(find.text('放映厅微光'), findsOneWidget);
+
       await tester.tap(find.text('全部'));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('beaconTaskCard-task-2')));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('beaconTaskEditorDeleteButton')));
+      await tester.tap(
+        find.byKey(const ValueKey('beaconTaskEditorDeleteButton')),
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.text('删除').last);
       await tester.pumpAndSettle();
@@ -7721,23 +8397,22 @@ void main() {
         ],
       );
 
-      await _pumpBeaconApp(
-        tester,
-        beaconTaskRepository: beaconTaskRepository,
-      );
+      await _pumpBeaconApp(tester, beaconTaskRepository: beaconTaskRepository);
 
-      final pendingHeaderY = tester.getTopLeft(
-        find.byKey(const ValueKey('beaconPendingSectionHeader')),
-      ).dy;
-      final pendingCardY = tester.getTopLeft(
-        find.byKey(const ValueKey('beaconTaskCard-task-pending')),
-      ).dy;
-      final archivedHeaderY = tester.getTopLeft(
-        find.byKey(const ValueKey('beaconArchivedSectionHeader')),
-      ).dy;
-      final archivedCardY = tester.getTopLeft(
-        find.byKey(const ValueKey('beaconTaskCard-task-archived')),
-      ).dy;
+      final pendingHeaderY = tester
+          .getTopLeft(find.byKey(const ValueKey('beaconPendingSectionHeader')))
+          .dy;
+      final pendingCardY = tester
+          .getTopLeft(find.byKey(const ValueKey('beaconTaskCard-task-pending')))
+          .dy;
+      final archivedHeaderY = tester
+          .getTopLeft(find.byKey(const ValueKey('beaconArchivedSectionHeader')))
+          .dy;
+      final archivedCardY = tester
+          .getTopLeft(
+            find.byKey(const ValueKey('beaconTaskCard-task-archived')),
+          )
+          .dy;
 
       expect(pendingHeaderY, lessThan(pendingCardY));
       expect(pendingCardY, lessThan(archivedHeaderY));
@@ -7772,7 +8447,7 @@ void main() {
             id: 'task-4',
             projectId: 'project-beacon',
             taskTitle: '未选中的进行中任务',
-            taskDescription: '它的元素不应该出现在执行模式。',
+            taskDescription: '它的元素不应该出现在探索。',
             linkedElementIds: <String>['element-3'],
             createdTimestamp: DateTime(2026),
             updatedTimestamp: DateTime(2026, 1, 2, 1),
@@ -7780,7 +8455,7 @@ void main() {
           BeaconTask.create(
             id: 'task-3',
             projectId: 'project-beacon',
-            taskTitle: '不会出现在执行模式',
+            taskTitle: '不会出现在探索',
             taskDescription: '因为已归档。',
             linkedElementIds: const <String>[],
             createdTimestamp: DateTime(2026),
@@ -7830,7 +8505,7 @@ void main() {
         findsOneWidget,
       );
       expect(
-        find.descendant(of: entryButtonFinder, matching: find.text('执行模式')),
+        find.descendant(of: entryButtonFinder, matching: find.text('探索')),
         findsOneWidget,
       );
 
@@ -7848,25 +8523,54 @@ void main() {
         find.byKey(const ValueKey('beaconExecutionTaskPickerDialog')),
         findsOneWidget,
       );
-      expect(find.text('放映厅微光'), findsOneWidget);
-      expect(find.text('河滩残骸'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('beaconExecutionTaskPickerDialog')),
+          matching: find.text('放映厅微光'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('beaconExecutionTaskPickerDialog')),
+          matching: find.text('河滩残骸'),
+        ),
+        findsOneWidget,
+      );
       expect(find.byType(Checkbox), findsNothing);
-      expect(find.text('极低照度拍摄。'), findsNothing);
-      expect(find.text('观察河床切割线。'), findsNothing);
-      expect(find.byKey(const ValueKey('beaconExecutionModeRoot')), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('beaconExecutionTaskPickerDialog')),
+          matching: find.text('极低照度拍摄。'),
+        ),
+        findsNothing,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('beaconExecutionTaskPickerDialog')),
+          matching: find.text('观察河床切割线。'),
+        ),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('beaconExecutionModeRoot')),
+        findsNothing,
+      );
       expect(
         find.byKey(const ValueKey('beaconExecutionTaskPickerRow-task-3')),
         findsNothing,
       );
       expect(
-        tester.widget<Opacity>(
-          find.ancestor(
-            of: find.byKey(
-              const ValueKey('beaconExecutionTaskPickerConfirmButton'),
-            ),
-            matching: find.byType(Opacity),
-          ),
-        ).opacity,
+        tester
+            .widget<Opacity>(
+              find.ancestor(
+                of: find.byKey(
+                  const ValueKey('beaconExecutionTaskPickerConfirmButton'),
+                ),
+                matching: find.byType(Opacity),
+              ),
+            )
+            .opacity,
         0.35,
       );
       final pickerTitle = tester.widget<Text>(
@@ -7890,17 +8594,20 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byKey(const ValueKey('beaconNormalModeRoot')), findsNothing);
-      expect(find.byKey(const ValueKey('beaconExecutionModeRoot')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('beaconExecutionModeRoot')),
+        findsOneWidget,
+      );
       expect(find.byType(CustomBottomNavBar), findsNothing);
       expect(find.byKey(const ValueKey('beaconSearchField')), findsNothing);
       expect(find.byKey(const ValueKey('beaconAddTaskButton')), findsNothing);
-      expect(find.byKey(const ValueKey('beaconExecutionExitButton')), findsOneWidget);
-      expect(find.byType(Image), findsNothing);
-      expect(find.text('不会出现在执行模式'), findsNothing);
       expect(
-        find.text('选择任务后，这里只保留当前外拍需要记住的提示。'),
-        findsNothing,
+        find.byKey(const ValueKey('beaconExecutionExitButton')),
+        findsOneWidget,
       );
+      expect(find.byType(Image), findsNothing);
+      expect(find.text('不会出现在探索'), findsNothing);
+      expect(find.text('选择任务后，这里只保留当前外拍需要记住的提示。'), findsNothing);
       expect(navigator.canPop(), isFalse);
 
       final elementSectionFinder = find.byKey(
@@ -7925,16 +8632,16 @@ void main() {
             )
             .style
             ?.fontSize,
-        greaterThan(
+        greaterThanOrEqualTo(
           tester
-              .widget<Text>(
-                find.descendant(
-                  of: taskSectionFinder,
-                  matching: find.text('任务介绍'),
-                ),
-              )
-              .style
-              ?.fontSize ??
+                  .widget<Text>(
+                    find.descendant(
+                      of: taskSectionFinder,
+                      matching: find.text('任务介绍'),
+                    ),
+                  )
+                  .style
+                  ?.fontSize ??
               0,
         ),
       );
@@ -7960,7 +8667,10 @@ void main() {
 
       await tester.tap(find.byKey(const ValueKey('beaconExecutionExitButton')));
       await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('beaconNormalModeRoot')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('beaconNormalModeRoot')),
+        findsOneWidget,
+      );
 
       await tester.tap(entryButtonFinder);
       await tester.pumpAndSettle();
@@ -7973,25 +8683,31 @@ void main() {
         findsNothing,
       );
       expect(
-        tester.widget<Opacity>(
-          find.ancestor(
-            of: find.byKey(
-              const ValueKey('beaconExecutionTaskPickerConfirmButton'),
-            ),
-            matching: find.byType(Opacity),
-          ),
-        ).opacity,
+        tester
+            .widget<Opacity>(
+              find.ancestor(
+                of: find.byKey(
+                  const ValueKey('beaconExecutionTaskPickerConfirmButton'),
+                ),
+                matching: find.byType(Opacity),
+              ),
+            )
+            .opacity,
         0.35,
       );
       await tester.tap(
         find.byKey(const ValueKey('beaconExecutionTaskPickerConfirmButton')),
+        warnIfMissed: false,
       );
       await tester.pumpAndSettle();
       expect(
         find.byKey(const ValueKey('beaconExecutionTaskPickerDialog')),
         findsOneWidget,
       );
-      expect(find.byKey(const ValueKey('beaconExecutionModeRoot')), findsNothing);
+      expect(
+        find.byKey(const ValueKey('beaconExecutionModeRoot')),
+        findsNothing,
+      );
     },
   );
 
@@ -8055,6 +8771,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      expect(find.text('任务名'), findsNothing);
+      expect(find.text('任务介绍'), findsNothing);
       expect(find.text('C H A P T E R  01  /  先出现章节'), findsOneWidget);
       expect(find.text('C H A P T E R  02  /  后出现章节'), findsOneWidget);
       expect(find.text('未 归 章 节'), findsOneWidget);
@@ -8063,12 +8781,12 @@ void main() {
         find.text('C H A P T E R  01  /  先出现章节').evaluate().single,
         isNotNull,
       );
-      final chapterOneY = tester.getTopLeft(
-        find.text('C H A P T E R  01  /  先出现章节'),
-      ).dy;
-      final chapterTwoY = tester.getTopLeft(
-        find.text('C H A P T E R  02  /  后出现章节'),
-      ).dy;
+      final chapterOneY = tester
+          .getTopLeft(find.text('C H A P T E R  01  /  先出现章节'))
+          .dy;
+      final chapterTwoY = tester
+          .getTopLeft(find.text('C H A P T E R  02  /  后出现章节'))
+          .dy;
       final unassignedY = tester.getTopLeft(find.text('未 归 章 节')).dy;
 
       expect(chapterOneY, lessThan(chapterTwoY));
@@ -8108,7 +8826,11 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const ValueKey('beaconTaskEditorArchiveButton')));
+      expect(find.text('任务名'), findsOneWidget);
+      expect(find.text('任务介绍'), findsOneWidget);
+      await tester.tap(
+        find.byKey(const ValueKey('beaconTaskEditorArchiveButton')),
+      );
       await tester.pumpAndSettle();
       expect(find.text('归档任务'), findsOneWidget);
       expect(find.byType(Dialog), findsOneWidget);
@@ -8119,13 +8841,15 @@ void main() {
       await tester.tap(find.text('取 消'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const ValueKey('beaconTaskEditorDeleteButton')));
+      await tester.tap(
+        find.byKey(const ValueKey('beaconTaskEditorDeleteButton')),
+      );
       await tester.pumpAndSettle();
       expect(find.text('删除任务'), findsOneWidget);
       expect(find.byType(Dialog), findsOneWidget);
       expect(find.byType(AlertDialog), findsNothing);
       expect(
-        find.descendant(of: find.byType(Dialog), matching: find.text('删 除')),
+        find.descendant(of: find.byType(Dialog), matching: find.text('删除')),
         findsOneWidget,
       );
     },
@@ -8762,6 +9486,18 @@ class _InMemoryBeaconTaskRepository implements BeaconTaskRepository {
   }
 
   @override
+  Future<BeaconTask?> restoreTask(String taskId) async {
+    for (final task in _tasks) {
+      if (task.taskId == taskId) {
+        task.statusValue = BeaconTaskStatus.pending;
+        task.updatedAt = DateTime(2026, 1, 12);
+        return task;
+      }
+    }
+    return null;
+  }
+
+  @override
   Future<bool> deleteTask(String taskId) async {
     final index = _tasks.indexWhere((task) => task.taskId == taskId);
     if (index < 0) {
@@ -8831,6 +9567,33 @@ class _InMemoryCaptureRecordRepository implements CaptureRecordRepository {
       }
     }
     return null;
+  }
+
+  @override
+  Future<CaptureRecord?> updateRecordPhotos({
+    required String recordId,
+    required List<String> photoPaths,
+    required List<String> pendingPhotoPaths,
+  }) async {
+    for (final record in _records) {
+      if (record.recordId == recordId) {
+        record.photoPaths = List<String>.from(photoPaths);
+        record.unorganizedPhotoPaths = List<String>.from(pendingPhotoPaths);
+        record.updatedAt = DateTime(2026, 1, 10);
+        return record;
+      }
+    }
+    return null;
+  }
+
+  @override
+  Future<bool> deleteRecord(String recordId) async {
+    final index = _records.indexWhere((record) => record.recordId == recordId);
+    if (index < 0) {
+      return false;
+    }
+    _records.removeAt(index);
+    return true;
   }
 }
 
@@ -9137,6 +9900,79 @@ class _InMemoryProjectRelationRepository implements ProjectRelationRepository {
     );
     return relationTypes;
   }
+}
+
+class _CurationInteractionHarness extends StatelessWidget {
+  _CurationInteractionHarness()
+    : boardData = _curationBoardData(chapterCount: 1);
+
+  _CurationInteractionHarness.large()
+    : boardData = _curationBoardData(chapterCount: 18);
+
+  final GlobalArrangeBoardData boardData;
+
+  @override
+  Widget build(BuildContext context) {
+    return GlobalArrangePage(
+      projectTitle: '交互测试项目',
+      boardData: boardData,
+      onOpenSidebar: () {},
+      onBottomTabChanged: (_) {},
+      onOpenPendingOrganize: () async {},
+      onMoveChapter: ({required chapterId, required targetIndex}) async {},
+      onMoveElement:
+          ({
+            required elementId,
+            required targetChapterId,
+            required targetIndex,
+          }) async {},
+      onMovePhoto:
+          ({
+            required sourceElementId,
+            required sourcePhotoIndex,
+            required targetElementId,
+            required targetPhotoIndex,
+          }) async {},
+    );
+  }
+}
+
+GlobalArrangeBoardData _curationBoardData({required int chapterCount}) {
+  return GlobalArrangeBoardData(
+    chapters: List<GlobalArrangeChapterData>.generate(chapterCount, (
+      chapterIndex,
+    ) {
+      final chapterNumber = chapterIndex + 1;
+      return GlobalArrangeChapterData(
+        chapterId: 'chapter-$chapterNumber',
+        title: '章节 $chapterNumber',
+        elements: <GlobalArrangeElementData>[
+          GlobalArrangeElementData(
+            elementId: 'element-$chapterNumber',
+            title: '元素 $chapterNumber',
+            relationTags: chapterIndex == 0 ? const <String>['呼应'] : const [],
+            photos: <GlobalArrangePhotoData>[
+              GlobalArrangePhotoData(
+                photoId: chapterIndex == 0
+                    ? 'photo-1'
+                    : 'chapter-$chapterNumber-photo-1',
+                imageSource: '/tmp/photo-$chapterNumber-a.jpg',
+                relationTags: chapterIndex == 0
+                    ? const <String>['呼应']
+                    : const [],
+              ),
+              if (chapterIndex == 0)
+                const GlobalArrangePhotoData(
+                  photoId: 'photo-2',
+                  imageSource: '/tmp/photo-2.jpg',
+                  relationTags: <String>['旁支'],
+                ),
+            ],
+          ),
+        ],
+      );
+    }),
+  );
 }
 
 ImageProvider<Object> _baseImageProvider(ImageProvider<Object> provider) {

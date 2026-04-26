@@ -10,6 +10,7 @@ import 'package:echo/features/structure_elements_relations/presentation/pages/pr
 import 'package:echo/features/structure_elements_relations/presentation/widgets/narrative_thumbnail_provider.dart';
 import 'package:echo/shared/models/content_preview_item.dart';
 import 'package:echo/shared/widgets/content_preview_card.dart';
+import 'package:echo/shared/widgets/restrained_action_button.dart';
 import 'package:flutter/material.dart';
 
 class ProjectRelationGroupPage extends StatefulWidget {
@@ -670,32 +671,11 @@ class _ProjectRelationGroupPageState extends State<ProjectRelationGroupPage> {
   }
 
   Widget _buildAddGroupButton() {
-    return InkWell(
+    return RestrainedActionButton(
       key: const ValueKey('addRelationGroupButton'),
+      label: '添加关系组',
       onTap: _openCreateRelationGroupPage,
-      child: Container(
-        margin: const EdgeInsets.only(top: 8),
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        decoration: BoxDecoration(
-          border: Border.all(color: Colors.black12, width: 1),
-        ),
-        child: const Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.add, size: 16, color: Colors.black54),
-            SizedBox(width: 8),
-            Text(
-              '添 加 关 系 组',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                letterSpacing: 2.0,
-                color: Colors.black54,
-              ),
-            ),
-          ],
-        ),
-      ),
+      margin: const EdgeInsets.only(top: 8),
     );
   }
 }

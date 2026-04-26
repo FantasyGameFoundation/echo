@@ -821,19 +821,18 @@ class _PendingOrganizePageState extends State<PendingOrganizePage> {
     _PendingEntryDraft draft,
   ) {
     if (elements.isEmpty) {
-      return Container(
+      return SizedBox(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          border: Border.all(color: Colors.black12, width: 0.8),
-        ),
-        child: Text(
-          '当前章节下暂无可挂接元素',
-          style: TextStyle(
-            fontSize: 13,
-            color: Colors.black.withValues(alpha: 0.42),
-            letterSpacing: 0.8,
+        child: Padding(
+          padding: const EdgeInsets.only(top: 2, bottom: 6),
+          child: Text(
+            '当前章节下暂无可挂接元素',
+            style: TextStyle(
+              fontSize: 11,
+              color: Colors.black.withValues(alpha: 0.34),
+              letterSpacing: 1.1,
+              fontStyle: FontStyle.italic,
+            ),
           ),
         ),
       );

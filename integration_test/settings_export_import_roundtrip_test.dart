@@ -11,8 +11,6 @@ import 'package:echo/features/project/infrastructure/database/project_isar.dart'
 import 'package:echo/features/project/infrastructure/models/project_session.dart';
 import 'package:echo/features/project/infrastructure/repositories/local_project_repository.dart';
 import 'package:echo/features/settings/domain/entities/app_settings.dart';
-import 'package:echo/features/settings/domain/services/export_project_bundle.dart';
-import 'package:echo/features/settings/domain/services/import_project_bundle.dart';
 import 'package:echo/features/settings/infrastructure/repositories/local_app_settings_repository.dart';
 import 'package:echo/features/settings/infrastructure/services/local_export_project_bundle.dart';
 import 'package:echo/features/settings/infrastructure/services/local_import_project_bundle.dart';
@@ -303,9 +301,6 @@ class _FakeProjectBundleFileTransfer implements ProjectBundleFileTransfer {
       displayPath: bundlePath,
     );
   }
-
-  @override
-  Future<bool> requestStoragePermissionIfNeeded() async => true;
 
   Future<void> _copyDirectory(
     Directory sourceDirectory,

@@ -6,6 +6,7 @@ import 'package:echo/shared/models/prototype_tab.dart';
 import 'package:echo/shared/widgets/custom_bottom_nav_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
 
 const Object _retainHoverChapterId = Object();
 const String globalArrangeLoosePhotoBucketId =
@@ -89,6 +90,7 @@ class GlobalArrangePage extends StatefulWidget {
     this.onOpenSettings,
     this.landingRequest,
     this.onLandingRequestConsumed,
+    this.onDeletePhoto,
   });
 
   final String projectTitle;
@@ -117,6 +119,7 @@ class GlobalArrangePage extends StatefulWidget {
   final Future<void> Function()? onOpenSettings;
   final GlobalArrangePhotoLandingRequest? landingRequest;
   final ValueChanged<String>? onLandingRequestConsumed;
+  final Future<bool> Function(String photoPath)? onDeletePhoto;
 
   @override
   State<GlobalArrangePage> createState() => _GlobalArrangePageState();
@@ -134,6 +137,9 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
   static const Duration _dragFeedbackAnimationDuration = Duration(
     milliseconds: 150,
   );
+  static const int _maxLandingAttempts = 5;
+  static const Duration _focusModeRestoreDelay = Duration(milliseconds: 780);
+  static const Duration _hapticThrottleDuration = Duration(milliseconds: 180);
   static const Curve _dragMotionCurve = Curves.easeOutCubic;
   static const double _autoScrollEdgePadding = 136.0;
   static const double _autoScrollMinStep = 2.0;
@@ -144,6 +150,7 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
   static const double _elementAfterThresholdCap = 72.0;
   static const double _elementInactiveGapExtent = 20.0;
   static const double _elementTailGapExtent = 84.0;
+  static const double _spotlightInactiveScale = 0.98;
   final Set<String> _expandedChapterIds = <String>{};
   final Set<String> _expandedElementIds = <String>{};
   final Map<String, GlobalKey> _chapterItemKeys = <String, GlobalKey>{};
@@ -174,6 +181,9 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
   final GlobalKey _scrollViewportKey = GlobalKey(
     debugLabel: 'global-arrange-scroll-viewport',
   );
+  final GlobalKey _unassignedPhotoPoolKey = GlobalKey(
+    debugLabel: 'global-arrange-unassigned-photo-pool',
+  );
   late final Ticker _autoScrollTicker;
   late final ValueNotifier<_ElementDragState?> _elementDragStateListenable;
   late final ValueNotifier<_PhotoDragState?> _photoDragStateListenable;
@@ -187,8 +197,14 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
   _ChapterDragState? _chapterDragState;
   Offset? _latestDragGlobalPosition;
   Duration? _lastAutoScrollElapsed;
+  Timer? _focusModeRestoreTimer;
+  DateTime? _lastHapticAt;
+  String? _lastHapticTargetId;
+  double _lastScrollOffset = 0.0;
+  double _chapterBreathingGap = 0.0;
   bool _chapterDragFinalizing = false;
   bool _elementDragFinalizing = false;
+  bool _isFocusMode = false;
   bool _isUnassignedChapterExpanded = true;
   String? _processingLandingRequestId;
   String? _consumedLandingRequestId;
@@ -209,6 +225,7 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
     _autoScrollTicker = createTicker(_handleAutoScrollTick);
     _elementDragStateListenable = ValueNotifier<_ElementDragState?>(null);
     _photoDragStateListenable = ValueNotifier<_PhotoDragState?>(null);
+    _scrollController.addListener(_handleScrollForFocusMode);
     _syncBoardData();
     _queueLandingRequestIfNeeded();
   }
@@ -216,6 +233,8 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
   @override
   void dispose() {
     _stopAutoScroll();
+    _focusModeRestoreTimer?.cancel();
+    _scrollController.removeListener(_handleScrollForFocusMode);
     _autoScrollTicker.dispose();
     _elementDragStateListenable.dispose();
     _photoDragStateListenable.dispose();
@@ -300,8 +319,9 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
   }
 
   Future<void> _consumeLandingRequest(
-    GlobalArrangePhotoLandingRequest request,
-  ) async {
+    GlobalArrangePhotoLandingRequest request, {
+    int attempt = 1,
+  }) async {
     if (!mounted || widget.landingRequest?.requestId != request.requestId) {
       _processingLandingRequestId = null;
       return;
@@ -329,14 +349,30 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
       if (mounted) {
         setState(() {});
       }
-      SchedulerBinding.instance.addPostFrameCallback((_) {
-        unawaited(_consumeLandingRequest(request));
-      });
+      _scheduleLandingAttempt(request, attempt + 1);
+      return;
+    }
+
+    if (attempt == 2) {
+      final containerContext = _landingContainerContext(target);
+      if (containerContext != null) {
+        await Scrollable.ensureVisible(
+          containerContext,
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+          alignment: 0.10,
+        );
+      }
+      _scheduleLandingAttempt(request, attempt + 1);
       return;
     }
 
     final targetContext = _photoKey(target.photoId).currentContext;
     if (targetContext == null) {
+      if (attempt < _maxLandingAttempts) {
+        _scheduleLandingAttempt(request, attempt + 1);
+        return;
+      }
       _finishLandingRequest(request.requestId);
       return;
     }
@@ -348,6 +384,27 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
       alignment: 0.14,
     );
     _finishLandingRequest(request.requestId);
+  }
+
+  void _scheduleLandingAttempt(
+    GlobalArrangePhotoLandingRequest request,
+    int attempt,
+  ) {
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      unawaited(_consumeLandingRequest(request, attempt: attempt));
+    });
+  }
+
+  BuildContext? _landingContainerContext(_PhotoLandingTarget target) {
+    final elementId = target.elementId;
+    if (elementId != null) {
+      return _elementKey(elementId).currentContext;
+    }
+    final chapterId = target.chapterId;
+    if (chapterId != null) {
+      return _chapterKey(chapterId).currentContext;
+    }
+    return _unassignedPhotoPoolKey.currentContext;
   }
 
   _PhotoLandingTarget? _findLandingTarget(
@@ -488,6 +545,16 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
     });
   }
 
+  void _clearActiveTag() {
+    if (_activeTag == null) {
+      return;
+    }
+    setState(() {
+      _activeTag = null;
+      _activeTagSource = null;
+    });
+  }
+
   GlobalKey _chapterKey(String chapterId) {
     return _chapterItemKeys.putIfAbsent(
       chapterId,
@@ -535,6 +602,9 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
 
   void _recordDragPosition(Offset globalPosition) {
     _latestDragGlobalPosition = globalPosition;
+    if (_activeDragKind != null) {
+      _ensureAutoScrollRunning();
+    }
   }
 
   void _ensureAutoScrollRunning() {
@@ -555,6 +625,82 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
   void _releaseDragMotion() {
     _latestDragGlobalPosition = null;
     _stopAutoScroll();
+    _scheduleFocusModeRestore();
+  }
+
+  void _triggerHaptic({String? targetId, bool force = false}) {
+    final now = DateTime.now();
+    if (!force &&
+        _lastHapticAt != null &&
+        now.difference(_lastHapticAt!) < _hapticThrottleDuration &&
+        _lastHapticTargetId == targetId) {
+      return;
+    }
+    _lastHapticAt = now;
+    _lastHapticTargetId = targetId;
+    unawaited(HapticFeedback.mediumImpact());
+  }
+
+  void _scheduleFocusModeRestore() {
+    _focusModeRestoreTimer?.cancel();
+    if (_activeDragKind != null) {
+      return;
+    }
+    _focusModeRestoreTimer = Timer(_focusModeRestoreDelay, () {
+      if (!mounted || _activeDragKind != null) {
+        return;
+      }
+      setState(() {
+        _isFocusMode = false;
+        _chapterBreathingGap = 0.0;
+      });
+    });
+  }
+
+  void _enterFocusMode({double? breathingGap}) {
+    _focusModeRestoreTimer?.cancel();
+    final nextBreathingGap = breathingGap ?? _chapterBreathingGap;
+    if (!_isFocusMode ||
+        (nextBreathingGap - _chapterBreathingGap).abs() > 0.8) {
+      setState(() {
+        _isFocusMode = true;
+        _chapterBreathingGap = nextBreathingGap;
+      });
+    }
+    _scheduleFocusModeRestore();
+  }
+
+  bool _handleBoardScrollNotification(ScrollNotification notification) {
+    if (notification.depth != 0) {
+      return false;
+    }
+    final shouldEnterFocus =
+        notification is ScrollStartNotification ||
+        notification is ScrollUpdateNotification ||
+        notification is OverscrollNotification ||
+        notification is UserScrollNotification;
+    if (!shouldEnterFocus) {
+      return false;
+    }
+    final delta = notification is ScrollUpdateNotification
+        ? (notification.scrollDelta ?? 0).abs()
+        : 1.0;
+    _enterFocusMode(breathingGap: (delta * 0.16).clamp(0.0, 8.0));
+    return false;
+  }
+
+  void _handleScrollForFocusMode() {
+    if (!_scrollController.hasClients) {
+      return;
+    }
+    final nextOffset = _scrollController.offset;
+    final delta = (nextOffset - _lastScrollOffset).abs();
+    _lastScrollOffset = nextOffset;
+    if (delta <= 0.2) {
+      return;
+    }
+    final nextBreathingGap = (delta * 0.16).clamp(0.0, 8.0);
+    _enterFocusMode(breathingGap: nextBreathingGap);
   }
 
   void _handleAutoScrollTick(Duration elapsed) {
@@ -675,11 +821,14 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
         builder: (context, value, feedbackChild) {
           return Opacity(
             opacity: lerpDouble(0.82, 1.0, value)!,
-            child: Transform.scale(
-              scale: lerpDouble(1.0, maxScale, value)!,
-              child: DecoratedBox(
-                decoration: BoxDecoration(boxShadow: _dragLiftShadow),
-                child: feedbackChild,
+            child: Transform.rotate(
+              angle: lerpDouble(0.0, -0.035, value)!,
+              child: Transform.scale(
+                scale: lerpDouble(1.0, maxScale, value)!,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(boxShadow: _dragLiftShadow),
+                  child: feedbackChild,
+                ),
               ),
             ),
           );
@@ -809,8 +958,10 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
     if (sourceIndex == -1) {
       return;
     }
+    _triggerHaptic(targetId: 'chapter-$chapterId', force: true);
     final wasExpanded = _isChapterExpanded(chapterId);
     setState(() {
+      _isFocusMode = true;
       _activeDragKind = _DragKind.chapter;
       _chapterDragState = _ChapterDragState(
         sourceChapterId: chapterId,
@@ -1030,8 +1181,10 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
     if (locatedElement.elementIndex == -1) {
       return;
     }
+    _triggerHaptic(targetId: 'element-$elementId', force: true);
     final wasExpanded = _isElementExpanded(elementId);
     setState(() {
+      _isFocusMode = true;
       _activeDragKind = _DragKind.element;
       _elementDragState = _ElementDragState(
         sourceElementId: elementId,
@@ -1315,7 +1468,12 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
     required String sourceElementId,
     required int sourcePhotoIndex,
   }) {
+    _triggerHaptic(
+      targetId: 'photo-$sourceElementId-$sourcePhotoIndex',
+      force: true,
+    );
     setState(() {
+      _isFocusMode = true;
       _activeDragKind = _DragKind.photo;
       _photoDragState = _PhotoDragState(
         sourceElementId: sourceElementId,
@@ -1373,6 +1531,9 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
         dragState.hoverPhotoIndex == nextHoverIndex) {
       return;
     }
+    if (dragState.hoverElementId != targetElementId) {
+      _triggerHaptic(targetId: 'photo-target-$targetElementId');
+    }
     _photoDragState = dragState.copyWith(
       hoverElementId: targetElementId,
       hoverPhotoIndex: nextHoverIndex,
@@ -1427,6 +1588,7 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
             initialIndex: initialIndex,
             elementTitle: elementTitle,
             chapterLabel: chapterLabel,
+            onDeletePhoto: widget.onDeletePhoto,
           );
         },
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
@@ -1441,39 +1603,72 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
     return Scaffold(
       backgroundColor: const Color(0xFFFCFCFC),
       body: SafeArea(
-        child: Column(
-          children: [
-            _buildTopBar(),
-            Expanded(
-              child: ListView(
-                key: _scrollViewportKey,
-                controller: _scrollController,
-                physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.only(bottom: 140),
+        child: Listener(
+          onPointerMove: (event) {
+            if (_activeDragKind != null) {
+              _recordDragPosition(event.position);
+            }
+          },
+          child: Stack(
+            children: [
+              Column(
                 children: [
-                  ..._buildChapterListChildren(),
-                  if (_unassignedElements.isNotEmpty ||
-                      _unassignedPhotos.isNotEmpty)
-                    _buildUnassignedSection(),
+                  _buildTopBar(),
+                  Expanded(
+                    child: NotificationListener<ScrollNotification>(
+                      onNotification: _handleBoardScrollNotification,
+                      child: ListView(
+                        key: _scrollViewportKey,
+                        controller: _scrollController,
+                        physics: const BouncingScrollPhysics(),
+                        padding: const EdgeInsets.only(bottom: 140),
+                        children: [
+                          ..._buildChapterListChildren(),
+                          if (_unassignedElements.isNotEmpty ||
+                              _unassignedPhotos.isNotEmpty)
+                            _buildUnassignedSection(),
+                        ],
+                      ),
+                    ),
+                  ),
                 ],
               ),
-            ),
-          ],
+              Positioned(
+                right: 20,
+                bottom: 18,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    if (_activeTag != null) ...[
+                      _buildStickyFilterPill(),
+                      const SizedBox(height: 6),
+                    ],
+                    _PendingOrganizeFab(
+                      buttonKey: const ValueKey('globalArrangePendingButton'),
+                      onTap: () {
+                        widget.onOpenPendingOrganize();
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
-      floatingActionButton: Padding(
-        padding: const EdgeInsets.only(bottom: 24),
-        child: _PendingOrganizeFab(
-          buttonKey: const ValueKey('globalArrangePendingButton'),
-          onTap: () {
-            widget.onOpenPendingOrganize();
-          },
+      bottomNavigationBar: SizedBox(
+        key: const ValueKey('globalArrangeBottomNavShell'),
+        height: 80,
+        child: OverflowBox(
+          minHeight: 80,
+          maxHeight: 80,
+          alignment: Alignment.topCenter,
+          child: CustomBottomNavBar(
+            activeTab: PrototypeTab.curation,
+            onChangeTab: widget.onBottomTabChanged,
+          ),
         ),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-      bottomNavigationBar: CustomBottomNavBar(
-        activeTab: PrototypeTab.curation,
-        onChangeTab: widget.onBottomTabChanged,
       ),
     );
   }
@@ -1489,6 +1684,14 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
       children.add(
         _buildChapterDragTarget(chapter: chapter, chapterIndex: index),
       );
+      if (_chapterBreathingGap > 0) {
+        children.add(
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 160),
+            height: _chapterBreathingGap,
+          ),
+        );
+      }
     }
     return children;
   }
@@ -1531,12 +1734,104 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
     );
   }
 
+  Widget _buildStickyFilterPill() {
+    return _FrostedBoardPill(
+      key: const ValueKey('globalArrangeStickyFilterPill'),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(
+            child: Text(
+              '透 视 中 : $_activeTag',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 10,
+                letterSpacing: 2.0,
+                color: Colors.black87,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          GestureDetector(
+            key: const ValueKey('globalArrangeStickyFilterClearButton'),
+            onTap: _clearActiveTag,
+            child: const Text(
+              '×',
+              style: TextStyle(fontSize: 16, height: 1, color: Colors.black54),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSpotlightDepth({required bool isActive, required Widget child}) {
+    final wrapped = ColorFiltered(
+      colorFilter: isActive
+          ? const ColorFilter.matrix(<double>[
+              1,
+              0,
+              0,
+              0,
+              0,
+              0,
+              1,
+              0,
+              0,
+              0,
+              0,
+              0,
+              1,
+              0,
+              0,
+              0,
+              0,
+              0,
+              1,
+              0,
+            ])
+          : const ColorFilter.matrix(<double>[
+              0.2126,
+              0.7152,
+              0.0722,
+              0,
+              0,
+              0.2126,
+              0.7152,
+              0.0722,
+              0,
+              0,
+              0.2126,
+              0.7152,
+              0.0722,
+              0,
+              0,
+              0,
+              0,
+              0,
+              1,
+              0,
+            ]),
+      child: child,
+    );
+    return AnimatedScale(
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+      scale: isActive ? 1.0 : _spotlightInactiveScale,
+      child: AnimatedOpacity(
+        duration: const Duration(milliseconds: 220),
+        opacity: isActive ? 1.0 : 0.15,
+        child: wrapped,
+      ),
+    );
+  }
+
   Widget _buildChapterSection(_ArrangeChapterVm chapter, int chapterIndex) {
     final isExpanded = _isChapterExpanded(chapter.chapterId);
     final children = <Widget>[
-      AnimatedOpacity(
-        duration: const Duration(milliseconds: 220),
-        opacity: _isChapterActive(chapter) ? 1.0 : 0.15,
+      _buildSpotlightDepth(
+        isActive: _isChapterActive(chapter),
         child: _buildChapterHeader(
           chapter: chapter,
           chapterIndex: chapterIndex,
@@ -1831,6 +2126,7 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
     }
 
     return Padding(
+      key: _unassignedPhotoPoolKey,
       padding: const EdgeInsets.only(bottom: 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1866,14 +2162,15 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
     required String? owningChapterId,
   }) {
     final isExpanded = _isElementExpanded(element.elementId);
-    return Padding(
-      padding: EdgeInsets.only(bottom: isExpanded ? 24.0 : 8.0),
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      margin: EdgeInsets.only(bottom: isExpanded ? 24.0 : 8.0),
+      decoration: const BoxDecoration(color: Colors.transparent),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          AnimatedOpacity(
-            duration: const Duration(milliseconds: 220),
-            opacity: _isElementActive(element) ? 1.0 : 0.15,
+          _buildSpotlightDepth(
+            isActive: _isElementActive(element),
             child: _buildElementHeader(
               element: element,
               isExpanded: isExpanded,
@@ -1883,9 +2180,8 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
             ),
           ),
           if (isExpanded && element.relationTags.isNotEmpty)
-            AnimatedOpacity(
-              duration: const Duration(milliseconds: 220),
-              opacity: _isElementActive(element) ? 1.0 : 0.15,
+            _buildSpotlightDepth(
+              isActive: _isElementActive(element),
               child: Padding(
                 padding: const EdgeInsets.only(left: 48, bottom: 12),
                 child: Row(
@@ -1944,7 +2240,7 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
             final availableWidth =
                 constraints.maxWidth - horizontalPadding * 2 - spacing;
             final itemWidth = availableWidth > 0 ? availableWidth / 2 : 0.0;
-            final photoHeight = itemWidth > 0 ? itemWidth + 22.0 : 142.0;
+            final photoHeight = itemWidth > 0 ? itemWidth + 32.0 : 152.0;
             final photoChildren = <Widget>[];
             final projectedPhotos = _projectedPhotosForElement(element);
             final hoverPhotoIndex = _displayPhotoGapIndexForState(
@@ -1990,9 +2286,8 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
               final photoEntry = projectedPhotos[index];
               final photo = photoEntry.photo;
               photoChildren.add(
-                AnimatedOpacity(
-                  duration: const Duration(milliseconds: 220),
-                  opacity: _isPhotoActive(element, photo) ? 1.0 : 0.15,
+                _buildSpotlightDepth(
+                  isActive: _isPhotoActive(element, photo),
                   child: SizedBox(
                     width: itemWidth == 0 ? 120.0 : itemWidth,
                     child: _buildPhotoDragTarget(
@@ -2029,9 +2324,30 @@ class _GlobalArrangePageState extends State<GlobalArrangePage>
               );
             }
 
-            return Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: horizontalPadding,
+            final isHoveredDropTarget =
+                dragState != null &&
+                dragState.hoverElementId == element.elementId &&
+                dragState.sourceElementId != element.elementId;
+            return AnimatedContainer(
+              duration: const Duration(milliseconds: 160),
+              margin: const EdgeInsets.symmetric(horizontal: 18),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+              decoration: BoxDecoration(
+                color: isHoveredDropTarget
+                    ? Colors.white.withValues(alpha: 0.62)
+                    : Colors.transparent,
+                border: isHoveredDropTarget
+                    ? Border.all(color: Colors.black.withValues(alpha: 0.08))
+                    : null,
+                boxShadow: isHoveredDropTarget
+                    ? [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.04),
+                          blurRadius: 14,
+                          offset: const Offset(0, 6),
+                        ),
+                      ]
+                    : null,
               ),
               child: GridView.builder(
                 shrinkWrap: true,
@@ -2759,12 +3075,14 @@ class _GlobalArrangeFullScreenViewer extends StatefulWidget {
     required this.initialIndex,
     required this.elementTitle,
     required this.chapterLabel,
+    this.onDeletePhoto,
   });
 
   final List<_ArrangePhotoVm> photos;
   final int initialIndex;
   final String elementTitle;
   final String chapterLabel;
+  final Future<bool> Function(String photoPath)? onDeletePhoto;
 
   @override
   State<_GlobalArrangeFullScreenViewer> createState() =>
@@ -2773,65 +3091,197 @@ class _GlobalArrangeFullScreenViewer extends StatefulWidget {
 
 class _GlobalArrangeFullScreenViewerState
     extends State<_GlobalArrangeFullScreenViewer> {
+  static const Duration _dismissSpringDuration = Duration(milliseconds: 240);
+
   late final PageController _pageController;
+  late final TransformationController _transformationController;
   late int _currentIndex;
   bool _showUI = true;
+  bool _isDismissingBack = false;
+  bool _isDeleting = false;
+  Offset _dismissOffset = Offset.zero;
+  double _viewerScale = 1.0;
 
   @override
   void initState() {
     super.initState();
     _currentIndex = widget.initialIndex;
     _pageController = PageController(initialPage: widget.initialIndex);
+    _transformationController = TransformationController()
+      ..addListener(_handleTransformationChanged);
   }
 
   @override
   void dispose() {
+    _transformationController.removeListener(_handleTransformationChanged);
+    _transformationController.dispose();
     _pageController.dispose();
     super.dispose();
   }
 
+  void _handleTransformationChanged() {
+    _viewerScale = _transformationController.value.getMaxScaleOnAxis();
+  }
+
   void _toggleUI() {
+    if (_dismissOffset != Offset.zero) {
+      return;
+    }
     setState(() {
       _showUI = !_showUI;
     });
   }
 
+  bool get _canDismissByDrag => _viewerScale <= 1.02;
+
+  void _handleVerticalDismissUpdate(DragUpdateDetails details) {
+    if (!_canDismissByDrag || details.primaryDelta == null) {
+      return;
+    }
+    final nextDy = (_dismissOffset.dy + details.primaryDelta!).clamp(
+      0.0,
+      360.0,
+    );
+    if (nextDy == _dismissOffset.dy) {
+      return;
+    }
+    setState(() {
+      _showUI = false;
+      _isDismissingBack = false;
+      _dismissOffset = Offset(0, nextDy);
+    });
+  }
+
+  void _handleVerticalDismissEnd(DragEndDetails details) {
+    if (_dismissOffset == Offset.zero) {
+      return;
+    }
+    final shouldDismiss =
+        _dismissOffset.dy > 132 || (details.primaryVelocity ?? 0) > 850;
+    if (shouldDismiss) {
+      Navigator.of(context).pop();
+      return;
+    }
+    setState(() {
+      _isDismissingBack = true;
+      _dismissOffset = Offset.zero;
+      _showUI = true;
+    });
+  }
+
+  void _resetVerticalDismiss() {
+    if (_dismissOffset == Offset.zero) {
+      return;
+    }
+    setState(() {
+      _isDismissingBack = true;
+      _dismissOffset = Offset.zero;
+      _showUI = true;
+    });
+  }
+
+  Future<void> _deleteCurrentPhoto() async {
+    final onDeletePhoto = widget.onDeletePhoto;
+    if (onDeletePhoto == null ||
+        _isDeleting ||
+        _currentIndex < 0 ||
+        _currentIndex >= widget.photos.length) {
+      return;
+    }
+    setState(() {
+      _isDeleting = true;
+    });
+    final deleted = await onDeletePhoto(
+      widget.photos[_currentIndex].imageSource,
+    );
+    if (!mounted) {
+      return;
+    }
+    if (deleted) {
+      Navigator.of(context).pop();
+      return;
+    }
+    setState(() {
+      _isDeleting = false;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    final dismissAnimationDuration = _isDismissingBack
+        ? _dismissSpringDuration
+        : Duration.zero;
+    final dismissScale = 1.0 - (_dismissOffset.dy / 1200.0).clamp(0.0, 0.18);
+
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Colors.transparent,
       body: GestureDetector(
         onTap: _toggleUI,
+        onVerticalDragUpdate: _handleVerticalDismissUpdate,
+        onVerticalDragEnd: _handleVerticalDismissEnd,
+        onVerticalDragCancel: _resetVerticalDismiss,
         child: Stack(
           children: [
-            PageView.builder(
-              controller: _pageController,
-              physics: const BouncingScrollPhysics(),
-              itemCount: widget.photos.length,
-              onPageChanged: (index) {
+            Positioned.fill(
+              child: AnimatedContainer(
+                duration: dismissAnimationDuration,
+                curve: Curves.easeOutCubic,
+                color: Colors.black.withValues(
+                  alpha: 1.0 - (_dismissOffset.dy / 420.0).clamp(0.0, 0.58),
+                ),
+              ),
+            ),
+            AnimatedContainer(
+              duration: dismissAnimationDuration,
+              curve: Curves.easeOutCubic,
+              transform: Matrix4.identity()
+                ..translateByDouble(0.0, _dismissOffset.dy, 0.0, 1.0)
+                ..scaleByDouble(dismissScale, dismissScale, 1.0, 1.0),
+              transformAlignment: Alignment.center,
+              onEnd: () {
+                if (!mounted || !_isDismissingBack) {
+                  return;
+                }
                 setState(() {
-                  _currentIndex = index;
+                  _isDismissingBack = false;
                 });
               },
-              itemBuilder: (context, index) {
-                final photo = widget.photos[index];
-                return InteractiveViewer(
-                  minScale: 1,
-                  maxScale: 4,
-                  child: Center(
-                    child: Image(
-                      image: narrativeThumbnailProvider(photo.imageSource),
-                      fit: BoxFit.contain,
-                      errorBuilder: (context, error, stackTrace) {
-                        return _buildPlaceholder(
-                          icon: Icons.broken_image_outlined,
-                          label: 'IMAGE UNAVAILABLE',
-                        );
-                      },
+              child: PageView.builder(
+                controller: _pageController,
+                physics: const BouncingScrollPhysics(),
+                itemCount: widget.photos.length,
+                onPageChanged: (index) {
+                  setState(() {
+                    _currentIndex = index;
+                    _isDismissingBack = false;
+                    _dismissOffset = Offset.zero;
+                    _viewerScale = 1.0;
+                  });
+                  _transformationController.value = Matrix4.identity();
+                },
+                itemBuilder: (context, index) {
+                  final photo = widget.photos[index];
+                  return InteractiveViewer(
+                    transformationController: index == _currentIndex
+                        ? _transformationController
+                        : null,
+                    minScale: 1,
+                    maxScale: 4,
+                    child: Center(
+                      child: Image(
+                        image: narrativeThumbnailProvider(photo.imageSource),
+                        fit: BoxFit.contain,
+                        errorBuilder: (context, error, stackTrace) {
+                          return _buildPlaceholder(
+                            icon: Icons.broken_image_outlined,
+                            label: 'IMAGE UNAVAILABLE',
+                          );
+                        },
+                      ),
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
             AnimatedOpacity(
               duration: const Duration(milliseconds: 200),
@@ -3016,6 +3466,56 @@ class _GlobalArrangeFullScreenViewerState
                 ),
               ),
             ),
+            if (widget.onDeletePhoto != null)
+              Positioned(
+                right: 18,
+                bottom: MediaQuery.of(context).padding.bottom + 18,
+                child: AnimatedOpacity(
+                  duration: const Duration(milliseconds: 200),
+                  opacity: _showUI ? 1 : 0,
+                  child: IgnorePointer(
+                    ignoring: !_showUI,
+                    child: GestureDetector(
+                      key: const ValueKey('globalArrangePhotoDeleteButton'),
+                      behavior: HitTestBehavior.opaque,
+                      onTap: _deleteCurrentPhoto,
+                      child: ClipRect(
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                          child: Container(
+                            width: 38,
+                            height: 38,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.28),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.16),
+                                width: 0.6,
+                              ),
+                            ),
+                            child: _isDeleting
+                                ? SizedBox(
+                                    width: 13,
+                                    height: 13,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 1.3,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                        Colors.white.withValues(alpha: 0.78),
+                                      ),
+                                    ),
+                                  )
+                                : Icon(
+                                    Icons.delete_outline,
+                                    size: 17,
+                                    color: Colors.white.withValues(alpha: 0.78),
+                                  ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -3064,45 +3564,64 @@ class _PendingOrganizeFab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const buttonColor = Color(0xFFF7F7F9);
-
     return GestureDetector(
       onTap: onTap,
-      child: Container(
+      child: _FrostedBoardPill(
         key: buttonKey,
-        padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
-        decoration: BoxDecoration(
-          color: buttonColor,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 12,
-              offset: const Offset(0, 6),
-            ),
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.02),
-              blurRadius: 4,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
         child: const Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.inbox_outlined, color: Colors.black87, size: 14),
+            Icon(Icons.inbox_outlined, color: Colors.black87, size: 13),
             SizedBox(width: 8),
             Text(
-              '待整理',
+              '待 整 理',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 color: Colors.black87,
-                fontSize: 11,
-                fontWeight: FontWeight.w300,
-                letterSpacing: 4.0,
+                fontSize: 10,
+                fontWeight: FontWeight.w400,
+                letterSpacing: 2.0,
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _FrostedBoardPill extends StatelessWidget {
+  const _FrostedBoardPill({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.74),
+        border: Border.all(color: Colors.black.withValues(alpha: 0.06)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.065),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
+          ),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.025),
+            blurRadius: 5,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: ClipRect(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            child: child,
+          ),
         ),
       ),
     );
