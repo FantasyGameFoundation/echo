@@ -1,26 +1,6 @@
 .playwright-mcp/*
-.omx/*
-!.omx/context/
-!.omx/interviews/
-!.omx/plans/
-!.omx/specs/
-!.omx/project-memory.json
-.omx/context/*
-!.omx/context/*.md
-.omx/interviews/*
-!.omx/interviews/*.md
-.omx/plans/*
-!.omx/plans/*.md
-.omx/specs/*
-!.omx/specs/*.md
-.codex/*
-!.codex/agents/
-!.codex/agents/**
-!.codex/skills/
-!.codex/skills/**
-.codex/skills/.system/**
-!.codex/prompts/
-!.codex/prompts/**
+.codex/
+.omx/
 
 # OS files
 .DS_Store
@@ -52,4 +32,3 @@ ios/Flutter/Generated.xcconfig
 *.temp
 tmp/
 temp/
-.omx/
